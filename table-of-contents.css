@@ -51,7 +51,7 @@ html {
   cursor: grab;
   user-select: none;
 
-  gap: 0.25rem;
+  gap: 0.125rem;
   position: relative;
 }
 
