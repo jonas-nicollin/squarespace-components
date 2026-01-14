@@ -49,3 +49,11 @@
 <script src="https://cdn.jsdelivr.net/gh/jonas-nicollin/squarespace-components/automatic-toc.js"></script>
 <!-- \ Automatic TOC – Main Script -->
 <!-- Instructions: Place in Footer Code Injection. -->
+
+
+## Blog Item Title Sizes
+
+<!-- Blog Item Title Sizes -->
+<script src="https://cdn.jsdelivr.net/gh/jonas-nicollin/utilities/blog-item-title-sizes.js"></script>
+<!-- \ Blog Item Title Sizes -->
+<!-- Instructions: Place in Footer Code Injection. -->
