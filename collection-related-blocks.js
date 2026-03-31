@@ -552,8 +552,9 @@
 
 function buildBlock(items, CFG) {
   const section = document.createElement('section');
-  section.className = 'collection-related-block';
+  section.className = 'collection-related-block collection-related-block--vtest';
   section.dataset.relatedKey = CFG.key;
+  section.dataset.crbVersion = 'vtest-01';
 
   const extraClasses = String(CFG.classes?.block || '')
     .split(/\s+/)
@@ -662,6 +663,8 @@ function buildBlock(items, CFG) {
 }
 
 function applyStateClasses(section) {
+  section.classList.add('collection-related-block--applyStateClasses-ran');
+
   if (section.querySelector('.collection-related-block__heading')) {
     section.classList.add('collection-related-block--has-heading');
   }
@@ -684,16 +687,6 @@ function applyStateClasses(section) {
 
   if (section.querySelector('.collection-related-block__location')) {
     section.classList.add('collection-related-block--has-location');
-  }
-
-  const items = section.querySelectorAll('.collection-related-block__item');
-
-  if (items.length === 1) {
-    section.classList.add('collection-related-block--single-item');
-  }
-
-  if (items.length > 1) {
-    section.classList.add('collection-related-block--multiple-items');
   }
 }
   
