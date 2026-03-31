@@ -552,30 +552,31 @@
 
   function applyStateClasses(section, items, CFG) {
     const display = CFG.display || {};
+    
     if ((items.length === 1 && CFG.headingSingular) || CFG.heading) {
       section.classList.add('collection-related-block--has-heading');
       }
-
-  if (display.showImage) {
-    section.classList.add('collection-related-block--has-image');
-  }
-
-  if (display.showTitle) {
-    section.classList.add('collection-related-block--has-title');
-  }
-
-  if (display.showCategories) {
-    section.classList.add('collection-related-block--has-meta');
-  }
-
-  if (display.showExcerpt) {
-    section.classList.add('collection-related-block--has-excerpt');
-  }
-
-  if (display.showLocation) {
-    section.classList.add('collection-related-block--has-location');
-  }
-}
+    
+    if (display.showImage) {
+      section.classList.add('collection-related-block--has-image');
+      }
+    
+    if (display.showTitle) {
+      section.classList.add('collection-related-block--has-title');
+      }
+    
+    if (display.showCategories) {
+      section.classList.add('collection-related-block--has-meta');
+      }
+    
+    if (display.showExcerpt) {
+      section.classList.add('collection-related-block--has-excerpt');
+      }
+    
+    if (display.showLocation) {
+      section.classList.add('collection-related-block--has-location');
+      }
+    }
 
   function buildBlock(items, CFG) {
     const section = document.createElement('section');
