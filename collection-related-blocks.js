@@ -557,27 +557,26 @@
       section.classList.add('collection-related-block--has-heading');
       }
     
-    if (display.showImage) {
+    if (display.showImage && items.some(item => item.assetUrl)) {
       section.classList.add('collection-related-block--has-image');
       }
-    
-    if (display.showTitle) {
+    if (display.showTitle && items.some(item => item.title)) {
       section.classList.add('collection-related-block--has-title');
       }
     
-    if (display.showCategories) {
+    if (display.showCategories && items.some(item => Array.isArray(item.categories) && item.categories.length)) {
       section.classList.add('collection-related-block--has-meta');
       }
     
-    if (display.showExcerpt) {
+    if (display.showExcerpt && items.some(item => item.excerpt)) {
       section.classList.add('collection-related-block--has-excerpt');
       }
     
-    if (display.showLocation) {
+    if (display.showLocation && items.some(item => item.locationText)) {
       section.classList.add('collection-related-block--has-location');
       }
     }
-
+  
   function buildBlock(items, CFG) {
     const section = document.createElement('section');
     section.className = 'collection-related-block';
