@@ -550,38 +550,10 @@
     return CFG.heading || '';
   }
 
-  function applyStateClasses(section, items, CFG) {
-    const display = CFG.display || {};
-    
-    if ((items.length === 1 && CFG.headingSingular) || CFG.heading) {
-      section.classList.add('collection-related-block--has-heading');
-      }
-    
-    if (display.showImage && items.some(item => item.assetUrl)) {
-      section.classList.add('collection-related-block--has-image');
-      }
-    if (display.showTitle && items.some(item => item.title)) {
-      section.classList.add('collection-related-block--has-title');
-      }
-    
-    if (display.showCategories && items.some(item => Array.isArray(item.categories) && item.categories.length)) {
-      section.classList.add('collection-related-block--has-meta');
-      }
-    
-    if (display.showExcerpt && items.some(item => item.excerpt)) {
-      section.classList.add('collection-related-block--has-excerpt');
-      }
-    
-    if (display.showLocation && items.some(item => item.locationText)) {
-      section.classList.add('collection-related-block--has-location');
-      }
-    }
-  
   function buildBlock(items, CFG) {
     const section = document.createElement('section');
     section.className = 'collection-related-block';
     section.dataset.relatedKey = CFG.key;
-    applyStateClasses(section, items, CFG);
 
     const extraClasses = String(CFG.classes?.block || '')
       .split(/\s+/)
@@ -680,9 +652,39 @@
     });
 
     section.appendChild(list);
+    
+    applyStateClasses(section);
+    
     return section;
   }
 
+  function applyStateClasses(section, items, CFG) {
+    const display = CFG.display || {};
+    
+    if ((items.length === 1 && CFG.headingSingular) || CFG.heading) {
+      section.classList.add('collection-related-block--has-heading');
+      }
+    
+    if (display.showImage && items.some(item => item.assetUrl)) {
+      section.classList.add('collection-related-block--has-image');
+      }
+    if (display.showTitle && items.some(item => item.title)) {
+      section.classList.add('collection-related-block--has-title');
+      }
+    
+    if (display.showCategories && items.some(item => Array.isArray(item.categories) && item.categories.length)) {
+      section.classList.add('collection-related-block--has-meta');
+      }
+    
+    if (display.showExcerpt && items.some(item => item.excerpt)) {
+      section.classList.add('collection-related-block--has-excerpt');
+      }
+    
+    if (display.showLocation && items.some(item => item.locationText)) {
+      section.classList.add('collection-related-block--has-location');
+      }
+    }
+  
   function createRunner(CFG) {
     CFG = Object.assign(
       {
