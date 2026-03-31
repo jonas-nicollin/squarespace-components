@@ -658,32 +658,31 @@
     return section;
   }
 
-  function applyStateClasses(section, items, CFG) {
-    const display = CFG.display || {};
-    
-    if ((items.length === 1 && CFG.headingSingular) || CFG.heading) {
-      section.classList.add('collection-related-block--has-heading');
-      }
-    
-    if (display.showImage && items.some(item => item.assetUrl)) {
-      section.classList.add('collection-related-block--has-image');
-      }
-    if (display.showTitle && items.some(item => item.title)) {
-      section.classList.add('collection-related-block--has-title');
-      }
-    
-    if (display.showCategories && items.some(item => Array.isArray(item.categories) && item.categories.length)) {
-      section.classList.add('collection-related-block--has-meta');
-      }
-    
-    if (display.showExcerpt && items.some(item => item.excerpt)) {
-      section.classList.add('collection-related-block--has-excerpt');
-      }
-    
-    if (display.showLocation && items.some(item => item.locationText)) {
-      section.classList.add('collection-related-block--has-location');
-      }
-    }
+function applyStateClasses(section) {
+  if (section.querySelector('.collection-related-block__heading')) {
+    section.classList.add('collection-related-block--has-heading');
+  }
+
+  if (section.querySelector('.collection-related-block__image')) {
+    section.classList.add('collection-related-block--has-image');
+  }
+
+  if (section.querySelector('.collection-related-block__title')) {
+    section.classList.add('collection-related-block--has-title');
+  }
+
+  if (section.querySelector('.collection-related-block__meta')) {
+    section.classList.add('collection-related-block--has-meta');
+  }
+
+  if (section.querySelector('.collection-related-block__excerpt')) {
+    section.classList.add('collection-related-block--has-excerpt');
+  }
+
+  if (section.querySelector('.collection-related-block__location')) {
+    section.classList.add('collection-related-block--has-location');
+  }
+}
   
   function createRunner(CFG) {
     CFG = Object.assign(
