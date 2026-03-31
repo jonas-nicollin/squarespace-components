@@ -550,113 +550,116 @@
     return CFG.heading || '';
   }
 
-  function buildBlock(items, CFG) {
-    const section = document.createElement('section');
-    section.className = 'collection-related-block';
-    section.dataset.relatedKey = CFG.key;
+function buildBlock(items, CFG) {
+  const section = document.createElement('section');
+  section.className = 'collection-related-block';
+  section.dataset.relatedKey = CFG.key;
 
-    const extraClasses = String(CFG.classes?.block || '')
-      .split(/\s+/)
-      .map(s => s.trim())
-      .filter(Boolean);
+  const extraClasses = String(CFG.classes?.block || '')
+    .split(/\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
 
-    extraClasses.forEach(cls => section.classList.add(cls));
+  extraClasses.forEach(cls => section.classList.add(cls));
 
+  const headingText = getHeadingText(items, CFG);
+  if (headingText) {
     const tag = CFG.headingTag || 'h3';
     const heading = document.createElement(tag);
     heading.className = 'collection-related-block__heading';
-    heading.textContent = getHeadingText(items, CFG);
+    heading.textContent = headingText;
     section.appendChild(heading);
+  }
 
-    const list = document.createElement('div');
-    list.className = 'collection-related-block__list';
+  const list = document.createElement('div');
+  list.className = 'collection-related-block__list';
 
-    items.forEach(item => {
-      const card = document.createElement('a');
-      card.className = 'collection-related-block__item';
-      card.href = item.fullUrl || (CFG.sourceCollection.path + '/' + item.urlId);
+  items.forEach(item => {
+    const card = document.createElement('a');
+    card.className = 'collection-related-block__item';
+    card.href = item.fullUrl || (CFG.sourceCollection.path + '/' + item.urlId);
 
-      extraClasses.forEach(cls => card.classList.add(cls + '__item'));
+    extraClasses.forEach(cls => card.classList.add(cls + '__item'));
 
-      if (CFG.display?.showImage && item.assetUrl) {
-        const media = document.createElement('div');
-        media.className = 'collection-related-block__image';
+    if (CFG.display?.showImage && item.assetUrl) {
+      const media = document.createElement('div');
+      media.className = 'collection-related-block__image';
 
-        const img = document.createElement('img');
-        img.src = item.assetUrl;
-        img.alt = cleanText(item.title || '');
-        img.loading = 'lazy';
-        img.decoding = 'async';
+      const img = document.createElement('img');
+      img.src = item.assetUrl;
+      img.alt = cleanText(item.title || '');
+      img.loading = 'lazy';
+      img.decoding = 'async';
 
-        img.style.objectPosition =
-          item.mediaFocalPoint &&
-          typeof item.mediaFocalPoint.x === 'number' &&
-          typeof item.mediaFocalPoint.y === 'number'
-            ? Math.round(item.mediaFocalPoint.x * 100) + '% ' +
-              Math.round(item.mediaFocalPoint.y * 100) + '%'
-            : '50% 50%';
+      img.style.objectPosition =
+        item.mediaFocalPoint &&
+        typeof item.mediaFocalPoint.x === 'number' &&
+        typeof item.mediaFocalPoint.y === 'number'
+          ? Math.round(item.mediaFocalPoint.x * 100) + '% ' +
+            Math.round(item.mediaFocalPoint.y * 100) + '%'
+          : '50% 50%';
 
-        media.appendChild(img);
-        card.appendChild(media);
+      media.appendChild(img);
+      card.appendChild(media);
+    }
+
+    const content = document.createElement('div');
+    content.className = 'collection-related-block__content';
+
+    const order = Array.isArray(CFG.display?.order)
+      ? CFG.display.order
+      : ['meta', 'title', 'excerpt', 'location'];
+
+    order.forEach(type => {
+      if (type === 'meta' && CFG.display?.showCategories) {
+        const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
+        if (cats.length) {
+          const meta = document.createElement('div');
+          meta.className = 'collection-related-block__meta';
+
+          cats.forEach(cat => {
+            const span = document.createElement('span');
+            span.className = 'collection-related-block__category';
+            span.textContent = cleanText(cat);
+            meta.appendChild(span);
+          });
+
+          content.appendChild(meta);
+        }
       }
 
-      const content = document.createElement('div');
-      content.className = 'collection-related-block__content';
+      if (type === 'title' && CFG.display?.showTitle) {
+        const title = document.createElement('div');
+        title.className = 'collection-related-block__title';
+        title.textContent = cleanText(item.title || '');
+        content.appendChild(title);
+      }
 
-      const order = Array.isArray(CFG.display?.order)
-        ? CFG.display.order
-        : ['meta', 'title', 'excerpt', 'location'];
+      if (type === 'excerpt' && CFG.display?.showExcerpt && item.excerpt) {
+        const excerpt = document.createElement('div');
+        excerpt.className = 'collection-related-block__excerpt';
+        excerpt.textContent = cleanText(item.excerpt);
+        content.appendChild(excerpt);
+      }
 
-      order.forEach(type => {
-        if (type === 'meta' && CFG.display?.showCategories) {
-          const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
-          if (cats.length) {
-            const meta = document.createElement('div');
-            meta.className = 'collection-related-block__meta';
-
-            cats.forEach(cat => {
-              const span = document.createElement('span');
-              span.className = 'collection-related-block__category';
-              span.textContent = cleanText(cat);
-              meta.appendChild(span);
-            });
-
-            content.appendChild(meta);
-          }
-        }
-
-        if (type === 'title' && CFG.display?.showTitle) {
-          const title = document.createElement('div');
-          title.className = 'collection-related-block__title';
-          title.textContent = cleanText(item.title || '');
-          content.appendChild(title);
-        }
-
-        if (type === 'excerpt' && CFG.display?.showExcerpt && item.excerpt) {
-          const excerpt = document.createElement('div');
-          excerpt.className = 'collection-related-block__excerpt';
-          excerpt.textContent = cleanText(item.excerpt);
-          content.appendChild(excerpt);
-        }
-
-        if (type === 'location' && CFG.display?.showLocation && item.locationText) {
-          const location = document.createElement('div');
-          location.className = 'collection-related-block__location';
-          location.textContent = cleanText(item.locationText);
-          content.appendChild(location);
-        }
-      });
-
-      card.appendChild(content);
-      list.appendChild(card);
+      if (type === 'location' && CFG.display?.showLocation && item.locationText) {
+        const location = document.createElement('div');
+        location.className = 'collection-related-block__location';
+        location.textContent = cleanText(item.locationText);
+        content.appendChild(location);
+      }
     });
 
-    section.appendChild(list);
-    
-    applyStateClasses(section);
-    
-    return section;
-  }
+    card.appendChild(content);
+    list.appendChild(card);
+  });
+
+  section.appendChild(list);
+
+  applyStateClasses(section);
+
+  return section;
+}
 
 function applyStateClasses(section) {
   if (section.querySelector('.collection-related-block__heading')) {
@@ -687,7 +690,9 @@ function applyStateClasses(section) {
 
   if (items.length === 1) {
     section.classList.add('collection-related-block--single-item');
-  } else if (items.length > 1) {
+  }
+
+  if (items.length > 1) {
     section.classList.add('collection-related-block--multiple-items');
   }
 }
