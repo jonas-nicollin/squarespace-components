@@ -653,7 +653,7 @@
 
     section.appendChild(list);
     
-    applyStateClasses(section);
+    applyStateClasses(section, items, CFG);
     
     return section;
   }
