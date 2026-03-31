@@ -9,18 +9,6 @@
 
   const JSON_FORMAT_SUFFIX = '?format=json';
 
-  function normalize(str) {
-    return String(str || '')
-      .replace(/\u00A0/g, ' ')
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[\u2019’]/g, "'")
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
   function cleanText(str) {
     const txt = document.createElement('textarea');
     txt.innerHTML = String(str || '');
@@ -80,25 +68,30 @@
     return Array.from(new Set(values));
   }
 
+  function addCustomClasses(element, classes) {
+    if (!element || !classes) return;
+
+    String(classes)
+      .split(/\s+/)
+      .map(cls => cls.trim())
+      .filter(Boolean)
+      .forEach(cls => element.classList.add(cls));
+  }
+
   async function fetchPageJson(settings) {
     const url = ensureJsonFormat(settings.jsonUrl || window.location.pathname);
     const response = await fetch(url, { credentials: 'same-origin' });
+
     if (!response.ok) {
       throw new Error('Metadata Blocks: unable to fetch page JSON');
     }
-    const json = await response.json();
-    return typeof settings.dataResolver === 'function'
-      ? settings.dataResolver({ settings, json })
-      : json;
+
+    return response.json();
   }
 
-  function resolveCurrentItemData(json, settings) {
+  function resolveCurrentItemData(json) {
     const items = Array.isArray(json?.items) ? json.items : [];
     const currentPath = getCurrentPath();
-
-    if (typeof settings.itemResolver === 'function') {
-      return settings.itemResolver({ settings, json, items, currentPath }) || null;
-    }
 
     if (json?.item) return json.item;
 
@@ -136,6 +129,10 @@
       const container = document.createElement('div');
       container.className = 'metadata-blocks';
 
+      if (settings.customClass) {
+        addCustomClasses(container, settings.customClass);
+      }
+
       blockContent.appendChild(container);
       wrapper.appendChild(blockContent);
 
@@ -150,6 +147,11 @@
     if (!container) return null;
 
     container.innerHTML = '';
+    container.className = 'metadata-blocks';
+
+    if (settings.customClass) {
+      addCustomClasses(container, settings.customClass);
+    }
 
     return { wrapper, container };
   }
@@ -162,12 +164,29 @@
     return orderMap;
   }
 
-  function getLocationValues(itemData, pageData, block) {
-    if (typeof block.valueResolver === 'function') {
-      return block.valueResolver(itemData, pageData, block) || [];
-    }
+  function getGoogleMapsUrl(itemData) {
+    const location = itemData?.location || {};
 
+    const lat = typeof location.markerLat === 'number'
+      ? location.markerLat
+      : typeof location.mapLat === 'number'
+        ? location.mapLat
+        : null;
+
+    const lng = typeof location.markerLng === 'number'
+      ? location.markerLng
+      : typeof location.mapLng === 'number'
+        ? location.mapLng
+        : null;
+
+    if (typeof lat !== 'number' || typeof lng !== 'number') return '';
+
+    return `https://www.google.com/maps?q=${lat},${lng}`;
+  }
+
+  function getLocationValues(itemData, block) {
     const source = itemData?.location || {};
+
     const values = [
       source.addressTitle,
       source.addressLine1,
@@ -177,30 +196,27 @@
       .map(cleanText)
       .filter(Boolean);
 
-    return values;
-  }
+    if (values.length) return values;
 
-  function getExcerptHtml(itemData, pageData, block) {
-    if (typeof block.excerptResolver === 'function') {
-      return String(block.excerptResolver(itemData, pageData, block) || '').trim();
+    if (block.useGoogleMapsLink && getGoogleMapsUrl(itemData)) {
+      return [block.googleMapsLabel || 'Voir sur la carte'];
     }
 
-    if (!block.fetchExcerpt) return '';
+    return [];
+  }
 
+  function getExcerptHtml(itemData, block) {
+    if (!block.fetchExcerpt) return '';
     return String(itemData?.excerpt || '').trim();
   }
 
-  function getRawValuesForBlock(block, itemData, pageData) {
+  function getRawValuesForBlock(block, itemData) {
     if (block.isLocation) {
-      return getLocationValues(itemData, pageData, block);
+      return getLocationValues(itemData, block);
     }
 
     if (block.isExcerpt) {
       return [];
-    }
-
-    if (typeof block.valueResolver === 'function') {
-      return block.valueResolver(itemData, pageData, block) || [];
     }
 
     const sourceKey = block.source || 'tags';
@@ -208,7 +224,9 @@
   }
 
   function filterBlockValues(values, block) {
-    let filtered = values.map(v => String(v || '').trim()).filter(Boolean);
+    let filtered = values
+      .map(v => String(v || '').trim())
+      .filter(Boolean);
 
     if (block.allowedCategories?.length) {
       filtered = filtered.filter(value => block.allowedCategories.includes(value));
@@ -223,9 +241,10 @@
     }
 
     if (block.allowedPrefixSuffix) {
-      filtered = filtered.filter(value => {
-        return value.startsWith(block.allowedPrefixSuffix) || value.endsWith(block.allowedPrefixSuffix);
-      });
+      filtered = filtered.filter(value =>
+        value.startsWith(block.allowedPrefixSuffix) ||
+        value.endsWith(block.allowedPrefixSuffix)
+      );
     }
 
     return filtered;
@@ -266,17 +285,55 @@
     return normalized;
   }
 
-  function createMetadataValueElement(value, inline) {
+  function getBlockTitle(block, valueCount) {
+    if (block.title === 'hidden') return null;
+
+    const singular = block.iconTitle || block.title || '';
+    const plural = block.iconTitle || block.titlePlural || block.title || '';
+
+    return valueCount > 1 ? plural : singular;
+  }
+
+  function createMetadataValueElement(value, inline, options = {}) {
     const tag = inline ? 'span' : 'div';
     const el = document.createElement(tag);
     el.className = 'metadata-value';
-    el.textContent = value;
+
+    if (options.href) {
+      const link = document.createElement('a');
+      link.href = options.href;
+      link.textContent = value;
+
+      if (options.target) {
+        link.target = options.target;
+      }
+
+      if (options.target === '_blank') {
+        link.rel = 'noopener noreferrer';
+      }
+
+      el.appendChild(link);
+    } else {
+      el.textContent = value;
+    }
+
     return el;
   }
 
-  function appendValuesToContent(content, values, block) {
+  function appendValuesToContent(content, values, block, itemData) {
+    const mapsUrl = block.isLocation && block.useGoogleMapsLink
+      ? getGoogleMapsUrl(itemData)
+      : '';
+
     values.forEach((value, index) => {
-      const element = createMetadataValueElement(value, block.displayInline);
+      const element = createMetadataValueElement(
+        value,
+        block.displayInline,
+        {
+          href: mapsUrl || '',
+          target: block.googleMapsTarget || ''
+        }
+      );
 
       if (block.displayInline && index < values.length - 1) {
         const separator = document.createElement('span');
@@ -289,7 +346,7 @@
     });
   }
 
-  function createMetadataBlockWrapper(block, orderMap) {
+  function createMetadataBlockWrapper(block, orderMap, valueCount) {
     const wrapper = document.createElement('div');
     wrapper.className = `metadata-block metadata-block--${block.name}`;
 
@@ -299,10 +356,12 @@
     const order = orderMap[block.name] || block.order || 99;
     wrapper.style.order = order;
 
-    if (block.title !== 'hidden') {
+    const blockTitle = getBlockTitle(block, valueCount);
+
+    if (blockTitle) {
       const title = document.createElement('div');
       title.className = 'metadata-title';
-      title.textContent = block.iconTitle || block.title || '';
+      title.textContent = blockTitle;
       wrapper.appendChild(title);
     }
 
@@ -329,7 +388,7 @@
     }
   }
 
-  function buildMetadataBlocks(settings, pageData, itemData, container) {
+  function buildMetadataBlocks(settings, itemData, container) {
     const orderMap = getBlockOrderMap(settings);
     const blockWrappers = {};
 
@@ -347,24 +406,28 @@
         return;
       }
 
-      const wrapper = createMetadataBlockWrapper(block, orderMap);
       const content = document.createElement('div');
       content.className = 'metadata-elements';
 
+      let valueCount = 0;
+
       if (block.isExcerpt) {
-        const excerptHtml = getExcerptHtml(itemData, pageData, block);
+        const excerptHtml = getExcerptHtml(itemData, block);
         if (!excerptHtml) return;
 
         content.classList.add('metadata-excerpt');
         content.innerHTML = excerptHtml;
+        valueCount = 1;
       } else {
-        const rawValues = getRawValuesForBlock(block, itemData, pageData);
+        const rawValues = getRawValuesForBlock(block, itemData);
         const values = normalizeBlockValues(rawValues, block);
         if (!values.length) return;
 
-        appendValuesToContent(content, values, block);
+        valueCount = values.length;
+        appendValuesToContent(content, values, block, itemData);
       }
 
+      const wrapper = createMetadataBlockWrapper(block, orderMap, valueCount);
       wrapper.appendChild(content);
       container.appendChild(wrapper);
       blockWrappers[block.name] = wrapper;
@@ -375,12 +438,21 @@
       const targetContent = parentWrapper?.querySelector('.metadata-elements');
       if (!targetContent) return;
 
-      const rawValues = getRawValuesForBlock(block, itemData, pageData);
+      const rawValues = getRawValuesForBlock(block, itemData);
       const values = normalizeBlockValues(rawValues, block);
       if (!values.length) return;
 
+      const mapsUrl = block.useGoogleMapsLink ? getGoogleMapsUrl(itemData) : '';
+
       values.forEach(value => {
-        const element = createMetadataValueElement(value, block.displayInline);
+        const element = createMetadataValueElement(
+          value,
+          block.displayInline,
+          {
+            href: mapsUrl || '',
+            target: block.googleMapsTarget || ''
+          }
+        );
 
         if (block.groupPosition === 'prepend') {
           targetContent.insertBefore(element, targetContent.firstChild);
@@ -388,6 +460,22 @@
           targetContent.appendChild(element);
         }
       });
+
+      const parentBlockName = block.group;
+      const parentBlockConfig = allBlocks.find(item => item.name === parentBlockName);
+
+      if (parentBlockConfig) {
+        const allValues = Array.from(
+          targetContent.querySelectorAll('.metadata-value')
+        );
+
+        const parentTitle = parentWrapper.querySelector('.metadata-title');
+        const computedTitle = getBlockTitle(parentBlockConfig, allValues.length);
+
+        if (parentTitle && computedTitle) {
+          parentTitle.textContent = computedTitle;
+        }
+      }
     });
 
     applyStateClasses(container);
@@ -404,13 +492,13 @@
     const pageData = await fetchPageJson(settings);
     if (!pageData) return;
 
-    const currentItem = resolveCurrentItemData(pageData, settings);
+    const currentItem = resolveCurrentItemData(pageData);
     if (!currentItem) return;
 
     const mount = prepareMetadataBlocksMount(settings);
     if (!mount?.container) return;
 
-    buildMetadataBlocks(settings, pageData, currentItem, mount.container);
+    buildMetadataBlocks(settings, currentItem, mount.container);
   }
 
   async function startAll() {
