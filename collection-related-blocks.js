@@ -653,7 +653,7 @@
 
     section.appendChild(list);
     
-    applyStateClasses(section, items, CFG);
+    applyStateClasses(section);
     
     return section;
   }
@@ -681,6 +681,14 @@ function applyStateClasses(section) {
 
   if (section.querySelector('.collection-related-block__location')) {
     section.classList.add('collection-related-block--has-location');
+  }
+
+  const items = section.querySelectorAll('.collection-related-block__item');
+
+  if (items.length === 1) {
+    section.classList.add('collection-related-block--single-item');
+  } else if (items.length > 1) {
+    section.classList.add('collection-related-block--multiple-items');
   }
 }
   
