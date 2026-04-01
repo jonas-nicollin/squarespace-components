@@ -562,13 +562,17 @@ function buildBlock(items, CFG) {
 
   extraClasses.forEach(cls => section.classList.add(cls));
 
+  // 👉 wrapper interne
+  const inner = document.createElement('div');
+  inner.className = 'collection-related-block__inner';
+
   const headingText = getHeadingText(items, CFG);
   if (headingText) {
     const tag = CFG.headingTag || 'h3';
     const heading = document.createElement(tag);
     heading.className = 'collection-related-block__heading';
     heading.textContent = headingText;
-    section.appendChild(heading);
+    inner.appendChild(heading);
   }
 
   const list = document.createElement('div');
@@ -654,7 +658,8 @@ function buildBlock(items, CFG) {
     list.appendChild(card);
   });
 
-  section.appendChild(list);
+  inner.appendChild(list);
+  section.appendChild(inner);
 
   applyStateClasses(section);
 
