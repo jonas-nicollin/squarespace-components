@@ -665,7 +665,7 @@ function buildBlock(items, CFG) {
 
   return section;
 }
-
+  
 function applyStateClasses(section) {
   if (section.querySelector('.collection-related-block__heading')) {
     section.classList.add('collection-related-block--has-heading');
