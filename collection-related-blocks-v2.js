@@ -93,6 +93,26 @@
       .filter(tag => tag.rawNorm);
   }
 
+  function getTagValuesByPrefix(item, prefix) {
+    if (!prefix) return [];
+
+    const normalizedPrefix = normalize(String(prefix).replace(/:$/, ''));
+
+    return (Array.isArray(item?.tags) ? item.tags : [])
+      .map(tag => {
+        const raw = String(tag || '');
+        const idx = raw.indexOf(':');
+        if (idx === -1) return null;
+
+        const tagPrefix = normalize(raw.slice(0, idx));
+        const value = cleanText(raw.slice(idx + 1));
+
+        if (tagPrefix === normalizedPrefix) return value;
+        return null;
+      })
+      .filter(Boolean);
+  }
+
   function getCurrentPathname() {
     return (location.pathname || '').replace(/\/+$/, '') || '/';
   }
@@ -516,11 +536,10 @@
     if (
       override &&
       override.enabled &&
-      override.bodyId &&
-      document.body.id === override.bodyId
+      (!override.bodyId || document.body.id === override.bodyId)
     ) {
       return {
-        id: override.bodyId,
+        id: override.bodyId || null,
         title: cleanText(override.title || document.title || 'Draft item'),
         fullUrl: override.fullUrl || pathname,
         urlId: (override.fullUrl || pathname).split('/').filter(Boolean).pop() || '',
@@ -550,158 +569,190 @@
     return CFG.heading || '';
   }
 
-function buildBlock(items, CFG) {
-  const section = document.createElement('section');
-  section.className = 'collection-related-block';
-  section.dataset.relatedKey = CFG.key;
+  function buildTagPrefixField(item, fieldConfig) {
+    if (!fieldConfig || !fieldConfig.prefix) return null;
 
-  const extraClasses = String(CFG.classes?.block || '')
-    .split(/\s+/)
-    .map(s => s.trim())
-    .filter(Boolean);
+    let values = getTagValuesByPrefix(item, fieldConfig.prefix);
+    if (!values.length) return null;
 
-  extraClasses.forEach(cls => section.classList.add(cls));
-
-  // 👉 wrapper interne
-  const inner = document.createElement('div');
-  inner.className = 'collection-related-block__inner';
-
-  const headingText = getHeadingText(items, CFG);
-  if (headingText) {
-    const tag = CFG.headingTag || 'h3';
-    const heading = document.createElement(tag);
-    heading.className = 'collection-related-block__heading';
-    heading.textContent = headingText;
-    inner.appendChild(heading);
-  }
-
-  const list = document.createElement('div');
-  list.className = 'collection-related-block__list';
-
-  items.forEach(item => {
-    const card = document.createElement('a');
-    card.className = 'collection-related-block__item';
-    card.href = item.fullUrl || (CFG.sourceCollection.path + '/' + item.urlId);
-
-    extraClasses.forEach(cls => card.classList.add(cls + '__item'));
-
-    if (CFG.display?.showImage && item.assetUrl) {
-      const media = document.createElement('div');
-      media.className = 'collection-related-block__image';
-
-      const img = document.createElement('img');
-      img.src = item.assetUrl;
-      img.alt = cleanText(item.title || '');
-      img.loading = 'lazy';
-      img.decoding = 'async';
-
-      img.style.objectPosition =
-        item.mediaFocalPoint &&
-        typeof item.mediaFocalPoint.x === 'number' &&
-        typeof item.mediaFocalPoint.y === 'number'
-          ? Math.round(item.mediaFocalPoint.x * 100) + '% ' +
-            Math.round(item.mediaFocalPoint.y * 100) + '%'
-          : '50% 50%';
-
-      media.appendChild(img);
-      card.appendChild(media);
+    if (fieldConfig.maxItems) {
+      values = values.slice(0, fieldConfig.maxItems);
     }
 
-    const content = document.createElement('div');
-    content.className = 'collection-related-block__content';
+    const el = document.createElement('div');
+    el.className = fieldConfig.className || 'collection-related-block__tag-prefix';
 
-    const order = Array.isArray(CFG.display?.order)
-      ? CFG.display.order
-      : ['meta', 'title', 'excerpt', 'location'];
+    const label = cleanText(fieldConfig.label || '');
+    const joinWith = fieldConfig.joinWith || ', ';
+    const text = values.join(joinWith);
 
-    order.forEach(type => {
-      if (type === 'meta' && CFG.display?.showCategories) {
-        const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
-        if (cats.length) {
-          const meta = document.createElement('div');
-          meta.className = 'collection-related-block__meta';
+    el.textContent = label ? (label + ' ' + text) : text;
 
-          cats.forEach(cat => {
-            const span = document.createElement('span');
-            span.className = 'collection-related-block__category';
-            span.textContent = cleanText(cat);
-            meta.appendChild(span);
-          });
+    return el;
+  }
 
-          content.appendChild(meta);
+  function applyStateClasses(section) {
+    if (section.querySelector('.collection-related-block__heading')) {
+      section.classList.add('collection-related-block--has-heading');
+    }
+
+    if (section.querySelector('.collection-related-block__image')) {
+      section.classList.add('collection-related-block--has-image');
+    }
+
+    if (section.querySelector('.collection-related-block__title')) {
+      section.classList.add('collection-related-block--has-title');
+    }
+
+    if (section.querySelector('.collection-related-block__meta')) {
+      section.classList.add('collection-related-block--has-meta');
+    }
+
+    if (section.querySelector('.collection-related-block__excerpt')) {
+      section.classList.add('collection-related-block--has-excerpt');
+    }
+
+    if (section.querySelector('.collection-related-block__location')) {
+      section.classList.add('collection-related-block--has-location');
+    }
+
+    if (section.querySelector('.collection-related-block__tag-prefix')) {
+      section.classList.add('collection-related-block--has-tag-prefix');
+    }
+
+    const items = section.querySelectorAll('.collection-related-block__item');
+
+    if (items.length === 1) {
+      section.classList.add('collection-related-block--single-item');
+    }
+
+    if (items.length > 1) {
+      section.classList.add('collection-related-block--multiple-items');
+    }
+  }
+
+  function buildBlock(items, CFG) {
+    const section = document.createElement('section');
+    section.className = 'collection-related-block';
+    section.dataset.relatedKey = CFG.key;
+
+    const extraClasses = String(CFG.classes?.block || '')
+      .split(/\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    extraClasses.forEach(cls => section.classList.add(cls));
+
+    const inner = document.createElement('div');
+    inner.className = 'collection-related-block__inner';
+
+    const headingText = getHeadingText(items, CFG);
+    if (headingText) {
+      const tag = CFG.headingTag || 'h3';
+      const heading = document.createElement(tag);
+      heading.className = 'collection-related-block__heading';
+      heading.textContent = headingText;
+      inner.appendChild(heading);
+    }
+
+    const list = document.createElement('div');
+    list.className = 'collection-related-block__list';
+
+    items.forEach(item => {
+      const card = document.createElement('a');
+      card.className = 'collection-related-block__item';
+      card.href = item.fullUrl || (CFG.sourceCollection.path + '/' + item.urlId);
+
+      extraClasses.forEach(cls => card.classList.add(cls + '__item'));
+
+      if (CFG.display?.showImage && item.assetUrl) {
+        const media = document.createElement('div');
+        media.className = 'collection-related-block__image';
+
+        const img = document.createElement('img');
+        img.src = item.assetUrl;
+        img.alt = cleanText(item.title || '');
+        img.loading = 'lazy';
+        img.decoding = 'async';
+
+        img.style.objectPosition =
+          item.mediaFocalPoint &&
+          typeof item.mediaFocalPoint.x === 'number' &&
+          typeof item.mediaFocalPoint.y === 'number'
+            ? Math.round(item.mediaFocalPoint.x * 100) + '% ' +
+              Math.round(item.mediaFocalPoint.y * 100) + '%'
+            : '50% 50%';
+
+        media.appendChild(img);
+        card.appendChild(media);
+      }
+
+      const content = document.createElement('div');
+      content.className = 'collection-related-block__content';
+
+      const order = Array.isArray(CFG.display?.order)
+        ? CFG.display.order
+        : ['meta', 'title', 'excerpt', 'location'];
+
+      order.forEach(type => {
+        if (type === 'meta' && CFG.display?.showCategories) {
+          const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
+          if (cats.length) {
+            const meta = document.createElement('div');
+            meta.className = 'collection-related-block__meta';
+
+            cats.forEach(cat => {
+              const span = document.createElement('span');
+              span.className = 'collection-related-block__category';
+              span.textContent = cleanText(cat);
+              meta.appendChild(span);
+            });
+
+            content.appendChild(meta);
+          }
         }
-      }
 
-      if (type === 'title' && CFG.display?.showTitle) {
-        const title = document.createElement('div');
-        title.className = 'collection-related-block__title';
-        title.textContent = cleanText(item.title || '');
-        content.appendChild(title);
-      }
+        if (type === 'tagPrefix' && Array.isArray(CFG.display?.tagPrefixFields)) {
+          CFG.display.tagPrefixFields.forEach(fieldConfig => {
+            const fieldEl = buildTagPrefixField(item, fieldConfig);
+            if (fieldEl) content.appendChild(fieldEl);
+          });
+        }
 
-      if (type === 'excerpt' && CFG.display?.showExcerpt && item.excerpt) {
-        const excerpt = document.createElement('div');
-        excerpt.className = 'collection-related-block__excerpt';
-        excerpt.textContent = cleanText(item.excerpt);
-        content.appendChild(excerpt);
-      }
+        if (type === 'title' && CFG.display?.showTitle) {
+          const title = document.createElement('div');
+          title.className = 'collection-related-block__title';
+          title.textContent = cleanText(item.title || '');
+          content.appendChild(title);
+        }
 
-      if (type === 'location' && CFG.display?.showLocation && item.locationText) {
-        const location = document.createElement('div');
-        location.className = 'collection-related-block__location';
-        location.textContent = cleanText(item.locationText);
-        content.appendChild(location);
-      }
+        if (type === 'excerpt' && CFG.display?.showExcerpt && item.excerpt) {
+          const excerpt = document.createElement('div');
+          excerpt.className = 'collection-related-block__excerpt';
+          excerpt.textContent = cleanText(item.excerpt);
+          content.appendChild(excerpt);
+        }
+
+        if (type === 'location' && CFG.display?.showLocation && item.locationText) {
+          const location = document.createElement('div');
+          location.className = 'collection-related-block__location';
+          location.textContent = cleanText(item.locationText);
+          content.appendChild(location);
+        }
+      });
+
+      card.appendChild(content);
+      list.appendChild(card);
     });
 
-    card.appendChild(content);
-    list.appendChild(card);
-  });
+    inner.appendChild(list);
+    section.appendChild(inner);
 
-  inner.appendChild(list);
-  section.appendChild(inner);
+    applyStateClasses(section);
 
-  applyStateClasses(section);
-
-  return section;
-}
-  
-function applyStateClasses(section) {
-  if (section.querySelector('.collection-related-block__heading')) {
-    section.classList.add('collection-related-block--has-heading');
+    return section;
   }
 
-  if (section.querySelector('.collection-related-block__image')) {
-    section.classList.add('collection-related-block--has-image');
-  }
-
-  if (section.querySelector('.collection-related-block__title')) {
-    section.classList.add('collection-related-block--has-title');
-  }
-
-  if (section.querySelector('.collection-related-block__meta')) {
-    section.classList.add('collection-related-block--has-meta');
-  }
-
-  if (section.querySelector('.collection-related-block__excerpt')) {
-    section.classList.add('collection-related-block--has-excerpt');
-  }
-
-  if (section.querySelector('.collection-related-block__location')) {
-    section.classList.add('collection-related-block--has-location');
-  }
-
-  const items = section.querySelectorAll('.collection-related-block__item');
-
-  if (items.length === 1) {
-    section.classList.add('collection-related-block--single-item');
-  }
-
-  if (items.length > 1) {
-    section.classList.add('collection-related-block--multiple-items');
-  }
-}
-  
   function createRunner(CFG) {
     CFG = Object.assign(
       {
@@ -723,7 +774,8 @@ function applyStateClasses(section) {
           showCategories: true,
           showExcerpt: false,
           showLocation: false,
-          order: ['meta', 'title', 'excerpt', 'location']
+          order: ['meta', 'title', 'excerpt', 'location'],
+          tagPrefixFields: []
         },
         selection: {
           constraints: {
