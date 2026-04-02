@@ -9,6 +9,7 @@
   if (!CONFIGS.length) return;
 
   const DEFAULT_JSON_FORMAT_SUFFIX = '?format=json';
+  const COLLECTION_RELATED_BLOCK_COLLECTION_CACHE = new Map();
 
   function normalize(str) {
     return String(str || '')
@@ -74,6 +75,16 @@
     const idx = raw.indexOf(':');
     if (idx === -1) return raw.trim();
     return raw.slice(idx + 1).trim();
+  }
+
+  function slugifyToken(str) {
+    return String(str || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
   }
 
   function buildTagObjects(tags) {
@@ -146,6 +157,22 @@
     return ['collection-related-block-v2', CFG.key, location.pathname].join('::');
   }
 
+  function getCollectionCacheKey(path, maxPages, jsonFormatSuffix) {
+    return [
+      'collection-related-block-collection-cache',
+      path,
+      maxPages || 5,
+      jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX
+    ].join('::');
+  }
+
+  function getCollectionCacheOptions(CFG) {
+    return {
+      useMemoryCache: CFG.performance?.useCollectionMemoryCache !== false,
+      useSessionCache: CFG.performance?.useCollectionSessionCache === true
+    };
+  }
+
   function getAssetUrl(item) {
     return item.assetUrl || item?.asset?.url || null;
   }
@@ -179,7 +206,31 @@
     return '';
   }
 
-  function mapItemForRender(item) {
+  function mapItemForRender(item, CFG) {
+    const tagPrefixFields = Array.isArray(CFG?.display?.tagPrefixFields)
+      ? CFG.display.tagPrefixFields
+      : [];
+
+    const tagPrefixValues = tagPrefixFields
+      .map(fieldConfig => {
+        const prefix = fieldConfig?.prefix || '';
+        const values = getTagValuesByPrefix(item, prefix);
+        if (!values.length) return null;
+
+        const limitedValues = fieldConfig?.maxItems
+          ? values.slice(0, Number(fieldConfig.maxItems))
+          : values;
+
+        return {
+          prefix: cleanText(prefix),
+          prefixSlug: slugifyToken(String(prefix).replace(/:$/, '')),
+          values: limitedValues,
+          value: limitedValues.join(fieldConfig?.joinWith || ', '),
+          label: cleanText(fieldConfig?.label || '')
+        };
+      })
+      .filter(Boolean);
+
     return {
       title: cleanText(item.title || ''),
       urlId: item.urlId || '',
@@ -196,6 +247,7 @@
       locationText: getItemLocationText(item),
       displayIndex: Number(item.displayIndex || 999999),
       timestamp: getItemTimestamp(item),
+      tagPrefixValues,
       rawItem: item
     };
   }
@@ -453,7 +505,7 @@
     return list;
   }
 
-  function applyFallbackFill(selectedItems, allItems, currentItem, selection) {
+  function applyFallbackFill(selectedItems, allItems, currentItem, selection, CFG) {
     const fallback = selection?.fallback || {};
     const limit = Number(selection?.limit || selectedItems.length || 0);
 
@@ -470,7 +522,7 @@
 
     let pool = allItems
       .filter(item => passesConstraints(item, currentItem, { constraints }))
-      .map(mapItemForRender)
+      .map(item => mapItemForRender(item, CFG))
       .filter(item => {
         const itemUrl = String(item.fullUrl || '');
         if (!itemUrl) return false;
@@ -495,62 +547,98 @@
     return result.slice(0, limit);
   }
 
-async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix) {
-  const suffix = jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
-  let url = path + suffix;
-  const items = [];
+  async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions) {
+    const suffix = jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
+    const cacheKey = getCollectionCacheKey(path, maxPages, suffix);
+    const options = cacheOptions || {};
+    const useMemoryCache = options.useMemoryCache !== false;
+    const useSessionCache = options.useSessionCache === true;
 
-  function ensureJsonFormat(nextUrl) {
-    const raw = String(nextUrl || '');
-    if (!raw) return raw;
-    if (raw.includes('format=json')) return raw;
-    return raw.includes('?') ? raw + '&format=json' : raw + '?format=json';
+    if (useMemoryCache && COLLECTION_RELATED_BLOCK_COLLECTION_CACHE.has(cacheKey)) {
+      return COLLECTION_RELATED_BLOCK_COLLECTION_CACHE.get(cacheKey);
+    }
+
+    if (useSessionCache) {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            if (useMemoryCache) {
+              COLLECTION_RELATED_BLOCK_COLLECTION_CACHE.set(cacheKey, parsed);
+            }
+            return parsed;
+          }
+        }
+      } catch (e) {}
+    }
+
+    let url = path + suffix;
+    const items = [];
+
+    function ensureJsonFormat(nextUrl) {
+      const raw = String(nextUrl || '');
+      if (!raw) return raw;
+      if (raw.includes('format=json')) return raw;
+      return raw.includes('?') ? raw + '&format=json' : raw + '?format=json';
+    }
+
+    for (let page = 0; page < (maxPages || 5); page++) {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (!res.ok) break;
+
+      const data = await res.json();
+      const batch = Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.itemList)
+          ? data.itemList
+          : [];
+
+      items.push(...batch);
+
+      const next = data?.pagination?.nextPageUrl || null;
+      if (!next) break;
+
+      url = ensureJsonFormat(next);
+    }
+
+    if (useMemoryCache) {
+      COLLECTION_RELATED_BLOCK_COLLECTION_CACHE.set(cacheKey, items);
+    }
+
+    if (useSessionCache) {
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify(items));
+      } catch (e) {}
+    }
+
+    return items;
   }
 
-  for (let page = 0; page < (maxPages || 5); page++) {
-    const res = await fetch(url, { credentials: 'same-origin' });
-    if (!res.ok) break;
-
-    const data = await res.json();
-    const batch = Array.isArray(data?.items)
-      ? data.items
-      : Array.isArray(data?.itemList)
-        ? data.itemList
-        : [];
-
-    items.push(...batch);
-
-    const next = data?.pagination?.nextPageUrl || null;
-    if (!next) break;
-
-    url = ensureJsonFormat(next);
+  async function fetchCollectionItems(CFG) {
+    return fetchCollectionItemsFromPath(
+      CFG.sourceCollection.path,
+      CFG.performance?.maxPages || 5,
+      CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+      getCollectionCacheOptions(CFG)
+    );
   }
-
-  return items;
-}
-
-async function fetchCollectionItems(CFG) {
-  return fetchCollectionItemsFromPath(
-    CFG.sourceCollection.path,
-    CFG.performance?.maxPages || 5,
-    CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX
-  );
-}
 
   async function fetchCurrentItemCollectionItems(CFG) {
-  const currentSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
-  const currentSourceSuffix =
-    CFG.currentItem?.sourceCollection?.jsonFormatSuffix ||
-    CFG.sourceCollection?.jsonFormatSuffix ||
-    DEFAULT_JSON_FORMAT_SUFFIX;
+    const currentSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
+    const currentSourceSuffix =
+      CFG.currentItem?.sourceCollection?.jsonFormatSuffix ||
+      CFG.sourceCollection?.jsonFormatSuffix ||
+      DEFAULT_JSON_FORMAT_SUFFIX;
 
-  return fetchCollectionItemsFromPath(
-    currentSourcePath,
-    CFG.performance?.maxPages || 5,
-    currentSourceSuffix
-  );
-}
-  
+    return fetchCollectionItemsFromPath(
+      currentSourcePath,
+      CFG.performance?.maxPages || 5,
+      currentSourceSuffix,
+      getCollectionCacheOptions(CFG)
+    );
+  }
+
   function findCurrentItem(items, CFG) {
     const pathname = getCurrentPathname();
     const override = CFG.currentItem?.overrideForDev || null;
@@ -598,7 +686,7 @@ async function fetchCollectionItems(CFG) {
     if (!values.length) return null;
 
     if (fieldConfig.maxItems) {
-      values = values.slice(0, fieldConfig.maxItems);
+      values = values.slice(0, Number(fieldConfig.maxItems));
     }
 
     const el = document.createElement('div');
@@ -613,7 +701,33 @@ async function fetchCollectionItems(CFG) {
     return el;
   }
 
+  function createLoader() {
+    const loader = document.createElement('div');
+    loader.className = 'collection-related-block__loader';
+    loader.setAttribute('aria-hidden', 'true');
+
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'collection-related-block__loader-dot';
+      loader.appendChild(dot);
+    }
+
+    return loader;
+  }
+
   function applyStateClasses(section) {
+    section.classList.remove(
+      'collection-related-block--has-heading',
+      'collection-related-block--has-image',
+      'collection-related-block--has-title',
+      'collection-related-block--has-meta',
+      'collection-related-block--has-excerpt',
+      'collection-related-block--has-location',
+      'collection-related-block--has-tag-prefix',
+      'collection-related-block--single-item',
+      'collection-related-block--multiple-items'
+    );
+
     if (section.querySelector('.collection-related-block__heading')) {
       section.classList.add('collection-related-block--has-heading');
     }
@@ -651,6 +765,146 @@ async function fetchCollectionItems(CFG) {
     if (items.length > 1) {
       section.classList.add('collection-related-block--multiple-items');
     }
+  }
+
+  function buildBlockShell(CFG) {
+    const section = document.createElement('section');
+    section.className = 'collection-related-block collection-related-block--is-loading';
+    section.dataset.relatedKey = CFG.key;
+
+    const extraClasses = String(CFG.classes?.block || '')
+      .split(/\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    extraClasses.forEach(cls => section.classList.add(cls));
+
+    const inner = document.createElement('div');
+    inner.className = 'collection-related-block__inner';
+
+    if (!CFG.loading?.hideLoader) {
+      inner.appendChild(createLoader());
+    }
+
+    section.appendChild(inner);
+    applyStateClasses(section);
+
+    return section;
+  }
+
+  function replaceBlockContent(section, items, CFG) {
+    const inner = section.querySelector('.collection-related-block__inner');
+    if (!inner) return;
+
+    inner.innerHTML = '';
+
+    const headingText = getHeadingText(items, CFG);
+    if (headingText) {
+      const tag = CFG.headingTag || 'h3';
+      const heading = document.createElement(tag);
+      heading.className = 'collection-related-block__heading';
+      heading.textContent = headingText;
+      inner.appendChild(heading);
+    }
+
+    const list = document.createElement('div');
+    list.className = 'collection-related-block__list';
+
+    const extraClasses = String(CFG.classes?.block || '')
+      .split(/\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    items.forEach(item => {
+      const card = document.createElement('a');
+      card.className = 'collection-related-block__item';
+      card.href = item.fullUrl || (CFG.sourceCollection.path + '/' + item.urlId);
+
+      extraClasses.forEach(cls => card.classList.add(cls + '__item'));
+
+      if (CFG.display?.showImage && item.assetUrl) {
+        const media = document.createElement('div');
+        media.className = 'collection-related-block__image';
+
+        const img = document.createElement('img');
+        img.src = item.assetUrl;
+        img.alt = cleanText(item.title || '');
+        img.loading = 'lazy';
+        img.decoding = 'async';
+
+        img.style.objectPosition =
+          item.mediaFocalPoint &&
+          typeof item.mediaFocalPoint.x === 'number' &&
+          typeof item.mediaFocalPoint.y === 'number'
+            ? Math.round(item.mediaFocalPoint.x * 100) + '% ' +
+              Math.round(item.mediaFocalPoint.y * 100) + '%'
+            : '50% 50%';
+
+        media.appendChild(img);
+        card.appendChild(media);
+      }
+
+      const content = document.createElement('div');
+      content.className = 'collection-related-block__content';
+
+      const order = Array.isArray(CFG.display?.order)
+        ? CFG.display.order
+        : ['meta', 'title', 'excerpt', 'location'];
+
+      order.forEach(type => {
+        if (type === 'meta' && CFG.display?.showCategories) {
+          const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
+          if (cats.length) {
+            const meta = document.createElement('div');
+            meta.className = 'collection-related-block__meta';
+
+            cats.forEach(cat => {
+              const span = document.createElement('span');
+              span.className = 'collection-related-block__category';
+              span.textContent = cleanText(cat);
+              meta.appendChild(span);
+            });
+
+            content.appendChild(meta);
+          }
+        }
+
+        if (type === 'tagPrefix' && Array.isArray(CFG.display?.tagPrefixFields)) {
+          CFG.display.tagPrefixFields.forEach(fieldConfig => {
+            const fieldEl = buildTagPrefixField(item, fieldConfig);
+            if (fieldEl) content.appendChild(fieldEl);
+          });
+        }
+
+        if (type === 'title' && CFG.display?.showTitle) {
+          const title = document.createElement('div');
+          title.className = 'collection-related-block__title';
+          title.textContent = cleanText(item.title || '');
+          content.appendChild(title);
+        }
+
+        if (type === 'excerpt' && CFG.display?.showExcerpt && item.excerpt) {
+          const excerpt = document.createElement('div');
+          excerpt.className = 'collection-related-block__excerpt';
+          excerpt.textContent = cleanText(item.excerpt);
+          content.appendChild(excerpt);
+        }
+
+        if (type === 'location' && CFG.display?.showLocation && item.locationText) {
+          const location = document.createElement('div');
+          location.className = 'collection-related-block__location';
+          location.textContent = cleanText(item.locationText);
+          content.appendChild(location);
+        }
+      });
+
+      card.appendChild(content);
+      list.appendChild(card);
+    });
+
+    inner.appendChild(list);
+    section.classList.remove('collection-related-block--is-loading');
+    applyStateClasses(section);
   }
 
   function buildBlock(items, CFG) {
@@ -786,7 +1040,7 @@ async function fetchCollectionItems(CFG) {
         currentItem: {
           matchBy: 'pathname',
           sourceCollection: null
-          },
+        },
         insertion: { targetSelector: '', mode: 'append' },
         heading: '',
         headingSingular: '',
@@ -801,6 +1055,9 @@ async function fetchCollectionItems(CFG) {
           showLocation: false,
           order: ['meta', 'title', 'excerpt', 'location'],
           tagPrefixFields: []
+        },
+        loading: {
+          hideLoader: false
         },
         selection: {
           constraints: {
@@ -824,7 +1081,9 @@ async function fetchCollectionItems(CFG) {
         },
         performance: {
           useSessionStorage: true,
-          maxPages: 5
+          maxPages: 5,
+          useCollectionMemoryCache: true,
+          useCollectionSessionCache: false
         }
       },
       CFG || {}
@@ -843,6 +1102,7 @@ async function fetchCollectionItems(CFG) {
       if (alreadyInjected(target, CFG.key)) return true;
 
       const key = cacheKey(CFG);
+      let shell = null;
 
       if (CFG.performance?.useSessionStorage) {
         try {
@@ -853,37 +1113,50 @@ async function fetchCollectionItems(CFG) {
               insertInto(target, buildBlock(parsed, CFG), CFG.insertion?.mode);
               return true;
             }
-            return false;
           }
         } catch (e) {}
       }
 
-let items;
-try {
-  items = await fetchCollectionItems(CFG);
-} catch (e) {
-  return false;
-}
+      shell = buildBlockShell(CFG);
+      insertInto(target, shell, CFG.insertion?.mode);
 
-if (!Array.isArray(items) || !items.length) return false;
+      let items;
+      try {
+        items = await fetchCollectionItems(CFG);
+      } catch (e) {
+        shell.remove();
+        return false;
+      }
 
-let currentItemSourceItems = items;
-const currentItemSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
-const resultsSourcePath = CFG.sourceCollection?.path || '';
+      if (!Array.isArray(items) || !items.length) {
+        shell.remove();
+        return false;
+      }
 
-if (currentItemSourcePath !== resultsSourcePath) {
-  try {
-    currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG);
-  } catch (e) {
-    return false;
-  }
-}
+      let currentItemSourceItems = items;
+      const currentItemSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
+      const resultsSourcePath = CFG.sourceCollection?.path || '';
 
-if (!Array.isArray(currentItemSourceItems) || !currentItemSourceItems.length) return false;
+      if (currentItemSourcePath !== resultsSourcePath) {
+        try {
+          currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG);
+        } catch (e) {
+          shell.remove();
+          return false;
+        }
+      }
 
-const currentItem = findCurrentItem(currentItemSourceItems, CFG);
-if (!currentItem) return false;
-      
+      if (!Array.isArray(currentItemSourceItems) || !currentItemSourceItems.length) {
+        shell.remove();
+        return false;
+      }
+
+      const currentItem = findCurrentItem(currentItemSourceItems, CFG);
+      if (!currentItem) {
+        shell.remove();
+        return false;
+      }
+
       const candidates = [];
 
       items.forEach(item => {
@@ -897,7 +1170,7 @@ if (!currentItem) return false;
         if (CFG.selection?.score?.enabled && score < minScore) return;
 
         candidates.push({
-          ...mapItemForRender(item),
+          ...mapItemForRender(item, CFG),
           _score: score
         });
       });
@@ -913,9 +1186,10 @@ if (!currentItem) return false;
       finalItems = applyFallbackFill(finalItems, items, currentItem, {
         ...CFG.selection,
         limit: limit
-      });
+      }, CFG);
 
       if (!finalItems.length) {
+        shell.remove();
         if (CFG.performance?.useSessionStorage) {
           try {
             sessionStorage.setItem(key, JSON.stringify([]));
@@ -924,7 +1198,7 @@ if (!currentItem) return false;
         return false;
       }
 
-      insertInto(target, buildBlock(finalItems, CFG), CFG.insertion?.mode);
+      replaceBlockContent(shell, finalItems, CFG);
 
       if (CFG.performance?.useSessionStorage) {
         try {
