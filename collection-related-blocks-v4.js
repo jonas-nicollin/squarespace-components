@@ -495,40 +495,62 @@
     return result.slice(0, limit);
   }
 
-  async function fetchCollectionItems(CFG) {
-    const suffix = CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
-    let url = CFG.sourceCollection.path + suffix;
-    const items = [];
+async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix) {
+  const suffix = jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
+  let url = path + suffix;
+  const items = [];
 
-    function ensureJsonFormat(nextUrl) {
-      const raw = String(nextUrl || '');
-      if (!raw) return raw;
-      if (raw.includes('format=json')) return raw;
-      return raw.includes('?') ? raw + '&format=json' : raw + '?format=json';
-    }
-
-    for (let page = 0; page < (CFG.performance?.maxPages || 5); page++) {
-      const res = await fetch(url, { credentials: 'same-origin' });
-      if (!res.ok) break;
-
-      const data = await res.json();
-      const batch = Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.itemList)
-          ? data.itemList
-          : [];
-
-      items.push(...batch);
-
-      const next = data?.pagination?.nextPageUrl || null;
-      if (!next) break;
-
-      url = ensureJsonFormat(next);
-    }
-
-    return items;
+  function ensureJsonFormat(nextUrl) {
+    const raw = String(nextUrl || '');
+    if (!raw) return raw;
+    if (raw.includes('format=json')) return raw;
+    return raw.includes('?') ? raw + '&format=json' : raw + '?format=json';
   }
 
+  for (let page = 0; page < (maxPages || 5); page++) {
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) break;
+
+    const data = await res.json();
+    const batch = Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.itemList)
+        ? data.itemList
+        : [];
+
+    items.push(...batch);
+
+    const next = data?.pagination?.nextPageUrl || null;
+    if (!next) break;
+
+    url = ensureJsonFormat(next);
+  }
+
+  return items;
+}
+
+async function fetchCollectionItems(CFG) {
+  return fetchCollectionItemsFromPath(
+    CFG.sourceCollection.path,
+    CFG.performance?.maxPages || 5,
+    CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX
+  );
+}
+
+  async function fetchCurrentItemCollectionItems(CFG) {
+  const currentSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
+  const currentSourceSuffix =
+    CFG.currentItem?.sourceCollection?.jsonFormatSuffix ||
+    CFG.sourceCollection?.jsonFormatSuffix ||
+    DEFAULT_JSON_FORMAT_SUFFIX;
+
+  return fetchCollectionItemsFromPath(
+    currentSourcePath,
+    CFG.performance?.maxPages || 5,
+    currentSourceSuffix
+  );
+}
+  
   function findCurrentItem(items, CFG) {
     const pathname = getCurrentPathname();
     const override = CFG.currentItem?.overrideForDev || null;
@@ -761,7 +783,10 @@
         devGuard: { enabled: false },
         requiredBodyClasses: [],
         sourceCollection: { path: '' },
-        currentItem: { matchBy: 'pathname' },
+        currentItem: {
+          matchBy: 'pathname',
+          sourceCollection: null
+          },
         insertion: { targetSelector: '', mode: 'append' },
         heading: '',
         headingSingular: '',
@@ -833,18 +858,32 @@
         } catch (e) {}
       }
 
-      let items;
-      try {
-        items = await fetchCollectionItems(CFG);
-      } catch (e) {
-        return false;
-      }
+let items;
+try {
+  items = await fetchCollectionItems(CFG);
+} catch (e) {
+  return false;
+}
 
-      if (!Array.isArray(items) || !items.length) return false;
+if (!Array.isArray(items) || !items.length) return false;
 
-      const currentItem = findCurrentItem(items, CFG);
-      if (!currentItem) return false;
+let currentItemSourceItems = items;
+const currentItemSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
+const resultsSourcePath = CFG.sourceCollection?.path || '';
 
+if (currentItemSourcePath !== resultsSourcePath) {
+  try {
+    currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG);
+  } catch (e) {
+    return false;
+  }
+}
+
+if (!Array.isArray(currentItemSourceItems) || !currentItemSourceItems.length) return false;
+
+const currentItem = findCurrentItem(currentItemSourceItems, CFG);
+if (!currentItem) return false;
+      
       const candidates = [];
 
       items.forEach(item => {
