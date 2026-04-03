@@ -725,8 +725,9 @@
       'collection-related-block--has-location',
       'collection-related-block--has-tag-prefix',
       'collection-related-block--single-item',
-      'collection-related-block--multiple-items'
-    );
+      'collection-related-block--multiple-items',
+      'collection-related-block--is-empty'
+      );
 
     if (section.querySelector('.collection-related-block__heading')) {
       section.classList.add('collection-related-block--has-heading');
@@ -907,6 +908,35 @@
     applyStateClasses(section);
   }
 
+  function replaceBlockWithEmptyState(section, CFG) {
+  const inner = section.querySelector('.collection-related-block__inner');
+  if (!inner) return;
+
+  inner.innerHTML = '';
+
+  const headingText = CFG.heading || CFG.headingSingular || '';
+  if (headingText) {
+    const tag = CFG.headingTag || 'h3';
+    const heading = document.createElement(tag);
+    heading.className = 'collection-related-block__heading';
+    heading.textContent = headingText;
+    inner.appendChild(heading);
+  }
+
+  const message = cleanText(CFG.emptyState?.message || '');
+  if (message) {
+    const empty = document.createElement('div');
+    empty.className = 'collection-related-block__empty';
+    empty.textContent = message;
+    inner.appendChild(empty);
+  }
+
+  section.classList.remove('collection-related-block--is-loading');
+  section.classList.add('collection-related-block--is-empty');
+
+  applyStateClasses(section);
+}
+
   function buildBlock(items, CFG) {
     const section = document.createElement('section');
     section.className = 'collection-related-block';
@@ -1059,6 +1089,9 @@
         loading: {
           hideLoader: false
         },
+        emptyState: {
+          message: ''
+          },
         selection: {
           constraints: {
             requirePublished: true,
@@ -1189,14 +1222,24 @@
       }, CFG);
 
       if (!finalItems.length) {
-        shell.remove();
-        if (CFG.performance?.useSessionStorage) {
-          try {
-            sessionStorage.setItem(key, JSON.stringify([]));
-          } catch (e) {}
-        }
-        return false;
-      }
+  if (CFG.emptyState?.message) {
+    replaceBlockWithEmptyState(shell, CFG);
+    if (CFG.performance?.useSessionStorage) {
+      try {
+        sessionStorage.setItem(key, JSON.stringify([]));
+      } catch (e) {}
+    }
+    return true;
+  }
+
+  shell.remove();
+  if (CFG.performance?.useSessionStorage) {
+    try {
+      sessionStorage.setItem(key, JSON.stringify([]));
+    } catch (e) {}
+  }
+  return false;
+}
 
       replaceBlockContent(shell, finalItems, CFG);
 
