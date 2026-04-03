@@ -715,6 +715,72 @@
     return loader;
   }
 
+  function buildHeadingCta(CFG) {
+    const cta = CFG.headingCta || {};
+    const text = cleanText(cta.text || '');
+    const href = String(cta.href || '').trim();
+
+    if (!text || !href) return null;
+
+    const link = document.createElement('a');
+    link.className = 'collection-related-block__heading-cta';
+    link.href = href;
+
+    if (cta.newTab) {
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    }
+
+    const textEl = document.createElement('span');
+    textEl.className = 'collection-related-block__heading-cta-text';
+    textEl.textContent = text;
+    link.appendChild(textEl);
+
+    const icon = String(cta.icon || '');
+    const iconType = String(cta.iconType || 'text').toLowerCase();
+
+    if (icon) {
+      const iconEl = document.createElement('span');
+      iconEl.className = 'collection-related-block__heading-cta-icon';
+
+      if (iconType === 'html') {
+        iconEl.innerHTML = icon;
+      } else {
+        iconEl.textContent = icon;
+      }
+
+      link.appendChild(iconEl);
+    }
+
+    return link;
+  }
+
+  function buildHeadingElement(items, CFG, forceHeading) {
+    const headingText = forceHeading
+      ? (CFG.heading || CFG.headingSingular || '')
+      : getHeadingText(items, CFG);
+
+    const headingCta = buildHeadingCta(CFG);
+
+    if (!headingText && !headingCta) return null;
+
+    const heading = document.createElement('div');
+    heading.className = 'collection-related-block__heading';
+
+    if (headingText) {
+      const tag = document.createElement(CFG.headingTag || 'h3');
+      tag.className = 'collection-related-block__heading-text';
+      tag.textContent = headingText;
+      heading.appendChild(tag);
+    }
+
+    if (headingCta) {
+      heading.appendChild(headingCta);
+    }
+
+    return heading;
+  }
+
   function applyStateClasses(section) {
     section.classList.remove(
       'collection-related-block--has-heading',
@@ -724,13 +790,18 @@
       'collection-related-block--has-excerpt',
       'collection-related-block--has-location',
       'collection-related-block--has-tag-prefix',
+      'collection-related-block--has-heading-cta',
       'collection-related-block--single-item',
       'collection-related-block--multiple-items',
       'collection-related-block--is-empty'
-      );
+    );
 
     if (section.querySelector('.collection-related-block__heading')) {
       section.classList.add('collection-related-block--has-heading');
+    }
+
+    if (section.querySelector('.collection-related-block__heading-cta')) {
+      section.classList.add('collection-related-block--has-heading-cta');
     }
 
     if (section.querySelector('.collection-related-block__image')) {
@@ -799,12 +870,8 @@
 
     inner.innerHTML = '';
 
-    const headingText = getHeadingText(items, CFG);
-    if (headingText) {
-      const tag = CFG.headingTag || 'h3';
-      const heading = document.createElement(tag);
-      heading.className = 'collection-related-block__heading';
-      heading.textContent = headingText;
+    const heading = buildHeadingElement(items, CFG, false);
+    if (heading) {
       inner.appendChild(heading);
     }
 
@@ -909,33 +976,29 @@
   }
 
   function replaceBlockWithEmptyState(section, CFG) {
-  const inner = section.querySelector('.collection-related-block__inner');
-  if (!inner) return;
+    const inner = section.querySelector('.collection-related-block__inner');
+    if (!inner) return;
 
-  inner.innerHTML = '';
+    inner.innerHTML = '';
 
-  const headingText = CFG.heading || CFG.headingSingular || '';
-  if (headingText) {
-    const tag = CFG.headingTag || 'h3';
-    const heading = document.createElement(tag);
-    heading.className = 'collection-related-block__heading';
-    heading.textContent = headingText;
-    inner.appendChild(heading);
+    const heading = buildHeadingElement([], CFG, true);
+    if (heading) {
+      inner.appendChild(heading);
+    }
+
+    const message = cleanText(CFG.emptyState?.message || '');
+    if (message) {
+      const empty = document.createElement('div');
+      empty.className = 'collection-related-block__empty';
+      empty.textContent = message;
+      inner.appendChild(empty);
+    }
+
+    section.classList.remove('collection-related-block--is-loading');
+    section.classList.add('collection-related-block--is-empty');
+
+    applyStateClasses(section);
   }
-
-  const message = cleanText(CFG.emptyState?.message || '');
-  if (message) {
-    const empty = document.createElement('div');
-    empty.className = 'collection-related-block__empty';
-    empty.textContent = message;
-    inner.appendChild(empty);
-  }
-
-  section.classList.remove('collection-related-block--is-loading');
-  section.classList.add('collection-related-block--is-empty');
-
-  applyStateClasses(section);
-}
 
   function buildBlock(items, CFG) {
     const section = document.createElement('section');
@@ -952,12 +1015,8 @@
     const inner = document.createElement('div');
     inner.className = 'collection-related-block__inner';
 
-    const headingText = getHeadingText(items, CFG);
-    if (headingText) {
-      const tag = CFG.headingTag || 'h3';
-      const heading = document.createElement(tag);
-      heading.className = 'collection-related-block__heading';
-      heading.textContent = headingText;
+    const heading = buildHeadingElement(items, CFG, false);
+    if (heading) {
       inner.appendChild(heading);
     }
 
@@ -1059,6 +1118,89 @@
     return section;
   }
 
+  function buildPreloadQueue() {
+    const queue = [];
+
+    CONFIGS.forEach(CFG => {
+      if (!CFG || CFG.enabled === false) return;
+      if (!matchesDevGuard(CFG)) return;
+      if (!CFG.requiredBodyClasses.every(cls => document.body.classList.contains(cls))) return;
+      if (CFG.preload?.enabled !== true) return;
+
+      const maxPages = CFG.preload?.maxPages || CFG.performance?.maxPages || 5;
+
+      const explicitCollections = Array.isArray(CFG.preload?.collections)
+        ? CFG.preload.collections
+        : [];
+
+      explicitCollections.forEach(collectionConfig => {
+        const path = collectionConfig?.path;
+        if (!path) return;
+
+        queue.push({
+          path,
+          maxPages: collectionConfig?.maxPages || maxPages,
+          jsonFormatSuffix: collectionConfig?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+          cacheOptions: getCollectionCacheOptions(CFG)
+        });
+      });
+
+      if (CFG.preload?.includeSourceCollection !== false && CFG.sourceCollection?.path) {
+        queue.push({
+          path: CFG.sourceCollection.path,
+          maxPages,
+          jsonFormatSuffix: CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+          cacheOptions: getCollectionCacheOptions(CFG)
+        });
+      }
+
+      if (CFG.preload?.includeCurrentItemSource === true) {
+        const currentPath = CFG.currentItem?.sourceCollection?.path;
+        const currentSuffix =
+          CFG.currentItem?.sourceCollection?.jsonFormatSuffix ||
+          DEFAULT_JSON_FORMAT_SUFFIX;
+
+        if (currentPath) {
+          queue.push({
+            path: currentPath,
+            maxPages,
+            jsonFormatSuffix: currentSuffix,
+            cacheOptions: getCollectionCacheOptions(CFG)
+          });
+        }
+      }
+    });
+
+    return uniqBy(
+      queue.filter(item => item.path),
+      item => [item.path, item.maxPages, item.jsonFormatSuffix].join('::')
+    );
+  }
+
+  function runPreloadQueue() {
+    const queue = buildPreloadQueue();
+    if (!queue.length) return;
+
+    const runner = async () => {
+      for (const item of queue) {
+        try {
+          await fetchCollectionItemsFromPath(
+            item.path,
+            item.maxPages,
+            item.jsonFormatSuffix,
+            item.cacheOptions
+          );
+        } catch (e) {}
+      }
+    };
+
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(runner, { timeout: 1500 });
+    } else {
+      setTimeout(runner, 300);
+    }
+  }
+
   function createRunner(CFG) {
     CFG = Object.assign(
       {
@@ -1075,6 +1217,13 @@
         heading: '',
         headingSingular: '',
         headingTag: 'h3',
+        headingCta: {
+          text: '',
+          href: '',
+          icon: '',
+          iconType: 'text',
+          newTab: false
+        },
         classes: { block: '' },
         display: {
           maxItems: 4,
@@ -1091,7 +1240,14 @@
         },
         emptyState: {
           message: ''
-          },
+        },
+        preload: {
+          enabled: false,
+          includeSourceCollection: true,
+          includeCurrentItemSource: false,
+          collections: [],
+          maxPages: null
+        },
         selection: {
           constraints: {
             requirePublished: true,
@@ -1222,24 +1378,24 @@
       }, CFG);
 
       if (!finalItems.length) {
-  if (CFG.emptyState?.message) {
-    replaceBlockWithEmptyState(shell, CFG);
-    if (CFG.performance?.useSessionStorage) {
-      try {
-        sessionStorage.setItem(key, JSON.stringify([]));
-      } catch (e) {}
-    }
-    return true;
-  }
+        if (CFG.emptyState?.message) {
+          replaceBlockWithEmptyState(shell, CFG);
+          if (CFG.performance?.useSessionStorage) {
+            try {
+              sessionStorage.setItem(key, JSON.stringify([]));
+            } catch (e) {}
+          }
+          return true;
+        }
 
-  shell.remove();
-  if (CFG.performance?.useSessionStorage) {
-    try {
-      sessionStorage.setItem(key, JSON.stringify([]));
-    } catch (e) {}
-  }
-  return false;
-}
+        shell.remove();
+        if (CFG.performance?.useSessionStorage) {
+          try {
+            sessionStorage.setItem(key, JSON.stringify([]));
+          } catch (e) {}
+        }
+        return false;
+      }
 
       replaceBlockContent(shell, finalItems, CFG);
 
@@ -1288,10 +1444,17 @@
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', startSequentially, { once: true });
+    document.addEventListener('DOMContentLoaded', function () {
+      startSequentially();
+      runPreloadQueue();
+    }, { once: true });
   } else {
     startSequentially();
+    runPreloadQueue();
   }
 
-  document.addEventListener('turbolinks:load', startSequentially);
+  document.addEventListener('turbolinks:load', function () {
+    startSequentially();
+    runPreloadQueue();
+  });
 })();
