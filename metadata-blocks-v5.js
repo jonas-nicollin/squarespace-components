@@ -133,10 +133,6 @@
         addCustomClasses(container, settings.customClass);
       }
 
-      if (settings.blockSeparator) {
-        container.style.setProperty('--metadata-block-separator', `"${settings.blockSeparator}"`);
-      }
-
       blockContent.appendChild(container);
       wrapper.appendChild(blockContent);
 
@@ -155,10 +151,6 @@
 
     if (settings.customClass) {
       addCustomClasses(container, settings.customClass);
-    }
-
-    if (settings.blockSeparator) {
-      container.style.setProperty('--metadata-block-separator', `"${settings.blockSeparator}"`);
     }
 
     return { wrapper, container };
@@ -378,6 +370,14 @@
     return wrapper;
   }
 
+  function createBlockSeparator(separatorText) {
+    const separator = document.createElement('div');
+    separator.className = 'metadata-block-separator';
+    separator.setAttribute('aria-hidden', 'true');
+    separator.textContent = separatorText;
+    return separator;
+  }
+
   function applyStateClasses(container, settings) {
     const blocks = container.querySelectorAll('.metadata-block');
 
@@ -399,6 +399,18 @@
 
     if (settings.blockSeparator) {
       container.classList.add('metadata-blocks--with-block-separator');
+    }
+  }
+
+  function injectBlockSeparators(container, settings) {
+    if (!settings.blockSeparator) return;
+
+    const blocks = Array.from(container.querySelectorAll(':scope > .metadata-block'));
+    if (blocks.length < 2) return;
+
+    for (let i = 0; i < blocks.length - 1; i++) {
+      const separator = createBlockSeparator(settings.blockSeparator);
+      blocks[i].insertAdjacentElement('afterend', separator);
     }
   }
 
@@ -479,10 +491,7 @@
       const parentBlockConfig = allBlocks.find(item => item.name === parentBlockName);
 
       if (parentBlockConfig) {
-        const allValues = Array.from(
-          targetContent.querySelectorAll('.metadata-value')
-        );
-
+        const allValues = Array.from(targetContent.querySelectorAll('.metadata-value'));
         const parentTitle = parentWrapper.querySelector('.metadata-title');
         const computedTitle = getBlockTitle(parentBlockConfig, allValues.length);
 
@@ -492,6 +501,7 @@
       }
     });
 
+    injectBlockSeparators(container, settings);
     applyStateClasses(container, settings);
   }
 
