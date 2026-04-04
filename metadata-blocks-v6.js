@@ -121,10 +121,7 @@
 
     if (!wrapper && buildAutomatically) {
       wrapper = document.createElement('div');
-      wrapper.className = 'sqs-block metadata-blocks-wrapper';
-
-      const blockContent = document.createElement('div');
-      blockContent.className = 'sqs-block-content';
+      wrapper.className = 'metadata-blocks-wrapper';
 
       const container = document.createElement('div');
       container.className = 'metadata-blocks';
@@ -133,8 +130,7 @@
         addCustomClasses(container, settings.customClass);
       }
 
-      blockContent.appendChild(container);
-      wrapper.appendChild(blockContent);
+      wrapper.appendChild(container);
 
       insertAtPosition(
         finalTarget,
@@ -211,13 +207,8 @@
   }
 
   function getRawValuesForBlock(block, itemData) {
-    if (block.isLocation) {
-      return getLocationValues(itemData, block);
-    }
-
-    if (block.isExcerpt) {
-      return [];
-    }
+    if (block.isLocation) return getLocationValues(itemData, block);
+    if (block.isExcerpt) return [];
 
     const sourceKey = block.source || 'tags';
     return Array.isArray(itemData?.[sourceKey]) ? [...itemData[sourceKey]] : [];
@@ -305,13 +296,8 @@
       link.href = options.href;
       link.textContent = value;
 
-      if (options.target) {
-        link.target = options.target;
-      }
-
-      if (options.target === '_blank') {
-        link.rel = 'noopener noreferrer';
-      }
+      if (options.target) link.target = options.target;
+      if (options.target === '_blank') link.rel = 'noopener noreferrer';
 
       el.appendChild(link);
     } else {
@@ -347,6 +333,14 @@
     });
   }
 
+  function createBlockEndSeparator(separatorText) {
+    const separator = document.createElement('span');
+    separator.className = 'metadata-block-separator';
+    separator.setAttribute('aria-hidden', 'true');
+    separator.textContent = separatorText;
+    return separator;
+  }
+
   function createMetadataBlockWrapper(block, orderMap, valueCount) {
     const wrapper = document.createElement('div');
     wrapper.className = `metadata-block metadata-block--${block.name}`;
@@ -355,7 +349,7 @@
     if (block.iconTitle) wrapper.classList.add('metadata-icon-title');
     if (block.showTitle === false) wrapper.classList.add('metadata-block--title-hidden');
 
-    const order = orderMap[block.name] || block.order || 99;
+    const order = block.order ?? orderMap[block.name] ?? 99;
     wrapper.style.order = order;
 
     const blockTitle = getBlockTitle(block, valueCount);
@@ -370,48 +364,30 @@
     return wrapper;
   }
 
-  function createBlockSeparator(separatorText) {
-    const separator = document.createElement('div');
-    separator.className = 'metadata-block-separator';
-    separator.setAttribute('aria-hidden', 'true');
-    separator.textContent = separatorText;
-    return separator;
-  }
-
-  function applyStateClasses(container, settings) {
-    const blocks = container.querySelectorAll('.metadata-block');
-
-    if (blocks.length === 1) {
-      container.classList.add('metadata-blocks--single');
-    }
-
-    if (blocks.length > 1) {
-      container.classList.add('metadata-blocks--multiple');
-    }
-
-    if (container.querySelector('.metadata-excerpt')) {
-      container.classList.add('metadata-blocks--has-excerpt');
-    }
-
-    if (container.querySelector('.display-inline')) {
-      container.classList.add('metadata-blocks--has-inline');
-    }
-
-    if (settings.blockSeparator) {
-      container.classList.add('metadata-blocks--with-block-separator');
-    }
-  }
-
-  function injectBlockSeparators(container, settings) {
+  function appendSeparatorsInsideBlocks(container, settings) {
     if (!settings.blockSeparator) return;
 
     const blocks = Array.from(container.querySelectorAll(':scope > .metadata-block'));
     if (blocks.length < 2) return;
 
-    for (let i = 0; i < blocks.length - 1; i++) {
-      const separator = createBlockSeparator(settings.blockSeparator);
-      blocks[i].insertAdjacentElement('afterend', separator);
-    }
+    blocks.forEach((block, index) => {
+      const old = block.querySelector(':scope > .metadata-block-separator');
+      if (old) old.remove();
+
+      if (index < blocks.length - 1) {
+        block.appendChild(createBlockEndSeparator(settings.blockSeparator));
+      }
+    });
+  }
+
+  function applyStateClasses(container, settings) {
+    const blocks = container.querySelectorAll('.metadata-block');
+
+    if (blocks.length === 1) container.classList.add('metadata-blocks--single');
+    if (blocks.length > 1) container.classList.add('metadata-blocks--multiple');
+    if (container.querySelector('.metadata-excerpt')) container.classList.add('metadata-blocks--has-excerpt');
+    if (container.querySelector('.display-inline')) container.classList.add('metadata-blocks--has-inline');
+    if (settings.blockSeparator) container.classList.add('metadata-blocks--with-block-separator');
   }
 
   function buildMetadataBlocks(settings, itemData, container) {
@@ -487,8 +463,7 @@
         }
       });
 
-      const parentBlockName = block.group;
-      const parentBlockConfig = allBlocks.find(item => item.name === parentBlockName);
+      const parentBlockConfig = allBlocks.find(item => item.name === block.group);
 
       if (parentBlockConfig) {
         const allValues = Array.from(targetContent.querySelectorAll('.metadata-value'));
@@ -501,7 +476,7 @@
       }
     });
 
-    injectBlockSeparators(container, settings);
+    appendSeparatorsInsideBlocks(container, settings);
     applyStateClasses(container, settings);
   }
 
