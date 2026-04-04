@@ -133,6 +133,10 @@
         addCustomClasses(container, settings.customClass);
       }
 
+      if (settings.blockSeparator) {
+        container.style.setProperty('--metadata-block-separator', `"${settings.blockSeparator}"`);
+      }
+
       blockContent.appendChild(container);
       wrapper.appendChild(blockContent);
 
@@ -151,6 +155,10 @@
 
     if (settings.customClass) {
       addCustomClasses(container, settings.customClass);
+    }
+
+    if (settings.blockSeparator) {
+      container.style.setProperty('--metadata-block-separator', `"${settings.blockSeparator}"`);
     }
 
     return { wrapper, container };
@@ -286,6 +294,7 @@
   }
 
   function getBlockTitle(block, valueCount) {
+    if (block.showTitle === false) return null;
     if (block.title === 'hidden') return null;
 
     const singular = block.iconTitle || block.title || '';
@@ -352,6 +361,7 @@
 
     if (block.displayInline) wrapper.classList.add('display-inline');
     if (block.iconTitle) wrapper.classList.add('metadata-icon-title');
+    if (block.showTitle === false) wrapper.classList.add('metadata-block--title-hidden');
 
     const order = orderMap[block.name] || block.order || 99;
     wrapper.style.order = order;
@@ -368,7 +378,7 @@
     return wrapper;
   }
 
-  function applyStateClasses(container) {
+  function applyStateClasses(container, settings) {
     const blocks = container.querySelectorAll('.metadata-block');
 
     if (blocks.length === 1) {
@@ -385,6 +395,10 @@
 
     if (container.querySelector('.display-inline')) {
       container.classList.add('metadata-blocks--has-inline');
+    }
+
+    if (settings.blockSeparator) {
+      container.classList.add('metadata-blocks--with-block-separator');
     }
   }
 
@@ -478,7 +492,7 @@
       }
     });
 
-    applyStateClasses(container);
+    applyStateClasses(container, settings);
   }
 
   async function runSettings(settings) {
