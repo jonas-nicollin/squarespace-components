@@ -78,7 +78,7 @@
     const bits = [];
 
     if (title) {
-      bits.push(`<h3 class="carousel-gallery-caption-title">${title}</h3>`);
+      bits.push(`<div class="carousel-gallery-caption-title">${title}</div>`);
     }
 
     if (descriptionHTML) {
