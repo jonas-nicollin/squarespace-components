@@ -1,4 +1,3 @@
-<script>
 (() => {
   "use strict";
 
@@ -381,4 +380,3 @@
   window.addEventListener("page:loaded", init);
   window.addEventListener("site:refresh", init);
 })();
-</script>
