@@ -1,9 +1,12 @@
 (() => {
 "use strict";
 
+/* ============================================================
+   CONFIG
+============================================================ */
 const CFG = window.CarouselGalleryFancyboxConfig || {};
-const captionsCfg = CFG.captions || {};
 
+const captionsCfg = CFG.captions || {};
 const showCarouselCaptions = captionsCfg.showOnCarousel ?? true;
 const showLightboxCaptions = captionsCfg.showOnLightbox ?? true;
 
@@ -86,11 +89,13 @@ function buildItems(container){
 }
 
 /* ============================================================
-   HEADING
+   HEADING (FIX DOUBLE INSERT)
 ============================================================ */
 function insertHeading(container){
 
   if(!CFG.galleryHeading?.enabled) return;
+
+  if(container.dataset.headingInjected === "true") return;
 
   const parent = container.parentNode;
   if(!parent) return;
@@ -103,6 +108,8 @@ function insertHeading(container){
   h.textContent = text;
 
   parent.insertBefore(h, container);
+
+  container.dataset.headingInjected = "true";
 }
 
 /* ============================================================
@@ -127,7 +134,7 @@ function getSrc(img){
 }
 
 /* ============================================================
-   FANCYBOX ITEMS
+   COLLECT ITEMS FOR FANCYBOX
 ============================================================ */
 function collect(container){
 
@@ -156,15 +163,52 @@ function collect(container){
       src: getSrc(img),
       type: "image",
       caption: caption || "",
-      alt: title || ""
+      alt: (title && !title.match(/\.(webp|jpg|png|gif)$/i)) ? title : ""
     });
+
   });
 
   return items;
 }
 
 /* ============================================================
-   OPEN FANCYBOX
+   FANCYBOX OPEN (FIX CONFIG STRUCTURE)
+============================================================ */
+function openFancybox(items, index){
+
+  const fb = CFG.fancybox || {};
+
+  Fancybox.show(items, {
+
+    startIndex: index,
+
+    theme: fb.theme ?? "light",
+    Hash: fb.hash ?? true,
+    preload: fb.preload ?? 1,
+    dragToClose: fb.dragToClose ?? true,
+    closeButton: fb.closeButton ?? false,
+
+    Carousel: {
+      infinite: fb.carousel?.infinite ?? false,
+
+      Thumbs: {
+        type: fb.carousel?.thumbs?.type || "modern",
+        showOnStart: fb.carousel?.thumbs?.showOnStart ?? false
+      },
+
+      Toolbar: {
+        display: {
+          left: fb.carousel?.toolbar?.left || ["counter"],
+          middle: fb.carousel?.toolbar?.middle || [],
+          right: fb.carousel?.toolbar?.right || ["zoomIn","thumbs","close"]
+        }
+      }
+    }
+  });
+}
+
+/* ============================================================
+   BIND FANCYBOX (FIX CLICK)
 ============================================================ */
 function bindFancybox(container){
 
@@ -173,16 +217,22 @@ function bindFancybox(container){
 
   container.addEventListener("click", e => {
 
-    const item = e.target.closest(".carousel-gallery-item");
+    const item = e.target.closest(
+      ".carousel-gallery-item, .carousel-gallery-image-wrapper, img"
+    );
+
     if(!item) return;
 
-    const items = collect(container);
-    const index = Number(item.dataset.index) || 0;
+    const realItem = item.closest(".carousel-gallery-item");
+    if(!realItem) return;
 
-    Fancybox.show(items, {
-      startIndex: index,
-      ...CFG.fancybox
-    });
+    e.preventDefault();
+    e.stopPropagation();
+
+    const items = collect(container);
+    const index = Number(realItem.dataset.index) || 0;
+
+    openFancybox(items, index);
 
   }, true);
 }
@@ -193,7 +243,6 @@ function bindFancybox(container){
 function ensureNav(container, track){
 
   let nav = container.querySelector(".carousel-gallery-nav");
-
   if(nav) return;
 
   nav = document.createElement("div");
