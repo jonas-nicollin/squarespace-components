@@ -357,26 +357,64 @@
     });
   }
 
+  function getRenderedImageWidth(item) {
+  const img = item.querySelector(".carousel-gallery-image");
+  if (!img) return 0;
+  return img.getBoundingClientRect().width || img.offsetWidth || 0;
+}
+
+    /* ============================================================
+     Helpers largeur image
+  ============================================================ */
+
+
+function syncItemWidths(container) {
+  $$(container, ".carousel-gallery-item").forEach((item) => {
+    const w = getRenderedImageWidth(item);
+    if (!w) return;
+
+    item.style.width = `${w}px`;
+
+    const caption = item.querySelector(".carousel-gallery-caption");
+    if (caption) {
+      caption.style.width = "100%";
+      caption.style.maxWidth = "100%";
+    }
+  });
+}
+
   /* ============================================================
      INIT
   ============================================================ */
   function initGallery(container) {
-    buildItems(container);
-    insertHeading(container);
+  buildItems(container);
+  insertHeading(container);
 
-    const track = container.querySelector(".sqs-gallery");
-    if (!track) return;
+  const track = container.querySelector(".sqs-gallery");
+  if (!track) return;
 
-    ensureNav(container, track);
-    bindFancybox(container);
-  }
+  ensureNav(container, track);
+  bindFancybox(container);
 
-  function init() {
-    getTargets().forEach(initGallery);
-  }
+  const sync = () => syncItemWidths(container);
 
-  document.addEventListener("DOMContentLoaded", init);
-  window.addEventListener("load", init);
-  window.addEventListener("page:loaded", init);
-  window.addEventListener("site:refresh", init);
+  $$(container, ".carousel-gallery-image").forEach((img) => {
+    if (img.complete) {
+      sync();
+    } else {
+      img.addEventListener("load", sync, { once: true });
+    }
+  });
+
+  const ro = new ResizeObserver(() => {
+    syncItemWidths(container);
+  });
+
+  ro.observe(track);
+
+  window.addEventListener("load", sync);
+  window.addEventListener("resize", sync);
+  window.addEventListener("orientationchange", sync);
+
+  syncItemWidths(container);
 })();
