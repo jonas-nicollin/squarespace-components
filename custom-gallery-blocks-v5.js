@@ -35,8 +35,7 @@
   };
 
   const STATE = {
-    uid: 0,
-    initializedBlocks: new WeakSet()
+    uid: 0
   };
 
   function nextUid(prefix = "custom-gallery-blocks") {
@@ -88,13 +87,16 @@
   }
 
   function getAllStackedBlocks() {
-    const stackedContainers = Array.from(
-      document.querySelectorAll(".sqs-gallery-container.sqs-gallery-block-stacked")
+    const allBlocks = Array.from(
+      document.querySelectorAll(".sqs-block.gallery-block.sqs-block-gallery")
     );
 
-    return stackedContainers
-      .map((container) => container.closest(".sqs-block.gallery-block.sqs-block-gallery"))
-      .filter(Boolean);
+    return allBlocks.filter((block) => {
+      const stackedContainer = block.querySelector(".sqs-gallery-container.sqs-gallery-block-stacked");
+      const gallery = stackedContainer?.querySelector(".sqs-gallery");
+      const hasItems = gallery?.querySelector(".image-wrapper");
+      return Boolean(stackedContainer && gallery && hasItems);
+    });
   }
 
   function getMatchingBlocks(blockConfig) {
@@ -289,6 +291,15 @@
     return caption.childNodes.length ? caption : null;
   }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function createFancyboxCaptionHtml(meta, classPrefixes) {
     if (!meta) return "";
 
@@ -303,14 +314,14 @@
     if (title) {
       blocks.push(
         `<div class="${generic}-header ${specific}-header">
-          <div class="${generic}-title ${specific}-title">${title}</div>
+          <div class="${generic}-title ${specific}-title">${escapeHtml(title)}</div>
         </div>`
       );
     }
 
     if (descriptionLines.length) {
       const linesHtml = descriptionLines
-        .map((line) => `<div class="${generic}-line ${specific}-line">${line}</div>`)
+        .map((line) => `<div class="${generic}-line ${specific}-line">${escapeHtml(line)}</div>`)
         .join("");
 
       blocks.push(
@@ -357,6 +368,60 @@
     return anchor;
   }
 
+  function applyFancyboxUiClasses(instance, prefixes) {
+    const generic = prefixes?.generic || "custom-gallery-blocks-fancybox";
+    const specific = prefixes?.specific || "custom-gallery-blocks";
+
+    const container = instance?.container || null;
+    const dialog = container?.closest("dialog.fancybox__dialog") || null;
+    const carousel = container?.querySelector(".fancybox__carousel") || null;
+
+    if (dialog) {
+      dialog.classList.add(
+        `${generic}-dialog`,
+        `${specific}-dialog`
+      );
+    }
+
+    if (container) {
+      container.classList.add(
+        `${generic}-container`,
+        `${specific}-container`
+      );
+    }
+
+    if (carousel) {
+      carousel.classList.add(
+        `${generic}-carousel`,
+        `${specific}-carousel`
+      );
+    }
+
+    if (container) {
+      container.querySelectorAll(".fancybox__slide").forEach((slideEl) => {
+        slideEl.classList.add(
+          `${generic}-slide`,
+          `${specific}-slide`
+        );
+
+        const img = slideEl.querySelector("img");
+        if (img) {
+          img.classList.add(
+            `${generic}-image`,
+            `${specific}-image`
+          );
+        }
+      });
+
+      container.querySelectorAll(".f-caption").forEach((captionEl) => {
+        captionEl.classList.add(
+          `${generic}-caption-wrap`,
+          `${specific}-caption-wrap`
+        );
+      });
+    }
+  }
+
   function bindFancybox(selector, globalConfig, blockFancyboxConfig) {
     if (!window.Fancybox) return;
 
@@ -373,20 +438,45 @@
       ...fancyboxOptions,
       on: {
         ...(fancyboxOptions.on || {}),
-        ready: (fb) => {
-          const container = fb?.container;
-          if (container) {
-            container.classList.add(
-              `${generic}-container`,
-              `${specific}-container`
-            );
+        init: (fb) => {
+          applyFancyboxUiClasses(fb, prefixes);
+
+          if (typeof fancyboxOptions.on?.init === "function") {
+            fancyboxOptions.on.init(fb);
           }
+        },
+        ready: (fb) => {
+          applyFancyboxUiClasses(fb, prefixes);
 
           if (typeof fancyboxOptions.on?.ready === "function") {
             fancyboxOptions.on.ready(fb);
           }
         },
+        reveal: (fb, slide) => {
+          applyFancyboxUiClasses(fb, prefixes);
+
+          if (slide?.el) {
+            slide.el.classList.add(
+              `${generic}-slide`,
+              `${specific}-slide`
+            );
+
+            const img = slide.el.querySelector("img");
+            if (img) {
+              img.classList.add(
+                `${generic}-image`,
+                `${specific}-image`
+              );
+            }
+          }
+
+          if (typeof fancyboxOptions.on?.reveal === "function") {
+            fancyboxOptions.on.reveal(fb, slide);
+          }
+        },
         createSlide: (fb, slide) => {
+          applyFancyboxUiClasses(fb, prefixes);
+
           if (slide?.el) {
             slide.el.classList.add(
               `${generic}-slide`,
@@ -407,6 +497,8 @@
           }
         },
         contentReady: (fb, slide) => {
+          applyFancyboxUiClasses(fb, prefixes);
+
           if (slide?.el) {
             const img = slide.el.querySelector("img");
             if (img) {
@@ -748,8 +840,8 @@
         const renderedHeight = img.getBoundingClientRect().height || img.offsetHeight;
         const dims = getImageDimensions(img);
 
-        let w = dims?.width || img.naturalWidth || 0;
-        let h = dims?.height || img.naturalHeight || 0;
+        const w = dims?.width || img.naturalWidth || 0;
+        const h = dims?.height || img.naturalHeight || 0;
 
         if (!w || !h || !renderedHeight) return;
 
@@ -854,18 +946,18 @@
   }
 
   function initBlock(block, blockConfig, config) {
-    if (STATE.initializedBlocks.has(block)) return;
+    const mode = blockConfig.mode || "grid";
+    const flag = `customGalleryBlocksReady${mode.charAt(0).toUpperCase()}${mode.slice(1)}`;
+
+    if (block.dataset[flag] === "true") return;
 
     addCustomClass(block, blockConfig.customClass);
-
-    const mode = blockConfig.mode || "grid";
 
     if (mode === "grid") initGrid(block, blockConfig, config);
     if (mode === "masonry") initMasonry(block, blockConfig, config);
     if (mode === "carousel") initCarousel(block, blockConfig, config);
 
-    STATE.initializedBlocks.add(block);
-    block.dataset.customGalleryBlocksReady = "true";
+    block.dataset[flag] = "true";
   }
 
   function run() {
