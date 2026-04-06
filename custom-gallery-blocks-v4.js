@@ -88,29 +88,17 @@
   }
 
   function getAllStackedBlocks() {
-    return Array.from(
-      document.querySelectorAll(
-        '.sqs-block.gallery-block.sqs-block-gallery[data-block-json*="\\"design\\":\\"stacked\\""]'
-      )
+    const stackedContainers = Array.from(
+      document.querySelectorAll(".sqs-gallery-container.sqs-gallery-block-stacked")
     );
-  }
 
-  function getBlockJson(block) {
-    const raw = block.getAttribute("data-block-json");
-    if (!raw) return null;
-
-    try {
-      return JSON.parse(raw);
-    } catch (error) {
-      return null;
-    }
+    return stackedContainers
+      .map((container) => container.closest(".sqs-block.gallery-block.sqs-block-gallery"))
+      .filter(Boolean);
   }
 
   function getMatchingBlocks(blockConfig) {
-    let blocks = getAllStackedBlocks().filter((block) => {
-      const data = getBlockJson(block);
-      return data && data.design === "stacked";
-    });
+    let blocks = getAllStackedBlocks();
 
     if (blockConfig.blockSelector) {
       blocks = blocks.filter((block) => block.matches(blockConfig.blockSelector));
@@ -181,7 +169,7 @@
   }
 
   function getStackedGallery(block) {
-    return block.querySelector(".sqs-gallery-block-stacked .sqs-gallery");
+    return block.querySelector(".sqs-gallery-container.sqs-gallery-block-stacked .sqs-gallery");
   }
 
   function getStackedItems(block) {
@@ -236,10 +224,6 @@
     return { width: w, height: h, ratio: h / w };
   }
 
-  function stripFormatSuffix(url) {
-    return url ? url.replace(/\?format=\d+w$/i, "") : "";
-  }
-
   function getMetaTitle(meta) {
     return meta?.querySelector(".meta-title")?.textContent.trim() || "";
   }
@@ -265,35 +249,35 @@
       .filter(Boolean);
   }
 
-  function createCarouselCaption(meta, options = {}) {
+  function createCaption(meta, options = {}) {
     if (!meta || options.showCaptions === false) return null;
 
     const title = getMetaTitle(meta);
     const descriptionLines = normalizeDescriptionLines(getMetaDescriptionHtml(meta));
 
     const caption = document.createElement("div");
-    caption.className = "custom-gallery-blocks-carousel-caption";
+    caption.className = "custom-gallery-blocks-caption";
 
     if (title) {
       const titleEl = document.createElement("div");
-      titleEl.className = "custom-gallery-blocks-carousel-caption-title";
+      titleEl.className = "custom-gallery-blocks-caption-title";
       titleEl.textContent = title;
       caption.appendChild(titleEl);
     }
 
     if (descriptionLines.length) {
       const descriptionEl = document.createElement("div");
-      descriptionEl.className = "custom-gallery-blocks-carousel-caption-description";
+      descriptionEl.className = "custom-gallery-blocks-caption-description";
 
       descriptionLines.forEach((line, index) => {
         const lineEl = document.createElement("span");
-        lineEl.className = "custom-gallery-blocks-carousel-caption-line";
+        lineEl.className = "custom-gallery-blocks-caption-line";
         lineEl.textContent = line;
         descriptionEl.appendChild(lineEl);
 
         if (index < descriptionLines.length - 1) {
           const sep = document.createElement("span");
-          sep.className = "custom-gallery-blocks-carousel-caption-separator";
+          sep.className = "custom-gallery-blocks-caption-separator";
           sep.textContent = ", ";
           descriptionEl.appendChild(sep);
         }
@@ -326,10 +310,7 @@
 
     if (descriptionLines.length) {
       const linesHtml = descriptionLines
-        .map(
-          (line) =>
-            `<div class="${generic}-line ${specific}-line">${line}</div>`
-        )
+        .map((line) => `<div class="${generic}-line ${specific}-line">${line}</div>`)
         .join("");
 
       blocks.push(
@@ -485,9 +466,7 @@
 
     return {
       gallery: data.gallery,
-      items: data.items,
-      groupName,
-      fancyboxEnabled
+      items: data.items
     };
   }
 
@@ -507,7 +486,7 @@
       card.appendChild(item.imageWrapper);
 
       if (blockConfig.grid?.showCaptions !== false && item.meta) {
-        const caption = createCarouselCaption(item.meta, { showCaptions: true });
+        const caption = createCaption(item.meta, { showCaptions: true });
         if (caption) {
           caption.classList.add("custom-gallery-blocks-grid-caption");
           card.appendChild(caption);
@@ -548,7 +527,7 @@
       wrapper.appendChild(item.imageWrapper);
 
       if (masonryConfig.showCaptions !== false && item.meta) {
-        const caption = createCarouselCaption(item.meta, { showCaptions: true });
+        const caption = createCaption(item.meta, { showCaptions: true });
         if (caption) {
           caption.classList.add("custom-gallery-blocks-masonry-caption");
           wrapper.appendChild(caption);
@@ -664,7 +643,6 @@
         mobileGap: 10,
         mobileCropMode: "none",
         showCaptions: true,
-        dragCursor: true,
         nav: {
           enabled: true,
           prevLabel: "Précédent",
@@ -704,8 +682,9 @@
       card.appendChild(media);
 
       if (carouselConfig.showCaptions !== false && item.meta) {
-        const caption = createCarouselCaption(item.meta, { showCaptions: true });
+        const caption = createCaption(item.meta, { showCaptions: true });
         if (caption) {
+          caption.classList.add("custom-gallery-blocks-carousel-caption");
           card.appendChild(caption);
         }
       }
@@ -713,16 +692,14 @@
       return card;
     });
 
-    track.innerHTML = "";
     cards.forEach((card) => track.appendChild(card));
     root.appendChild(track);
 
-    let controls = null;
     let prevBtn = null;
     let nextBtn = null;
 
     if (carouselConfig.nav?.enabled !== false) {
-      controls = document.createElement("div");
+      const controls = document.createElement("div");
       controls.className = "custom-gallery-blocks-carousel-controls";
 
       prevBtn = document.createElement("button");
@@ -744,13 +721,6 @@
 
     gallery.innerHTML = "";
     gallery.appendChild(root);
-
-    if (carouselConfig.fullWidth !== false) {
-      const section = block.closest("section");
-      if (section) {
-        section.classList.add("custom-gallery-blocks-has-full-width-carousel");
-      }
-    }
 
     function getGapPx() {
       const styles = window.getComputedStyle(track);
@@ -890,17 +860,9 @@
 
     const mode = blockConfig.mode || "grid";
 
-    if (mode === "grid") {
-      initGrid(block, blockConfig, config);
-    }
-
-    if (mode === "masonry") {
-      initMasonry(block, blockConfig, config);
-    }
-
-    if (mode === "carousel") {
-      initCarousel(block, blockConfig, config);
-    }
+    if (mode === "grid") initGrid(block, blockConfig, config);
+    if (mode === "masonry") initMasonry(block, blockConfig, config);
+    if (mode === "carousel") initCarousel(block, blockConfig, config);
 
     STATE.initializedBlocks.add(block);
     block.dataset.customGalleryBlocksReady = "true";
