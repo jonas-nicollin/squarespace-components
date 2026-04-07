@@ -124,6 +124,11 @@
       .filter(Boolean);
   }
 
+  function getComparableDisplayIndex(item) {
+    const value = Number(item?.displayIndex);
+    return Number.isFinite(value) ? value : null;
+  }
+
   function getCurrentPathname() {
     return (location.pathname || '').replace(/\/+$/, '') || '/';
   }
@@ -320,7 +325,42 @@
     return values.includes(candidateTitleNorm);
   }
 
-  function ruleMatchesCandidate(rule, candidateItem, currentItem) {
+  function findNextCollectionItemOfCategory(items, currentItem, rule) {
+    const currentIndex = getComparableDisplayIndex(currentItem);
+    if (currentIndex === null) return null;
+
+    const wantedCategories = Array.isArray(rule?.values)
+      ? rule.values
+      : rule?.category
+        ? [rule.category]
+        : [];
+
+    const currentUrl = String(currentItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+
+    const pool = (Array.isArray(items) ? items : [])
+      .filter(item => {
+        if (!item) return false;
+
+        const itemIndex = getComparableDisplayIndex(item);
+        if (itemIndex === null || itemIndex <= currentIndex) return false;
+
+        const itemUrl = String(item?.fullUrl || '').replace(/\/+$/, '') || '/';
+        if (itemUrl === currentUrl) return false;
+
+        if (wantedCategories.length && !itemHasAnyCategory(item, wantedCategories)) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        return getComparableDisplayIndex(a) - getComparableDisplayIndex(b);
+      });
+
+    return pool[0] || null;
+  }
+
+  function ruleMatchesCandidate(rule, candidateItem, currentItem, context) {
     const type = rule?.type;
 
     if (type === 'sharedCategory') {
@@ -355,10 +395,22 @@
       return itemTitleMatchesCurrentTagValue(candidateItem, currentItem, rule.prefixes || []);
     }
 
+    if (type === 'nextCollectionItemOfCategory') {
+      const nextItem = findNextCollectionItemOfCategory(context?.allItems || [], currentItem, rule);
+      if (!nextItem) return false;
+
+      const candidateUrl = String(candidateItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+      const nextUrl = String(nextItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+
+      if (candidateUrl && nextUrl && candidateUrl === nextUrl) return true;
+
+      return String(candidateItem?.urlId || '') === String(nextItem?.urlId || '');
+    }
+
     return false;
   }
 
-  function evaluateMatchGroups(candidateItem, currentItem, selection) {
+  function evaluateMatchGroups(candidateItem, currentItem, selection, context) {
     const groups = Array.isArray(selection?.match?.groups) ? selection.match.groups : [];
     if (!groups.length) return true;
 
@@ -369,10 +421,10 @@
       const logic = String(group.logic || 'or').toLowerCase();
 
       if (logic === 'and') {
-        return rules.every(rule => ruleMatchesCandidate(rule, candidateItem, currentItem));
+        return rules.every(rule => ruleMatchesCandidate(rule, candidateItem, currentItem, context));
       }
 
-      return rules.some(rule => ruleMatchesCandidate(rule, candidateItem, currentItem));
+      return rules.some(rule => ruleMatchesCandidate(rule, candidateItem, currentItem, context));
     });
   }
 
@@ -658,6 +710,7 @@
         categories: Array.isArray(override.categories) ? override.categories.map(cleanText) : [],
         assetUrl: override.assetUrl || null,
         mediaFocalPoint: override.mediaFocalPoint || null,
+        displayIndex: Number(override.displayIndex || 999999),
         workflowState: 1,
         publishOn: Date.now()
       };
@@ -743,10 +796,23 @@
     return location;
   }
 
-  function buildTagPrefixElements(item, CFG) {
-    if (!Array.isArray(CFG.display?.tagPrefixFields)) return [];
+  function buildTagPrefixElements(item, CFG, filterPrefixes) {
+    let fields = Array.isArray(CFG.display?.tagPrefixFields)
+      ? CFG.display.tagPrefixFields
+      : [];
 
-    return CFG.display.tagPrefixFields
+    if (Array.isArray(filterPrefixes) && filterPrefixes.length) {
+      const prefixSet = new Set(
+        filterPrefixes.map(prefix => normalize(String(prefix).replace(/:$/, '')))
+      );
+
+      fields = fields.filter(fieldConfig => {
+        const fieldPrefix = normalize(String(fieldConfig?.prefix || '').replace(/:$/, ''));
+        return prefixSet.has(fieldPrefix);
+      });
+    }
+
+    return fields
       .map(fieldConfig => buildTagPrefixField(item, fieldConfig))
       .filter(Boolean);
   }
@@ -775,7 +841,13 @@
     return media;
   }
 
-  function buildContentNodesByType(type, item, CFG) {
+  function buildContentNodesByType(definition, item, CFG) {
+    const descriptor = typeof definition === 'string'
+      ? { type: definition }
+      : (definition || {});
+
+    const type = descriptor.type;
+
     if (type === 'image') {
       const imageEl = buildImageElement(item, CFG);
       return imageEl ? [imageEl] : [];
@@ -801,7 +873,13 @@
     }
 
     if (type === 'tagPrefix') {
-      return buildTagPrefixElements(item, CFG);
+      const filterPrefixes = Array.isArray(descriptor.prefixes)
+        ? descriptor.prefixes
+        : descriptor.prefix
+          ? [descriptor.prefix]
+          : null;
+
+      return buildTagPrefixElements(item, CFG, filterPrefixes);
     }
 
     return [];
@@ -828,8 +906,8 @@
 
       classNames.forEach(cls => wrapper.classList.add(cls));
 
-      children.forEach(type => {
-        const nodes = buildContentNodesByType(type, item, CFG);
+      children.forEach(child => {
+        const nodes = buildContentNodesByType(child, item, CFG);
         nodes.forEach(node => wrapper.appendChild(node));
       });
 
@@ -1370,7 +1448,7 @@
       items.forEach(item => {
         if (!item) return;
         if (!passesConstraints(item, currentItem, CFG.selection)) return;
-        if (!evaluateMatchGroups(item, currentItem, CFG.selection)) return;
+        if (!evaluateMatchGroups(item, currentItem, CFG.selection, { allItems: items })) return;
 
         const score = computeCandidateScore(item, currentItem, CFG.selection);
         const minScore = Number(CFG.selection?.score?.minScore || 0);
