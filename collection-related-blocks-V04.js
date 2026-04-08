@@ -360,6 +360,41 @@
     return pool[0] || null;
   }
 
+  function findNextCollectionItemWithTag(items, currentItem, rule) {
+    const currentIndex = getComparableDisplayIndex(currentItem);
+    if (currentIndex === null) return null;
+
+    const wantedTags = Array.isArray(rule?.values)
+      ? rule.values.map(normalize)
+      : [];
+
+    const currentUrl = String(currentItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+
+    const pool = (Array.isArray(items) ? items : [])
+      .filter(item => {
+        if (!item) return false;
+
+        const itemIndex = getComparableDisplayIndex(item);
+        if (itemIndex === null || itemIndex <= currentIndex) return false;
+
+        const itemUrl = String(item?.fullUrl || '').replace(/\/+$/, '') || '/';
+        if (itemUrl === currentUrl) return false;
+
+        if (wantedTags.length) {
+          const itemTags = (Array.isArray(item.tags) ? item.tags : []).map(normalize);
+          const hasMatch = wantedTags.some(tag => itemTags.includes(tag));
+          if (!hasMatch) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        return getComparableDisplayIndex(a) - getComparableDisplayIndex(b);
+      });
+
+    return pool[0] || null;
+  }
+
   function ruleMatchesCandidate(rule, candidateItem, currentItem, context) {
     const type = rule?.type;
 
@@ -397,6 +432,18 @@
 
     if (type === 'nextCollectionItemOfCategory') {
       const nextItem = findNextCollectionItemOfCategory(context?.allItems || [], currentItem, rule);
+      if (!nextItem) return false;
+
+      const candidateUrl = String(candidateItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+      const nextUrl = String(nextItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+
+      if (candidateUrl && nextUrl && candidateUrl === nextUrl) return true;
+
+      return String(candidateItem?.urlId || '') === String(nextItem?.urlId || '');
+    }
+
+    if (type === 'nextCollectionItemWithTag') {
+      const nextItem = findNextCollectionItemWithTag(context?.allItems || [], currentItem, rule);
       if (!nextItem) return false;
 
       const candidateUrl = String(candidateItem?.fullUrl || '').replace(/\/+$/, '') || '/';
