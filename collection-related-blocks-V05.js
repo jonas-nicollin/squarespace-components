@@ -9,6 +9,8 @@
   if (!CONFIGS.length) return;
 
   const DEFAULT_JSON_FORMAT_SUFFIX = '?format=json';
+  const DEFAULT_SRCSET_WIDTHS = [100, 300, 500, 750, 1000, 1500, 2500];
+  const DEFAULT_IMAGE_SIZES = '(max-width: 768px) 100vw, 50vw';
   const COLLECTION_RELATED_BLOCK_COLLECTION_CACHE = new Map();
 
   function normalize(str) {
@@ -18,7 +20,7 @@
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[\u2019’]/g, "'")
+      .replace(/[\u2019']/g, "'")
       .replace(/&/g, 'and')
       .replace(/\s+/g, ' ')
       .trim();
@@ -193,14 +195,15 @@
   }
 
   function getItemExcerpt(item) {
+    const excerptMaxLength = 180;
     const rawExcerpt = item?.excerpt;
     const rawBody = item?.body;
 
     const excerptText = cleanText(rawExcerpt || '');
-    if (excerptText) return truncateText(excerptText, 180);
+    if (excerptText) return truncateText(excerptText, excerptMaxLength);
 
     const bodyText = cleanText(rawBody || '');
-    if (bodyText) return truncateText(bodyText, 180);
+    if (bodyText) return truncateText(bodyText, excerptMaxLength);
 
     return '';
   }
@@ -529,7 +532,9 @@
     const constraints = selection?.constraints || {};
 
     if (constraints.requirePublished) {
-      if (candidateItem.workflowState !== 1) return false;
+      const state = candidateItem.workflowState;
+      const isPublished = state === 1 || state === 'PUBLISHED';
+      if (!isPublished) return false;
       if (candidateItem.publishOn && Number(candidateItem.publishOn) > Date.now()) return false;
     }
 
@@ -604,6 +609,7 @@
     return list;
   }
 
+  // PATCHED: fallback now respects hard match constraints (fallback.matchGroups)
   function applyFallbackFill(selectedItems, allItems, currentItem, selection, CFG) {
     const fallback = selection?.fallback || {};
     const limit = Number(selection?.limit || selectedItems.length || 0);
@@ -619,8 +625,18 @@
     const usedUrls = new Set(selectedItems.map(item => String(item.fullUrl || '')));
     const constraints = selection?.constraints || {};
 
+    // fallback.matchGroups allows hard filtering during fallback fill
+    // e.g. enforce a required tag even when scoring didn't find enough items
+    const fallbackSelection = fallback.matchGroups
+      ? { match: { groups: fallback.matchGroups } }
+      : null;
+
     let pool = allItems
-      .filter(item => passesConstraints(item, currentItem, { constraints }))
+      .filter(item => {
+        if (!passesConstraints(item, currentItem, { constraints })) return false;
+        if (fallbackSelection && !evaluateMatchGroups(item, currentItem, fallbackSelection, { allItems })) return false;
+        return true;
+      })
       .map(item => mapItemForRender(item, CFG))
       .filter(item => {
         const itemUrl = String(item.fullUrl || '');
@@ -864,6 +880,7 @@
       .filter(Boolean);
   }
 
+  // PATCHED: srcset + sizes added, sizes configurable via display.imageSizes
   function buildImageElement(item, CFG) {
     if (!CFG.display?.showImage || !item.assetUrl) return null;
 
@@ -883,6 +900,16 @@
         ? Math.round(item.mediaFocalPoint.x * 100) + '% ' +
           Math.round(item.mediaFocalPoint.y * 100) + '%'
         : '50% 50%';
+
+    const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths)
+      ? CFG.display.srcsetWidths
+      : DEFAULT_SRCSET_WIDTHS;
+
+    img.srcset = srcsetWidths
+      .map(w => `${item.assetUrl}?format=${w}w ${w}w`)
+      .join(', ');
+
+    img.sizes = CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES;
 
     media.appendChild(img);
     return media;
@@ -1377,7 +1404,9 @@
           showLocation: false,
           order: ['meta', 'title', 'excerpt', 'location'],
           tagPrefixFields: [],
-          groups: []
+          groups: [],
+          srcsetWidths: DEFAULT_SRCSET_WIDTHS,
+          imageSizes: DEFAULT_IMAGE_SIZES
         },
         loading: {
           hideLoader: false
@@ -1409,7 +1438,8 @@
           fallback: {
             enabled: false,
             fillToLimit: false,
-            sort: [{ type: 'random' }]
+            sort: [{ type: 'random' }],
+            matchGroups: null
           }
         },
         performance: {
@@ -1457,6 +1487,7 @@
       try {
         items = await fetchCollectionItems(CFG);
       } catch (e) {
+        if (CFG.debug) console.warn('[CRB]', CFG.key, 'fetchCollectionItems failed', e);
         shell.remove();
         return false;
       }
@@ -1474,6 +1505,7 @@
         try {
           currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG);
         } catch (e) {
+          if (CFG.debug) console.warn('[CRB]', CFG.key, 'fetchCurrentItemCollectionItems failed', e);
           shell.remove();
           return false;
         }
