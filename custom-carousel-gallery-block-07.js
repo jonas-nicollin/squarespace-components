@@ -369,17 +369,81 @@
     return img.getBoundingClientRect().width || img.offsetWidth || 0;
   }
 
-  function syncItemWidths(container) {
+    function getRowHeightPx(container) {
+    const styles = getComputedStyle(container);
+    const raw = styles.getPropertyValue("--row-h").trim();
+
+    const probe = document.createElement("div");
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    probe.style.pointerEvents = "none";
+    probe.style.height = raw || "0px";
+    probe.style.width = "0";
+    container.appendChild(probe);
+
+    const h = probe.getBoundingClientRect().height || 0;
+    probe.remove();
+
+    return h;
+  }
+
+  function getImageRatio(img) {
+    const dim =
+      img?.getAttribute("data-image-dimensions") ||
+      img?.dataset?.imageDimensions ||
+      "";
+
+    if (dim.includes("x")) {
+      const [w, h] = dim.split("x").map(Number);
+      if (w > 0 && h > 0) return w / h;
+    }
+
+    const nw = img?.naturalWidth || 0;
+    const nh = img?.naturalHeight || 0;
+    if (nw > 0 && nh > 0) return nw / nh;
+
+    return 1;
+  }
+
+  function getPredictedImageWidth(container, item) {
+    const img = item.querySelector(".carousel-gallery-image");
+    if (!img) return 0;
+
+    const rowH = getRowHeightPx(container);
+    const ratio = getImageRatio(img);
+
+    if (!rowH || !ratio) return 0;
+
+    return rowH * ratio;
+  }
+
+    function syncItemWidths(container) {
     $$(container, ".carousel-gallery-item").forEach((item) => {
-      const w = getRenderedImageWidth(item);
+      const img = item.querySelector(".carousel-gallery-image");
+      if (!img) return;
+
+      let w = getPredictedImageWidth(container, item);
+
+      const rendered = img.getBoundingClientRect().width || img.offsetWidth || 0;
+
+      /* Une fois l’image vraiment rendue, on prend la valeur réelle si elle est fiable */
+      if (rendered > 0) {
+        w = rendered;
+      }
+
       if (!w) return;
 
       item.style.width = `${w}px`;
 
+      const media = item.querySelector(".carousel-gallery-media");
+      if (media) {
+        media.style.width = `${w}px`;
+      }
+
       const caption = item.querySelector(".carousel-gallery-caption");
       if (caption) {
-        caption.style.width = "100%";
-        caption.style.maxWidth = "100%";
+        caption.style.width = `${w}px`;
+        caption.style.maxWidth = `${w}px`;
       }
     });
   }
@@ -387,18 +451,29 @@
   /* ============================================================
      INIT
   ============================================================ */
-  function initGallery(container) {
+    function initGallery(container) {
     buildItems(container);
     insertHeading(container);
 
     const track = container.querySelector(".sqs-gallery");
     if (!track) return;
 
+    container.classList.add("is-layout-pending");
+
     ensureNav(container, track);
+    bindWheelBehavior(track);
     bindFancybox(container);
 
-    const sync = () => syncItemWidths(container);
+    const sync = () => {
+      syncItemWidths(container);
+      container.classList.remove("is-layout-pending");
+      container.classList.add("is-layout-ready");
+    };
 
+    /* 1er layout immédiat à partir des dimensions connues */
+    syncItemWidths(container);
+
+    /* Puis raffinement quand les images finissent de charger */
     $$(container, ".carousel-gallery-image").forEach((img) => {
       if (img.complete) {
         sync();
@@ -412,12 +487,15 @@
     });
 
     ro.observe(track);
+    ro.observe(container);
 
     window.addEventListener("load", sync);
     window.addEventListener("resize", sync);
     window.addEventListener("orientationchange", sync);
 
-    syncItemWidths(container);
+    requestAnimationFrame(() => {
+      sync();
+    });
   }
 
   function init() {
