@@ -12,6 +12,7 @@
   const DEFAULT_SRCSET_WIDTHS = [100, 300, 500, 750, 1000, 1500, 2500];
   const DEFAULT_IMAGE_SIZES = '(max-width: 768px) 100vw, 50vw';
   const COLLECTION_RELATED_BLOCK_COLLECTION_CACHE = new Map();
+  const BODY_RELATED_BLOCK_CLASS_PREFIX = 'has-related-block--';
 
   function normalize(str) {
     return String(str || '')
@@ -87,6 +88,38 @@
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
+  }
+
+  function getBodyRelatedBlockClassName(key) {
+    const slug = slugifyToken(key || 'related-block');
+    return BODY_RELATED_BLOCK_CLASS_PREFIX + slug;
+  }
+
+  function syncBodyRelatedBlockClasses() {
+    if (!document.body) return;
+
+    Array.from(document.body.classList).forEach(className => {
+      if (className.indexOf(BODY_RELATED_BLOCK_CLASS_PREFIX) === 0) {
+        document.body.classList.remove(className);
+      }
+    });
+
+    const blocks = Array.from(
+      document.querySelectorAll('.collection-related-block[data-related-key]')
+    );
+
+    if (!blocks.length) {
+      document.body.classList.remove('has-related-blocks');
+      return;
+    }
+
+    document.body.classList.add('has-related-blocks');
+
+    blocks.forEach(block => {
+      const key = String(block.dataset.relatedKey || '').trim();
+      if (!key) return;
+      document.body.classList.add(getBodyRelatedBlockClassName(key));
+    });
   }
 
   function buildTagObjects(tags) {
@@ -609,7 +642,6 @@
     return list;
   }
 
-  // PATCHED: fallback now respects hard match constraints (fallback.matchGroups)
   function applyFallbackFill(selectedItems, allItems, currentItem, selection, CFG) {
     const fallback = selection?.fallback || {};
     const limit = Number(selection?.limit || selectedItems.length || 0);
@@ -625,8 +657,6 @@
     const usedUrls = new Set(selectedItems.map(item => String(item.fullUrl || '')));
     const constraints = selection?.constraints || {};
 
-    // fallback.matchGroups allows hard filtering during fallback fill
-    // e.g. enforce a required tag even when scoring didn't find enough items
     const fallbackSelection = fallback.matchGroups
       ? { match: { groups: fallback.matchGroups } }
       : null;
@@ -880,7 +910,6 @@
       .filter(Boolean);
   }
 
-  // PATCHED: srcset + sizes added, sizes configurable via display.imageSizes
   function buildImageElement(item, CFG) {
     if (!CFG.display?.showImage || !item.assetUrl) return null;
 
@@ -1462,7 +1491,10 @@
       const target = getInsertTarget(CFG.insertion?.targetSelector);
       if (!target) return false;
 
-      if (alreadyInjected(target, CFG.key)) return true;
+      if (alreadyInjected(target, CFG.key)) {
+        syncBodyRelatedBlockClasses();
+        return true;
+      }
 
       const key = cacheKey(CFG);
       let shell = null;
@@ -1474,6 +1506,7 @@
             const parsed = JSON.parse(cached);
             if (Array.isArray(parsed) && parsed.length) {
               insertInto(target, buildBlock(parsed, CFG), CFG.insertion?.mode);
+              syncBodyRelatedBlockClasses();
               return true;
             }
           }
@@ -1489,11 +1522,13 @@
       } catch (e) {
         if (CFG.debug) console.warn('[CRB]', CFG.key, 'fetchCollectionItems failed', e);
         shell.remove();
+        syncBodyRelatedBlockClasses();
         return false;
       }
 
       if (!Array.isArray(items) || !items.length) {
         shell.remove();
+        syncBodyRelatedBlockClasses();
         return false;
       }
 
@@ -1507,18 +1542,21 @@
         } catch (e) {
           if (CFG.debug) console.warn('[CRB]', CFG.key, 'fetchCurrentItemCollectionItems failed', e);
           shell.remove();
+          syncBodyRelatedBlockClasses();
           return false;
         }
       }
 
       if (!Array.isArray(currentItemSourceItems) || !currentItemSourceItems.length) {
         shell.remove();
+        syncBodyRelatedBlockClasses();
         return false;
       }
 
       const currentItem = findCurrentItem(currentItemSourceItems, CFG);
       if (!currentItem) {
         shell.remove();
+        syncBodyRelatedBlockClasses();
         return false;
       }
 
@@ -1556,6 +1594,8 @@
       if (!finalItems.length) {
         if (CFG.emptyState?.message) {
           replaceBlockWithEmptyState(shell, CFG);
+          syncBodyRelatedBlockClasses();
+
           if (CFG.performance?.useSessionStorage) {
             try {
               sessionStorage.setItem(key, JSON.stringify([]));
@@ -1565,6 +1605,8 @@
         }
 
         shell.remove();
+        syncBodyRelatedBlockClasses();
+
         if (CFG.performance?.useSessionStorage) {
           try {
             sessionStorage.setItem(key, JSON.stringify([]));
@@ -1574,6 +1616,7 @@
       }
 
       replaceBlockContent(shell, finalItems, CFG);
+      syncBodyRelatedBlockClasses();
 
       if (CFG.performance?.useSessionStorage) {
         try {
@@ -1593,6 +1636,7 @@
         if (!target) return;
 
         if (alreadyInjected(target, CFG.key)) {
+          syncBodyRelatedBlockClasses();
           if (observer) observer.disconnect();
           return;
         }
@@ -1617,6 +1661,7 @@
     for (const runner of runners) {
       await runner.start();
     }
+    syncBodyRelatedBlockClasses();
   }
 
   if (document.readyState === 'loading') {
