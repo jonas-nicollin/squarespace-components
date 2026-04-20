@@ -361,6 +361,26 @@
   }
 
   /* ============================================================
+     WHEEL BEHAVIOR
+  ============================================================ */
+  function bindWheelBehavior(track) {
+    if (track._wheelBound) return;
+    track._wheelBound = true;
+
+    track.addEventListener("wheel", (e) => {
+      const absX = Math.abs(e.deltaX);
+      const absY = Math.abs(e.deltaY);
+
+      if (absY > absX) return;
+
+      if (absX > absY) {
+        e.preventDefault();
+        track.scrollLeft += e.deltaX;
+      }
+    }, { passive: false });
+  }
+
+  /* ============================================================
      HELPERS LARGEUR IMAGE
   ============================================================ */
   function getRenderedImageWidth(item) {
@@ -369,7 +389,7 @@
     return img.getBoundingClientRect().width || img.offsetWidth || 0;
   }
 
-    function getRowHeightPx(container) {
+  function getRowHeightPx(container) {
     const styles = getComputedStyle(container);
     const raw = styles.getPropertyValue("--row-h").trim();
 
@@ -417,7 +437,7 @@
     return rowH * ratio;
   }
 
-    function syncItemWidths(container) {
+  function syncItemWidths(container) {
     $$(container, ".carousel-gallery-item").forEach((item) => {
       const img = item.querySelector(".carousel-gallery-image");
       if (!img) return;
@@ -426,7 +446,6 @@
 
       const rendered = img.getBoundingClientRect().width || img.offsetWidth || 0;
 
-      /* Une fois l’image vraiment rendue, on prend la valeur réelle si elle est fiable */
       if (rendered > 0) {
         w = rendered;
       }
@@ -451,7 +470,7 @@
   /* ============================================================
      INIT
   ============================================================ */
-    function initGallery(container) {
+  function initGallery(container) {
     buildItems(container);
     insertHeading(container);
 
@@ -470,10 +489,8 @@
       container.classList.add("is-layout-ready");
     };
 
-    /* 1er layout immédiat à partir des dimensions connues */
     syncItemWidths(container);
 
-    /* Puis raffinement quand les images finissent de charger */
     $$(container, ".carousel-gallery-image").forEach((img) => {
       if (img.complete) {
         sync();
