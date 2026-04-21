@@ -439,7 +439,8 @@
   function buildCard(item, cfg, index) {
     var disp = cfg.display || {};
     var link = disp.cardLink !== false;
-    var card = el(link ? 'a' : 'div', { class: 'sqb-card', 'data-sqb-index': String(index) });
+    var cardClass = 'sqb-card' + (index === 0 ? ' sqb-card--featured' : '');
+    var card = el(link ? 'a' : 'div', { class: cardClass, 'data-sqb-index': String(index) });
     if (link) card.href = item.fullUrl;
 
     var groups = Array.isArray(disp.groups) && disp.groups.length ? disp.groups : null;
