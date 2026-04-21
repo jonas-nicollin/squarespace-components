@@ -1,36 +1,38 @@
 /*!
- * Squarespace Query Block (SQB) v1.3.0
- * Fetch JSON paginé · tabs · groupBy · lazy-load · cache sessionStorage
+ * Squarespace Query Block (SQB) v1.4.0
+ * Fetch JSON paginé · tabs · groupBy · sticky filters · lazy-load · cache
  * Compatible Weglot · zéro dépendance
  *
  * ─── RÉFÉRENCE CONFIGURATION ─────────────────────────────────────────────────
  *
  * window.SQB_CONFIGS = [
  * {
- *   // ── Identité ─────────────────────────────────────────────────────────────
- *   key:     'programme',        // ID unique → classe sqb--programme sur le bloc
- *   target:  '#sqb-programme',   // Sélecteur CSS du conteneur dans la page
- *   classes: 'ma-classe',        // Classes custom supplémentaires (optionnel)
+ *   key:     'programme',
+ *   target:  '#sqb-programme',
+ *   classes: 'ma-classe',
  *   enabled: true,
  *   debug:   false,
  *
- *   // ── Sources ───────────────────────────────────────────────────────────────
  *   sources: [{ path: '/programme-2026' }],
  *
- *   // ── Pré-filtre fixe (invisible dans l'UI) ────────────────────────────────
+ *   // Pré-filtre fixe (invisible dans l'UI)
  *   preFilter: {
  *     categories:        ['Exposition'],
  *     excludeCategories: ['Brouillon'],
  *     tagValues:         [{ prefix: 'Sélection', value: 'Homepage' }],
  *   },
  *
- *   // ── Filtres UI ───────────────────────────────────────────────────────────
- *   // false = aucun filtre
+ *   filters: false,  // ou objet ci-dessous
  *   filters: {
- *     layout: 'pills',           // 'pills' | 'dropdowns' | 'sidebar'
- *     // pills    = boutons pour catégories ET tag-prefix (peu de valeurs)
- *     // dropdowns = selects pour tout (beaucoup de valeurs)
- *     // sidebar  = filtres en colonne à gauche, grille à droite
+ *     // Nature des contrôles
+ *     layout: 'pills',        // 'pills' | 'dropdowns'
+ *
+ *     // Position des filtres
+ *     position: 'top',        // 'top' | 'sidebar'
+ *
+ *     // Sticky
+ *     sticky: false,          // true = barre sticky + classe sqb-filters--is-sticky
+ *     stickyTop: '0px',       // compense un header fixe (ex: '80px')
  *
  *     tabs: [
  *       { label: 'Expositions', filter: { categories: ['Exposition'] } },
@@ -41,35 +43,36 @@
  *     categories:      true,
  *     defaultCategory: null,
  *
- *     tagPrefixes: ['Date', 'Zone', 'Lieu'],
+ *     // Préfixes exposés comme filtres
+ *     // datePrefix : ce préfixe est trié chronologiquement (parse "DD mois YYYY")
+ *     tagPrefixes: ['Zone', 'Lieu', 'Date'],
+ *     datePrefix:  'Date',
  *     defaultTags: {},
- *     datePrefix:  'Date',       // trié chronologiquement
  *
  *     search: true,
  *   },
  *
- *   // ── Affichage ────────────────────────────────────────────────────────────
  *   display: {
- *     layout: 'grid',            // 'grid' | 'list'
+ *     layout:  'grid',        // 'grid' | 'list'
  *     counter: true,
  *     cardLink: true,
- *     imageRatio: '4/3',
  *
- *     groupBy: null,             // null | 'category' | { tagPrefix: 'Date' }
- *     groupOrder: 'collection',  // 'collection' | 'alpha' | ['Val1', 'Val2', …]
+ *     groupBy:    null,       // null | 'category' | { tagPrefix: 'Date' }
+ *     groupOrder: 'collection', // 'collection' | 'alpha' | ['Val1', 'Val2', …]
  *
- *     // Rendu par groupes sémantiques (remplace le rendu plat si défini)
+ *     // Rendu par groupes sémantiques
  *     // Rôles  : 'media' | 'header' | 'body' | 'meta' | 'footer'
  *     // Enfants: 'image' | 'title' | 'categories' | 'excerpt' | 'location'
- *     //          { type: 'tagPrefix', prefix: 'Artiste', label: 'Artiste·s' }
+ *     //          { type: 'tagPrefix', prefix: 'Artiste', label: 'Artiste·s', joinWith: '\n' }
  *     groups: [
- *       { role: 'media', children: ['image'] },
+ *       { role: 'media', children: ['image', 'title'] },
  *       { role: 'body',  children: [
  *           'categories',
- *           'title',
- *           { type: 'tagPrefix', prefix: 'Numéro', label: 'Étape' },
- *           { type: 'tagPrefix', prefix: 'Artiste', label: 'Artiste·s' },
- *           { type: 'tagPrefix', prefix: 'Lieu',    label: 'Lieu' },
+ *           { type: 'tagPrefix', prefix: 'Numéro',  label: 'Étape' },
+ *           { type: 'tagPrefix', prefix: 'Période',  label: 'Dates' },
+ *           { type: 'tagPrefix', prefix: 'Date',     label: 'Séances', joinWith: '\n' },
+ *           { type: 'tagPrefix', prefix: 'Artiste',  label: 'Artiste·s' },
+ *           { type: 'tagPrefix', prefix: 'Lieu',     label: 'Lieu' },
  *           'excerpt',
  *       ]},
  *     ],
@@ -78,15 +81,17 @@
  *     image: true, title: true, categories: true, excerpt: true, location: false,
  *     tagPrefixFields: [
  *       { prefix: 'Numéro',  label: 'Étape' },
+ *       { prefix: 'Période', label: 'Dates' },
+ *       { prefix: 'Date',    label: 'Séances', joinWith: '\n' },
  *       { prefix: 'Artiste', label: 'Artiste·s' },
  *     ],
+ *
+ *     imageRatio: '4/3',
  *   },
  *
- *   // ── Tri ──────────────────────────────────────────────────────────────────
  *   // type: 'collection' | 'date' | 'title' | 'category' | { tagPrefix: 'Numéro' }
  *   sort: { type: 'collection', direction: 'asc' },
  *
- *   // ── Pagination ───────────────────────────────────────────────────────────
  *   pagination: {
  *     mode:          'load-more',  // 'load-more' | 'infinite' | 'none'
  *     perPage:       12,
@@ -94,18 +99,10 @@
  *     endLabel:      false,        // false | string
  *   },
  *
- *   // ── Performance ──────────────────────────────────────────────────────────
  *   performance: { maxPages: 10, sessionCache: true, sessionCacheTTL: 300 },
  *
- *   // ── Textes ───────────────────────────────────────────────────────────────
- *   // loading: false ou absent = animation trois points (défaut)
- *   // loading: 'Chargement…'  = texte à la place de l'animation
- *   i18n: {
- *     loading:           false,
- *     all:               'Tout',
- *     noResults:         'Aucun résultat',
- *     searchPlaceholder: 'Rechercher…',
- *   },
+ *   // loading: false = animation points (défaut) | string = texte
+ *   i18n: { loading: false, all: 'Tout', noResults: 'Aucun résultat', searchPlaceholder: 'Rechercher…' },
  * }
  * ];
  */
@@ -113,9 +110,9 @@
 (function () {
   'use strict';
 
-  /* ═══════════════════════════════════════════════
+  /* ═══════════════════════════════════════════
    * 0. UTILITAIRES
-   * ═══════════════════════════════════════════════ */
+   * ═══════════════════════════════════════════ */
 
   function noop() {}
 
@@ -136,8 +133,7 @@
   function truncate(str, max) {
     var s = cleanHTML(str);
     if (!s || s.length <= max) return s;
-    var cut = s.slice(0, max);
-    var sp = cut.lastIndexOf(' ');
+    var cut = s.slice(0, max), sp = cut.lastIndexOf(' ');
     return (sp > 0 ? cut.slice(0, sp) : cut).trim() + '\u2026';
   }
 
@@ -163,11 +159,10 @@
     return e;
   }
 
-  function setText(elem, str) { elem.textContent = str; return elem; }
+  function setText(e, s) { e.textContent = s; return e; }
 
   function parseTag(tag) {
-    var raw = String(tag || '');
-    var idx = raw.indexOf(':');
+    var raw = String(tag || ''), idx = raw.indexOf(':');
     if (idx === -1) return { prefix: null, value: raw.trim() };
     return { prefix: raw.slice(0, idx).trim(), value: raw.slice(idx + 1).trim() };
   }
@@ -181,10 +176,9 @@
     }, []);
   }
 
-  /* ═══════════════════════════════════════════════
-   * 1. STYLES INJECTÉS (loader uniquement)
-   * Le reste du CSS est dans Custom CSS Squarespace.
-   * ═══════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════
+   * 1. LOADER (styles injectés une seule fois)
+   * ═══════════════════════════════════════════ */
 
   function injectLoaderStyles() {
     if (document.getElementById('sqb-loader-styles')) return;
@@ -198,27 +192,20 @@
       '.sqb-loader--text{display:block;font-style:italic;opacity:.5;text-align:center;padding:3rem 1rem}',
     ].join('');
     var s = document.createElement('style');
-    s.id = 'sqb-loader-styles';
-    s.textContent = css;
+    s.id = 'sqb-loader-styles'; s.textContent = css;
     document.head.appendChild(s);
   }
 
   function buildLoader(loadingText) {
-    // loadingText = false ou absent → animation points
-    // loadingText = string non vide → texte
-    if (loadingText) {
-      var d = el('div', { class: 'sqb-loader sqb-loader--text', 'aria-live': 'polite' });
-      d.textContent = loadingText;
-      return d;
-    }
-    var wrap = el('div', { class: 'sqb-loader', 'aria-label': 'Chargement', role: 'status' });
+    if (loadingText) return setText(el('div', { class: 'sqb-loader sqb-loader--text', 'aria-live': 'polite' }), loadingText);
+    var wrap = el('div', { class: 'sqb-loader', role: 'status', 'aria-label': 'Chargement' });
     for (var i = 0; i < 3; i++) wrap.appendChild(el('span', { class: 'sqb-loader-dot', 'aria-hidden': 'true' }));
     return wrap;
   }
 
-  /* ═══════════════════════════════════════════════
+  /* ═══════════════════════════════════════════
    * 2. FETCH & CACHE
-   * ═══════════════════════════════════════════════ */
+   * ═══════════════════════════════════════════ */
 
   var MEM = new Map();
 
@@ -245,7 +232,7 @@
   }
 
   async function fetchAllItems(path, maxPages, useSession, ttl) {
-    var key = 'sqb::v3::' + path + '::' + (maxPages || 10);
+    var key = 'sqb::v4::' + path + '::' + (maxPages || 10);
     var cached = cacheGet(key);
     if (cached) return cached;
     var items = [], url = ensureJson(path);
@@ -266,9 +253,9 @@
     return items;
   }
 
-  /* ═══════════════════════════════════════════════
+  /* ═══════════════════════════════════════════
    * 3. MAPPING
-   * ═══════════════════════════════════════════════ */
+   * ═══════════════════════════════════════════ */
 
   function mapItem(raw, sourcePath) {
     var assetUrl = raw.assetUrl || (raw.asset && raw.asset.url) || null;
@@ -292,13 +279,12 @@
     };
   }
 
-  /* ═══════════════════════════════════════════════
+  /* ═══════════════════════════════════════════
    * 4. FILTRAGE
-   * ═══════════════════════════════════════════════ */
+   * ═══════════════════════════════════════════ */
 
-  function matchesCatFilter(item, cats) {
-    if (!cats || !cats.length) return true;
-    return item.categories.some(function(c) {
+  function matchesCats(item, cats) {
+    return !cats || !cats.length || item.categories.some(function(c) {
       return cats.some(function(w) { return norm(w) === norm(c); });
     });
   }
@@ -306,27 +292,23 @@
   function applyPreFilter(items, pf) {
     if (!pf) return items;
     return items.filter(function(item) {
-      if (pf.categories && !matchesCatFilter(item, pf.categories)) return false;
-      if (pf.excludeCategories && matchesCatFilter(item, pf.excludeCategories)) return false;
-      if (pf.tagValues) {
-        for (var i = 0; i < pf.tagValues.length; i++) {
-          var tv = pf.tagValues[i];
-          if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) { return norm(v) === norm(tv.value); })) return false;
-        }
+      if (!matchesCats(item, pf.categories)) return false;
+      if (pf.excludeCategories && matchesCats(item, pf.excludeCategories)) return false;
+      if (pf.tagValues) for (var i = 0; i < pf.tagValues.length; i++) {
+        var tv = pf.tagValues[i];
+        if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) { return norm(v) === norm(tv.value); })) return false;
       }
       return true;
     });
   }
 
-  function applyTabFilter(items, tabFilter) {
-    if (!tabFilter) return items;
+  function applyTabFilter(items, tf) {
+    if (!tf) return items;
     return items.filter(function(item) {
-      if (tabFilter.categories && !matchesCatFilter(item, tabFilter.categories)) return false;
-      if (tabFilter.tagValues) {
-        for (var i = 0; i < tabFilter.tagValues.length; i++) {
-          var tv = tabFilter.tagValues[i];
-          if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) { return norm(v) === norm(tv.value); })) return false;
-        }
+      if (!matchesCats(item, tf.categories)) return false;
+      if (tf.tagValues) for (var i = 0; i < tf.tagValues.length; i++) {
+        var tv = tf.tagValues[i];
+        if (!getTagValuesByPrefix(item, tv.prefix).some(function(v) { return norm(v) === norm(tv.value); })) return false;
       }
       return true;
     });
@@ -341,29 +323,26 @@
     }
     if (state.search) {
       var q = norm(state.search);
-      var hay = norm([item.title, item.excerpt, item.location].concat(item.categories, item.tags).join(' '));
-      if (hay.indexOf(q) === -1) return false;
+      if (norm([item.title, item.excerpt, item.location].concat(item.categories, item.tags).join(' ')).indexOf(q) === -1) return false;
     }
     return true;
   }
 
-  /* ═══════════════════════════════════════════════
+  /* ═══════════════════════════════════════════
    * 5. TRI
-   * ═══════════════════════════════════════════════ */
+   * ═══════════════════════════════════════════ */
 
-  function tryNum(str) { var n = parseFloat(String(str || '').replace(',', '.')); return isFinite(n) ? n : null; }
+  function tryNum(s) { var n = parseFloat(String(s || '').replace(',', '.')); return isFinite(n) ? n : null; }
 
   function sortItems(items, sort) {
     if (!sort) return items;
-    var type = sort.type || 'collection';
-    var dir  = (sort.direction || 'asc') === 'desc' ? -1 : 1;
+    var type = sort.type || 'collection', dir = (sort.direction || 'asc') === 'desc' ? -1 : 1;
     return items.slice().sort(function(a, b) {
       if (type === 'date')     return (a.timestamp - b.timestamp) * dir;
       if (type === 'title')    return norm(a.title).localeCompare(norm(b.title)) * dir;
       if (type === 'category') return norm(a.categories[0] || '').localeCompare(norm(b.categories[0] || '')) * dir;
       if (typeof type === 'object' && type.tagPrefix) {
-        var av = getTagValuesByPrefix(a, type.tagPrefix)[0] || '';
-        var bv = getTagValuesByPrefix(b, type.tagPrefix)[0] || '';
+        var av = getTagValuesByPrefix(a, type.tagPrefix)[0] || '', bv = getTagValuesByPrefix(b, type.tagPrefix)[0] || '';
         var an = tryNum(av), bn = tryNum(bv);
         if (an !== null && bn !== null) return (an - bn) * dir;
         return norm(av).localeCompare(norm(bv)) * dir;
@@ -372,9 +351,9 @@
     });
   }
 
-  /* ═══════════════════════════════════════════════
+  /* ═══════════════════════════════════════════
    * 6. LAZY-LOAD
-   * ═══════════════════════════════════════════════ */
+   * ═══════════════════════════════════════════ */
 
   var IO_LAZY = ('IntersectionObserver' in window)
     ? new IntersectionObserver(function(entries, obs) {
@@ -403,39 +382,64 @@
     return wrap;
   }
 
-  /* ═══════════════════════════════════════════════
+  /* ═══════════════════════════════════════════
    * 7. RENDU CARTE
-   * ═══════════════════════════════════════════════ */
+   * ═══════════════════════════════════════════ */
 
-  var ROLE_CLASS = { media: 'sqb-card__media', header: 'sqb-card__header', body: 'sqb-card__body', meta: 'sqb-card__meta', footer: 'sqb-card__footer' };
+  var ROLE_CLASS = {
+    media: 'sqb-card__media', header: 'sqb-card__header',
+    body:  'sqb-card__body',  meta:   'sqb-card__meta', footer: 'sqb-card__footer',
+  };
 
   function buildChild(def, item, disp) {
     var type = typeof def === 'string' ? def : (def && def.type);
-    if (type === 'image')      return (disp.image !== false && item.assetUrl) ? buildImg(item.assetUrl, item.focalPoint, item.title, disp.imageRatio || '4/3') : null;
+
+    if (type === 'image') {
+      return (disp.image !== false && item.assetUrl)
+        ? buildImg(item.assetUrl, item.focalPoint, item.title, disp.imageRatio || '4/3') : null;
+    }
     if (type === 'categories') {
       if (disp.categories === false || !item.categories.length) return null;
       var w = el('div', { class: 'sqb-card__cats' });
       item.categories.forEach(function(c) { var s = el('span', { class: 'sqb-card__cat' }); s.textContent = c; w.appendChild(s); });
       return w;
     }
-    if (type === 'title')    return (disp.title !== false && item.title)    ? setText(el('h3', { class: 'sqb-card__title' }), item.title)    : null;
-    if (type === 'excerpt')  return (disp.excerpt !== false && item.excerpt) ? setText(el('p',  { class: 'sqb-card__excerpt' }), item.excerpt) : null;
-    if (type === 'location') return item.location                           ? setText(el('p',  { class: 'sqb-card__location' }), item.location) : null;
+    if (type === 'title')    return (disp.title !== false && item.title)     ? setText(el('h3', { class: 'sqb-card__title' }), item.title)     : null;
+    if (type === 'excerpt')  return (disp.excerpt !== false && item.excerpt)  ? setText(el('p',  { class: 'sqb-card__excerpt' }), item.excerpt)  : null;
+    if (type === 'location') return item.location                             ? setText(el('p',  { class: 'sqb-card__location' }), item.location) : null;
+
     if (type === 'tagPrefix') {
-      var vals = getTagValuesByPrefix(item, def.prefix || '');
+      var prefix  = (def && def.prefix)  || '';
+      var label   = (def && def.label)   || '';
+      var joinWith = (def && def.joinWith != null) ? def.joinWith : ', ';
+      var vals = getTagValuesByPrefix(item, prefix);
       if (!vals.length) return null;
-      var row = el('div', { class: 'sqb-card__tag-field', 'data-prefix': def.prefix });
-      if (def.label) { var lbl = el('span', { class: 'sqb-card__tag-label' }); lbl.textContent = def.label + '\u00A0'; row.appendChild(lbl); }
-      var val = el('span', { class: 'sqb-card__tag-value' }); val.textContent = vals.join(', '); row.appendChild(val);
+
+      var row = el('div', { class: 'sqb-card__tag-field', 'data-prefix': prefix });
+      if (label) { var lbl = el('span', { class: 'sqb-card__tag-label' }); lbl.textContent = label + '\u00A0'; row.appendChild(lbl); }
+
+      // joinWith '\n' → une ligne par valeur
+      if (joinWith === '\n') {
+        var vwrap = el('span', { class: 'sqb-card__tag-value sqb-card__tag-value--multiline' });
+        vals.forEach(function(v, i) {
+          if (i > 0) vwrap.appendChild(document.createElement('br'));
+          vwrap.appendChild(document.createTextNode(v));
+        });
+        row.appendChild(vwrap);
+      } else {
+        var val = el('span', { class: 'sqb-card__tag-value' });
+        val.textContent = vals.join(joinWith);
+        row.appendChild(val);
+      }
       return row;
     }
     return null;
   }
 
-  function buildCard(item, cfg) {
+  function buildCard(item, cfg, index) {
     var disp = cfg.display || {};
     var link = disp.cardLink !== false;
-    var card = el(link ? 'a' : 'div', { class: 'sqb-card' });
+    var card = el(link ? 'a' : 'div', { class: 'sqb-card', 'data-sqb-index': String(index) });
     if (link) card.href = item.fullUrl;
 
     var groups = Array.isArray(disp.groups) && disp.groups.length ? disp.groups : null;
@@ -461,7 +465,7 @@
     }
     if (disp.title !== false && item.title) body.appendChild(setText(el('h3', { class: 'sqb-card__title' }), item.title));
     (Array.isArray(disp.tagPrefixFields) ? disp.tagPrefixFields : []).forEach(function(f) {
-      var node = buildChild({ type: 'tagPrefix', prefix: f.prefix, label: f.label }, item, disp);
+      var node = buildChild({ type: 'tagPrefix', prefix: f.prefix, label: f.label, joinWith: f.joinWith }, item, disp);
       if (node) body.appendChild(node);
     });
     if (disp.excerpt !== false && item.excerpt) body.appendChild(setText(el('p', { class: 'sqb-card__excerpt' }), item.excerpt));
@@ -470,9 +474,9 @@
     return card;
   }
 
-  /* ═══════════════════════════════════════════════
+  /* ═══════════════════════════════════════════
    * 8. GROUPBY VISUEL
-   * ═══════════════════════════════════════════════ */
+   * ═══════════════════════════════════════════ */
 
   function getGroupKey(item, groupBy) {
     if (!groupBy) return null;
@@ -494,9 +498,14 @@
   }
 
   function renderGrouped(items, cfg, grid) {
-    var groupBy    = cfg.display && cfg.display.groupBy || null;
-    var groupOrder = cfg.display && cfg.display.groupOrder || 'collection';
-    if (!groupBy) { items.forEach(function(item) { grid.appendChild(buildCard(item, cfg)); }); return; }
+    var groupBy = (cfg.display && cfg.display.groupBy) || null;
+    var groupOrder = (cfg.display && cfg.display.groupOrder) || 'collection';
+    var globalIndex = 0;
+
+    if (!groupBy) {
+      items.forEach(function(item) { grid.appendChild(buildCard(item, cfg, globalIndex++)); });
+      return;
+    }
     var orderedKeys = [], groups = new Map();
     items.forEach(function(item) {
       var key = getGroupKey(item, groupBy);
@@ -508,13 +517,13 @@
       if (!gi.length) return;
       var h = el('div', { class: 'sqb-group-heading', 'data-group': key, style: 'grid-column:1 / -1' });
       setText(h, key); grid.appendChild(h);
-      gi.forEach(function(item) { grid.appendChild(buildCard(item, cfg)); });
+      gi.forEach(function(item) { grid.appendChild(buildCard(item, cfg, globalIndex++)); });
     });
   }
 
-  /* ═══════════════════════════════════════════════
+  /* ═══════════════════════════════════════════
    * 9. TRI CHRONOLOGIQUE DES TAGS DATE
-   * ═══════════════════════════════════════════════ */
+   * ═══════════════════════════════════════════ */
 
   var MONTH_MAP = {
     january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12,
@@ -538,19 +547,42 @@
     });
   }
 
-  /* ═══════════════════════════════════════════════
-   * 10. FILTRES UI
-   * ═══════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════
+   * 10. STICKY FILTERS (IntersectionObserver)
+   * ═══════════════════════════════════════════ */
+
+  function setupSticky(sentinel, filtersEl, stickyTop) {
+    if (!('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function(entries) {
+      var isStuck = !entries[0].isIntersecting;
+      filtersEl.classList.toggle('sqb-filters--is-sticky', isStuck);
+      if (isStuck) {
+        filtersEl.style.top = stickyTop || '0px';
+      } else {
+        filtersEl.style.top = '';
+      }
+    }, { threshold: 0, rootMargin: '0px 0px 0px 0px' });
+    io.observe(sentinel);
+  }
+
+  /* ═══════════════════════════════════════════
+   * 11. FILTRES UI
+   * ═══════════════════════════════════════════ */
 
   function buildFilterBar(baseItems, cfg, onFilter) {
     if (cfg.filters === false) return null;
     var fc      = cfg.filters || {};
-    var layout  = fc.layout || 'pills';
+    var layout  = fc.layout   || 'pills';
+    var usePills = layout !== 'dropdowns';
     var i18n    = Object.assign({ all: 'Tout', searchPlaceholder: 'Rechercher\u2026' }, cfg.i18n || {});
     var datePrefix = fc.datePrefix || null;
-    var usePills   = layout !== 'dropdowns'; // pills & sidebar → boutons; dropdowns → selects
 
-    var bar   = el('div', { class: 'sqb-filters sqb-filters--' + layout });
+    // Wrapper externe (peut être sticky)
+    var wrapper = el('div', { class: 'sqb-filters-wrapper' });
+    var bar     = el('div', { class: 'sqb-filters sqb-filters--' + layout + (fc.sticky ? ' sqb-filters--sticky-enabled' : '') });
+    if (fc.sticky) bar.style.cssText = 'position:sticky;top:' + (fc.stickyTop || '0px') + ';z-index:10';
+    wrapper.appendChild(bar);
+
     var state = { tab: null, category: null, tags: {}, search: '' };
     var secondaryEl = null;
 
@@ -561,123 +593,112 @@
     function tabPool() { return state.tab ? applyTabFilter(baseItems, state.tab) : baseItems; }
     function resetSec() { state.category = null; state.tags = {}; state.search = ''; }
 
-    function buildCategoryControl(pool, container) {
-      if (fc.categories === false) return;
-      var cats = uniqBy(
-        pool.reduce(function(a, i) { return a.concat(i.categories); }, []).filter(Boolean), norm
-      ).sort(function(a, b) { return norm(a).localeCompare(norm(b)); });
-      if (cats.length < 2) return;
-
-      var group = el('div', { class: 'sqb-filter-group sqb-filter-group--cats' });
-
-      if (usePills) {
-        // Boutons pills
-        var allBtn = el('button', { class: 'sqb-filter-btn sqb-filter-btn--active', type: 'button' });
-        setText(allBtn, i18n.all);
-        allBtn.addEventListener('click', function() {
-          state.category = null;
-          group.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
-          allBtn.classList.add('sqb-filter-btn--active'); emit();
-        });
-        group.appendChild(allBtn);
-        cats.forEach(function(cat) {
-          var isDef = fc.defaultCategory && norm(cat) === norm(fc.defaultCategory);
-          var btn = el('button', { class: 'sqb-filter-btn' + (isDef ? ' sqb-filter-btn--active' : ''), type: 'button' });
-          setText(btn, cat);
-          if (isDef) { state.category = cat; allBtn.classList.remove('sqb-filter-btn--active'); }
-          btn.addEventListener('click', function() {
-            state.category = cat;
-            group.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
-            btn.classList.add('sqb-filter-btn--active'); emit();
-          });
-          group.appendChild(btn);
-        });
-      } else {
-        // Select dropdown
-        var sel = el('select', { class: 'sqb-filter-select', 'aria-label': 'Catégorie' });
-        var o0 = el('option', { value: '' }); o0.textContent = 'Catégorie\u00a0: ' + i18n.all; sel.appendChild(o0);
-        cats.forEach(function(cat) {
-          var o = el('option', { value: cat }); o.textContent = cat;
-          if (fc.defaultCategory && norm(cat) === norm(fc.defaultCategory)) { o.selected = true; state.category = cat; }
-          sel.appendChild(o);
-        });
-        sel.addEventListener('change', function() { state.category = sel.value || null; emit(); });
-        group.appendChild(sel);
-      }
-      container.appendChild(group);
-    }
-
-    function buildTagControl(pool, prefix, container) {
-      var raw  = uniqBy(pool.reduce(function(a, i) { return a.concat(getTagValuesByPrefix(i, prefix)); }, []).filter(Boolean), norm);
-      var vals = sortTagValues(raw, prefix, datePrefix);
-      if (!vals.length) return;
-      var group = el('div', { class: 'sqb-filter-group sqb-filter-group--tag', 'data-prefix': prefix });
-      var defVal = fc.defaultTags && fc.defaultTags[prefix];
-
-      if (usePills) {
-        var allBtn = el('button', { class: 'sqb-filter-btn sqb-filter-btn--active', type: 'button' });
-        setText(allBtn, prefix + '\u00a0: ' + i18n.all);
-        allBtn.addEventListener('click', function() {
-          state.tags[prefix] = null;
-          group.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
-          allBtn.classList.add('sqb-filter-btn--active'); emit();
-        });
-        group.appendChild(allBtn);
-        vals.forEach(function(v) {
-          var isDef = defVal && norm(v) === norm(defVal);
-          var btn = el('button', { class: 'sqb-filter-btn' + (isDef ? ' sqb-filter-btn--active' : ''), type: 'button' });
-          setText(btn, v);
-          if (isDef) { state.tags[prefix] = v; allBtn.classList.remove('sqb-filter-btn--active'); }
-          btn.addEventListener('click', function() {
-            state.tags[prefix] = v;
-            group.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
-            btn.classList.add('sqb-filter-btn--active'); emit();
-          });
-          group.appendChild(btn);
-        });
-      } else {
-        var sel = el('select', { class: 'sqb-filter-select', 'aria-label': prefix });
-        var o0 = el('option', { value: '' }); o0.textContent = prefix + '\u00a0: ' + i18n.all; sel.appendChild(o0);
-        vals.forEach(function(v) {
-          var o = el('option', { value: v }); o.textContent = v;
-          if (defVal && norm(v) === norm(defVal)) { o.selected = true; state.tags[prefix] = v; }
-          sel.appendChild(o);
-        });
-        sel.addEventListener('change', function() { state.tags[prefix] = sel.value || null; emit(); });
-        group.appendChild(sel);
-      }
-      container.appendChild(group);
-    }
-
-    function buildSearchControl(container) {
-      if (fc.search === false) return;
-      var group = el('div', { class: 'sqb-filter-group sqb-filter-group--search' });
-      var input = el('input', { class: 'sqb-filter-search', type: 'search', placeholder: i18n.searchPlaceholder, 'aria-label': i18n.searchPlaceholder });
-      var timer;
-      input.addEventListener('input', function() {
-        clearTimeout(timer);
-        timer = setTimeout(function() { state.search = input.value.trim(); emit(); }, 200);
+    function buildPillGroup(vals, getCurrent, onSelect, allLabel) {
+      var group = el('div', { class: 'sqb-filter-group' });
+      var allBtn = el('button', { class: 'sqb-filter-btn' + (getCurrent() == null ? ' sqb-filter-btn--active' : ''), type: 'button' });
+      setText(allBtn, allLabel || i18n.all);
+      allBtn.addEventListener('click', function() {
+        onSelect(null);
+        group.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
+        allBtn.classList.add('sqb-filter-btn--active'); emit();
       });
-      group.appendChild(input); container.appendChild(group);
+      group.appendChild(allBtn);
+      vals.forEach(function(v) {
+        var active = getCurrent() !== null && norm(v) === norm(getCurrent());
+        var btn = el('button', { class: 'sqb-filter-btn' + (active ? ' sqb-filter-btn--active' : ''), type: 'button' });
+        setText(btn, v);
+        btn.addEventListener('click', function() {
+          onSelect(v);
+          group.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
+          btn.classList.add('sqb-filter-btn--active'); emit();
+        });
+        group.appendChild(btn);
+      });
+      return group;
     }
 
-    function buildSecondary(pool, container) {
-      buildCategoryControl(pool, container);
-      (Array.isArray(fc.tagPrefixes) ? fc.tagPrefixes : []).forEach(function(p) { buildTagControl(pool, p, container); });
-      buildSearchControl(container);
+    function buildDropdown(vals, label, getCurrent, onSelect) {
+      var group = el('div', { class: 'sqb-filter-group' });
+      var sel   = el('select', { class: 'sqb-filter-select', 'aria-label': label });
+      var o0    = el('option', { value: '' }); o0.textContent = label + '\u00a0: ' + i18n.all; sel.appendChild(o0);
+      vals.forEach(function(v) {
+        var o = el('option', { value: v }); o.textContent = v;
+        if (getCurrent() && norm(v) === norm(getCurrent())) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', function() { onSelect(sel.value || null); emit(); });
+      group.appendChild(sel); return group;
+    }
+
+    function appendSecondary(pool, container) {
+      // Catégories
+      if (fc.categories !== false) {
+        var cats = uniqBy(
+          pool.reduce(function(a, i) { return a.concat(i.categories); }, []).filter(Boolean), norm
+        ).sort(function(a, b) { return norm(a).localeCompare(norm(b)); });
+
+        if (cats.length > 1) {
+          var defCat = fc.defaultCategory || null;
+          if (defCat && state.category == null) state.category = defCat;
+          var grp;
+          if (usePills) {
+            grp = buildPillGroup(cats, function() { return state.category; }, function(v) { state.category = v; });
+          } else {
+            grp = buildDropdown(cats, 'Catégorie', function() { return state.category; }, function(v) { state.category = v; });
+          }
+          grp.classList.add('sqb-filter-group--cats');
+          container.appendChild(grp);
+        }
+      }
+
+      // Tag-prefix
+      (Array.isArray(fc.tagPrefixes) ? fc.tagPrefixes : []).forEach(function(prefix) {
+        var raw  = uniqBy(pool.reduce(function(a, i) { return a.concat(getTagValuesByPrefix(i, prefix)); }, []).filter(Boolean), norm);
+        var vals = sortTagValues(raw, prefix, datePrefix);
+        if (!vals.length) return;
+
+        var defVal = fc.defaultTags && fc.defaultTags[prefix];
+        if (defVal && !state.tags[prefix]) state.tags[prefix] = defVal;
+
+        var grp;
+        if (usePills) {
+          grp = buildPillGroup(vals,
+            function() { return state.tags[prefix] || null; },
+            function(v) { state.tags[prefix] = v; },
+            prefix + '\u00a0: ' + i18n.all
+          );
+        } else {
+          grp = buildDropdown(vals, prefix, function() { return state.tags[prefix] || null; }, function(v) { state.tags[prefix] = v; });
+        }
+        grp.classList.add('sqb-filter-group--tag');
+        grp.setAttribute('data-prefix', prefix);
+        container.appendChild(grp);
+      });
+
+      // Recherche
+      if (fc.search !== false) {
+        var sg = el('div', { class: 'sqb-filter-group sqb-filter-group--search' });
+        var inp = el('input', { class: 'sqb-filter-search', type: 'search', placeholder: i18n.searchPlaceholder, 'aria-label': i18n.searchPlaceholder });
+        var timer;
+        inp.addEventListener('input', function() {
+          clearTimeout(timer);
+          timer = setTimeout(function() { state.search = inp.value.trim(); emit(); }, 200);
+        });
+        sg.appendChild(inp); container.appendChild(sg);
+      }
     }
 
     function rebuildSecondary() {
       if (!secondaryEl) return;
       secondaryEl.innerHTML = '';
-      buildSecondary(tabPool(), secondaryEl);
+      appendSecondary(tabPool(), secondaryEl);
     }
 
     // Tabs
     var tabs = Array.isArray(fc.tabs) ? fc.tabs : [];
     if (tabs.length) {
       var tabGroup = el('div', { class: 'sqb-filter-group sqb-filter-group--tabs' });
-      var defIdx   = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      var defIdx = Number(fc.defaultTab != null ? fc.defaultTab : 0);
       tabs.forEach(function(tab, idx) {
         var active = idx === defIdx;
         var btn = el('button', { class: 'sqb-tab-btn' + (active ? ' sqb-tab-btn--active' : ''), type: 'button' });
@@ -696,15 +717,25 @@
     }
 
     secondaryEl = el('div', { class: 'sqb-filters-secondary' });
-    buildSecondary(tabPool(), secondaryEl);
+    appendSecondary(tabPool(), secondaryEl);
     bar.appendChild(secondaryEl);
 
-    return bar;
+    // Sticky via IntersectionObserver
+    if (fc.sticky) {
+      var sentinel = el('div', { class: 'sqb-sticky-sentinel', style: 'height:1px;pointer-events:none;visibility:hidden' });
+      wrapper.insertBefore(sentinel, bar);
+      // Observer après insertion dans le DOM (doit être appelé après append)
+      wrapper._sqbSentinel = sentinel;
+      wrapper._sqbBar      = bar;
+      wrapper._sqbStickyTop = fc.stickyTop || '0px';
+    }
+
+    return wrapper;
   }
 
-  /* ═══════════════════════════════════════════════
-   * 11. RUNNER
-   * ═══════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════
+   * 12. RUNNER
+   * ═══════════════════════════════════════════ */
 
   async function runConfig(cfg) {
     if (!cfg || cfg.enabled === false) return;
@@ -712,19 +743,23 @@
     if (!target) return;
 
     var perf = cfg.performance || {}, pag = cfg.pagination || {}, disp = cfg.display || {};
+    var fc   = (cfg.filters && cfg.filters !== false) ? cfg.filters : {};
     var i18n = Object.assign({ loading: false, all: 'Tout', noResults: 'Aucun r\u00e9sultat', loadMoreLabel: 'Voir plus', endLabel: '' }, cfg.i18n || {});
-    if (pag.loadMoreLabel)           i18n.loadMoreLabel = pag.loadMoreLabel;
-    if (pag.endLabel !== undefined)  i18n.endLabel      = pag.endLabel;
+    if (pag.loadMoreLabel)          i18n.loadMoreLabel = pag.loadMoreLabel;
+    if (pag.endLabel !== undefined) i18n.endLabel      = pag.endLabel;
 
     var perPage = Number(pag.perPage || 12);
     var mode    = pag.mode || 'load-more';
-    var displayLayout = disp.layout || 'grid'; // 'grid' | 'list'
+    var displayLayout = disp.layout   || 'grid';
+    var filterPosition = fc.position  || 'top';   // 'top' | 'sidebar'
 
+    // Classes conteneur
     target.classList.add('sqb-block');
     target.setAttribute('data-sqb-key', cfg.key || 'sqb');
     if (cfg.key)     target.classList.add('sqb--' + cfg.key);
     if (cfg.classes) cfg.classes.trim().split(/\s+/).forEach(function(c) { if (c) target.classList.add(c); });
-    if (displayLayout === 'list') target.classList.add('sqb-block--list');
+    if (displayLayout === 'list')           target.classList.add('sqb-block--list');
+    if (filterPosition === 'sidebar')       target.classList.add('sqb-block--sidebar');
 
     injectLoaderStyles();
     var loader = buildLoader(i18n.loading);
@@ -732,9 +767,8 @@
 
     // Fetch
     var rawItems = [];
-    var sources  = Array.isArray(cfg.sources) ? cfg.sources : [];
     try {
-      var results = await Promise.all(sources.map(function(src) {
+      var results = await Promise.all((Array.isArray(cfg.sources) ? cfg.sources : []).map(function(src) {
         return fetchAllItems(src.path, perf.maxPages || 10, perf.sessionCache !== false, perf.sessionCacheTTL || 300)
           .then(function(items) { return items.map(function(raw) { return mapItem(raw, src.path); }); });
       }));
@@ -742,7 +776,7 @@
     } catch (err) {
       if (cfg.debug) console.warn('[SQB]', cfg.key, err);
       loader.remove();
-      var errEl = el('p', { class: 'sqb-error' }); errEl.textContent = '\u26A0\uFE0F Erreur de chargement'; target.appendChild(errEl);
+      setText(target.appendChild(el('p', { class: 'sqb-error' })), '\u26A0 Erreur de chargement');
       return;
     }
 
@@ -752,32 +786,54 @@
     if (cfg.debug) console.log('[SQB]', cfg.key, rawItems.length, 'items');
     loader.remove();
 
+    // Init état
     var activeFilters = { tab: null, category: null, tags: {}, search: '' };
-    var currentPage   = 1;
-    var ioInfinite    = null;
-
-    // Init présélections
-    var fc = (cfg.filters && cfg.filters !== false) ? cfg.filters : {};
+    var currentPage = 1, ioInfinite = null;
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
       var di = Number(fc.defaultTab != null ? fc.defaultTab : 0);
       if (fc.tabs[di]) activeFilters.tab = fc.tabs[di].filter || null;
     }
     if (fc.defaultCategory) activeFilters.category = fc.defaultCategory;
-    if (fc.defaultTags)     Object.assign(activeFilters.tags, fc.defaultTags);
+    if (fc.defaultTags) Object.assign(activeFilters.tags, fc.defaultTags);
 
-    var root     = el('div', { class: 'sqb-root' });
-    var filterBar = buildFilterBar(rawItems, cfg, function(f) { activeFilters = f; currentPage = 1; render(); });
-    if (filterBar) root.appendChild(filterBar);
+    var root = el('div', { class: 'sqb-root' });
 
-    var gridClass = displayLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid';
-    var grid     = el('div', { class: gridClass });
-    var counter  = el('p',  { class: 'sqb-counter', 'aria-live': 'polite' });
+    // Barre de filtres
+    var filterWrapper = buildFilterBar(rawItems, cfg, function(f) {
+      activeFilters = f; currentPage = 1; render();
+    });
+
+    // Grille
+    var grid     = el('div', { class: displayLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid' });
+    var counter  = el('p',   { class: 'sqb-counter', 'aria-live': 'polite' });
     var footerEl = el('div', { class: 'sqb-footer' });
 
-    root.appendChild(grid);
-    if (disp.counter !== false) root.appendChild(counter);
-    root.appendChild(footerEl);
+    if (filterPosition === 'sidebar' && filterWrapper) {
+      // Sidebar : filtres à gauche, contenu à droite
+      var sidebarLayout = el('div', { class: 'sqb-sidebar-layout' });
+      var sidePanel = el('div', { class: 'sqb-sidebar-panel' });
+      var mainPanel = el('div', { class: 'sqb-main-panel' });
+      sidePanel.appendChild(filterWrapper);
+      mainPanel.appendChild(grid);
+      if (disp.counter !== false) mainPanel.appendChild(counter);
+      mainPanel.appendChild(footerEl);
+      sidebarLayout.appendChild(sidePanel);
+      sidebarLayout.appendChild(mainPanel);
+      root.appendChild(sidebarLayout);
+    } else {
+      // Top (défaut)
+      if (filterWrapper) root.appendChild(filterWrapper);
+      root.appendChild(grid);
+      if (disp.counter !== false) root.appendChild(counter);
+      root.appendChild(footerEl);
+    }
+
     target.appendChild(root);
+
+    // Activer sticky après insertion DOM
+    if (filterWrapper && filterWrapper._sqbSentinel) {
+      setupSticky(filterWrapper._sqbSentinel, filterWrapper._sqbBar, filterWrapper._sqbStickyTop);
+    }
 
     function render() {
       if (ioInfinite) { ioInfinite.disconnect(); ioInfinite = null; }
@@ -785,11 +841,10 @@
       var filtered = pool.filter(function(item) { return matchesUIFilters(item, activeFilters); });
       var total    = filtered.length;
       var shown    = filtered.slice(0, currentPage * perPage);
-
       grid.innerHTML = ''; footerEl.innerHTML = '';
 
       if (!shown.length) {
-        var empty = el('p', { class: 'sqb-empty' }); setText(empty, i18n.noResults); grid.appendChild(empty);
+        setText(grid.appendChild(el('p', { class: 'sqb-empty' })), i18n.noResults);
         if (disp.counter !== false) counter.textContent = '';
         return;
       }
@@ -799,14 +854,16 @@
 
       var hasMore = shown.length < total;
       if (!hasMore) {
-        if (i18n.endLabel !== false && i18n.endLabel) footerEl.appendChild(setText(el('p', { class: 'sqb-end-label' }), i18n.endLabel));
+        if (i18n.endLabel !== false && i18n.endLabel) setText(footerEl.appendChild(el('p', { class: 'sqb-end-label' })), i18n.endLabel);
         return;
       }
       if (mode === 'load-more') {
-        var btn = el('button', { class: 'sqb-load-more', type: 'button' }); setText(btn, i18n.loadMoreLabel);
-        btn.addEventListener('click', function() { currentPage++; render(); }); footerEl.appendChild(btn);
+        var btn = setText(el('button', { class: 'sqb-load-more', type: 'button' }), i18n.loadMoreLabel);
+        btn.addEventListener('click', function() { currentPage++; render(); });
+        footerEl.appendChild(btn);
       } else if (mode === 'infinite' && 'IntersectionObserver' in window) {
-        var sentinel = el('div', { class: 'sqb-sentinel', 'aria-hidden': 'true' }); footerEl.appendChild(sentinel);
+        var sentinel = el('div', { class: 'sqb-sentinel', 'aria-hidden': 'true' });
+        footerEl.appendChild(sentinel);
         ioInfinite = new IntersectionObserver(function(entries) {
           if (!entries[0].isIntersecting) return;
           ioInfinite.disconnect(); ioInfinite = null; currentPage++; render();
@@ -818,9 +875,9 @@
     render();
   }
 
-  /* ═══════════════════════════════════════════════
-   * 12. POINT D'ENTRÉE
-   * ═══════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════
+   * 13. POINT D'ENTRÉE
+   * ═══════════════════════════════════════════ */
 
   function init() {
     var configs = Array.isArray(window.SQB_CONFIGS) ? window.SQB_CONFIGS : [];
