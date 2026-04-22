@@ -1,117 +1,32 @@
 /*!
- * Squarespace Query Block (SQB) v1.8.0
+ * Squarespace Query Block (SQB) v1.9.0
  * Fetch JSON paginé · tabs · groupBy · sticky · hooks · lazy-load · cache
  * Compatible Weglot · zéro dépendance
  *
  * ─── RÉFÉRENCE CONFIGURATION ─────────────────────────────────────────────────
  *
- * window.SQB_CONFIGS = [
- * {
- *   key:     'programme',
- *   target:  '#sqb-programme',
- *   classes: 'ma-classe',
- *   enabled: true,
- *   debug:   false,
+ * window.SQB_CONFIGS = [{ ... }];
+ * window.SQB_HOOKS   = { 'key': function(grid, items, cfg) {} };
  *
- *   sources: [{ path: '/programme-2026' }],
+ * display.groups enfants :
+ *   'image' | 'title' | 'categories' | 'excerpt' | 'location'
+ *   { type: 'tagPrefix', prefix: 'Date', label: '', joinWith: '\n' }
  *
- *   preFilter: {
- *     categories:        ['Exposition'],
- *     excludeCategories: ['Brouillon'],
- *     tagValues:         [{ prefix: 'Sélection', value: 'Homepage' }],
- *   },
+ * filters.tagPrefixes :
+ *   ['Zone', 'Date']                              ← layout global
+ *   [{ prefix: 'Zone', layout: 'pills', showLabel: true },
+ *    { prefix: 'Lieu', layout: 'dropdown' }]      ← layout par préfixe
  *
- *   filters: false,  // ou :
- *   filters: {
- *     layout:   'pills',     // layout par défaut pour les contrôles
- *     position: 'top',       // 'top' | 'sidebar'
- *     sticky:   true,
- *     stickyTop: '0px',
- *
- *     tabs: [
- *       { label: 'Expositions', filter: { categories: ['Exposition'] } },
- *     ],
- *     defaultTab: 0,
- *
- *     categories: true,
- *     defaultCategory: null,
- *
- *     // tagPrefixes : tableau de strings (layout global) ou d'objets (layout par préfixe)
- *     tagPrefixes: ['Zone', 'Date', 'Lieu'],
- *     tagPrefixes: [
- *       { prefix: 'Zone', layout: 'pills' },
- *       { prefix: 'Date', layout: 'pills' },
- *       { prefix: 'Lieu', layout: 'dropdown' },
- *     ],
- *     datePrefix: 'Date',   // tri chronologique
- *     defaultTags: {},
- *     search: true,
- *   },
- *
- *   display: {
- *     layout:   'grid',      // 'grid' | 'list'
- *     counter:  true,
- *     cardLink: true,
- *
- *     groupBy:    null,      // null | 'category' | { tagPrefix: 'Date' }
- *     groupOrder: 'collection',
- *
- *     // Rendu par groupes sémantiques
- *     // Rôles  : 'media' | 'header' | 'body' | 'meta' | 'footer'
- *     // Enfants: 'image' | 'title' | 'categories' | 'excerpt' | 'location'
- *     //          { type: 'tagPrefix', prefix: 'Date', label: '', joinWith: '\n' }
- *     groups: [
- *       { role: 'media', children: ['image'] },
- *       { role: 'body',  children: [
- *           'categories',
- *           'title',
- *           { type: 'tagPrefix', prefix: 'Numéro', label: 'Étape' },
- *           { type: 'tagPrefix', prefix: 'Date',   label: '', joinWith: '\n' },
- *           { type: 'tagPrefix', prefix: 'Lieu',   label: '' },
- *       ]},
- *     ],
- *
- *     // Rendu plat (si groups absent) :
- *     image: true, title: true, categories: true, excerpt: true, location: false,
- *     tagPrefixFields: [
- *       { prefix: 'Numéro', label: 'Étape' },
- *       { prefix: 'Date',   label: '',     joinWith: '\n' },
- *     ],
- *   },
- *
- *   sort: { type: 'collection', direction: 'asc' },
- *
- *   pagination: {
- *     mode:          'load-more',  // 'load-more' | 'infinite' | 'none'
- *     perPage:       12,
- *     loadMoreLabel: 'Voir plus',
- *     endLabel:      false,
- *   },
- *
- *   performance: { maxPages: 10, sessionCache: true, sessionCacheTTL: 300 },
- *
- *   // loading: false = animation points | string = texte
- *   i18n: { loading: false, all: 'Tout', noResults: 'Aucun résultat', searchPlaceholder: 'Rechercher…' },
- * }
- * ];
- *
- * ─── HOOKS ────────────────────────────────────────────────────────────────────
- *
- * // Appelé après chaque render() d'un bloc.
- * // Paramètres : grid (élément DOM), items (items affichés), cfg (config du bloc)
- * window.SQB_HOOKS = {
- *   'homepage': function(grid, items, cfg) {
- *     // manipulation post-rendu
- *   },
- * };
+ * sort.type : 'collection' | 'date' | 'title' | 'category' | 'random'
+ *             | { tagPrefix: 'Numéro' }
  */
 
 (function () {
   'use strict';
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 0. UTILITAIRES
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   function noop() {}
 
@@ -138,18 +53,15 @@
 
   function uniqBy(arr, fn) {
     var seen = new Set();
-    return arr.filter(function(item) {
-      var k = fn(item);
-      if (seen.has(k)) return false;
-      seen.add(k); return true;
+    return arr.filter(function(x) {
+      var k = fn(x); if (seen.has(k)) return false; seen.add(k); return true;
     });
   }
 
   function el(tag, attrs) {
     var e = document.createElement(tag);
     if (attrs) Object.keys(attrs).forEach(function(k) {
-      var v = attrs[k];
-      if (v == null) return;
+      var v = attrs[k]; if (v == null) return;
       if (k === 'class') e.className = v;
       else if (k === 'style') e.style.cssText = v;
       else if (k.indexOf('data-') === 0) e.setAttribute(k, v);
@@ -167,26 +79,40 @@
   }
 
   function getTagValuesByPrefix(item, prefix) {
-    var pNorm = norm(String(prefix).replace(/:$/, ''));
+    var pn = norm(String(prefix).replace(/:$/, ''));
     return (item.tags || []).reduce(function(acc, tag) {
       var p = parseTag(tag);
-      if (p.prefix && norm(p.prefix) === pNorm && p.value) acc.push(p.value);
+      if (p.prefix && norm(p.prefix) === pn && p.value) acc.push(p.value);
       return acc;
     }, []);
   }
 
-  // Normalise tagPrefixes : string[] | object[] → object[] uniforme
-  function normalizeTagPrefixes(tagPrefixes, globalLayout) {
+  // Normalise tagPrefixes en tableau d'objets uniformes
+  function normalizePrefixes(tagPrefixes, globalLayout) {
     if (!Array.isArray(tagPrefixes)) return [];
     return tagPrefixes.map(function(p) {
-      if (typeof p === 'string') return { prefix: p, layout: globalLayout || 'pills' };
-      return { prefix: p.prefix, layout: p.layout || globalLayout || 'pills' };
+      if (typeof p === 'string') return { prefix: p, layout: globalLayout || 'pills', showLabel: true };
+      return {
+        prefix:    p.prefix,
+        layout:    p.layout    || globalLayout || 'pills',
+        showLabel: p.showLabel !== false,
+      };
     });
   }
 
-  /* ═══════════════════════════════════════
+  // Mélange aléatoire (Fisher-Yates)
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+
+  /* ════════════════════════════════════════
    * 1. LOADER
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   function injectLoaderStyles() {
     if (document.getElementById('sqb-loader-styles')) return;
@@ -206,22 +132,21 @@
 
   function buildLoader(loadingText) {
     if (loadingText) return setText(el('div', { class: 'sqb-loader sqb-loader--text', 'aria-live': 'polite' }), loadingText);
-    var wrap = el('div', { class: 'sqb-loader', role: 'status', 'aria-label': 'Chargement' });
-    for (var i = 0; i < 3; i++) wrap.appendChild(el('span', { class: 'sqb-loader-dot', 'aria-hidden': 'true' }));
-    return wrap;
+    var w = el('div', { class: 'sqb-loader', role: 'status', 'aria-label': 'Chargement' });
+    for (var i = 0; i < 3; i++) w.appendChild(el('span', { class: 'sqb-loader-dot', 'aria-hidden': 'true' }));
+    return w;
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 2. FETCH & CACHE
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   var MEM = new Map();
 
   function cacheGet(key) {
     if (MEM.has(key)) return MEM.get(key);
     try {
-      var raw = sessionStorage.getItem(key);
-      if (!raw) return null;
+      var raw = sessionStorage.getItem(key); if (!raw) return null;
       var p = JSON.parse(raw);
       if (Date.now() - p.ts > (p.ttl || 300) * 1000) { sessionStorage.removeItem(key); return null; }
       MEM.set(key, p.data); return p.data;
@@ -240,30 +165,27 @@
   }
 
   async function fetchAllItems(path, maxPages, useSession, ttl) {
-    var key = 'sqb::v8::' + path + '::' + (maxPages || 10);
-    var cached = cacheGet(key);
-    if (cached) return cached;
+    var key = 'sqb::v9::' + path + '::' + (maxPages || 10);
+    var cached = cacheGet(key); if (cached) return cached;
     var items = [], url = ensureJson(path);
     for (var p = 0; p < (maxPages || 10); p++) {
       var data;
       try {
         var res = await fetch(url, { credentials: 'same-origin' });
-        if (!res.ok) break;
-        data = await res.json();
+        if (!res.ok) break; data = await res.json();
       } catch (_) { break; }
       var batch = Array.isArray(data && data.items) ? data.items : Array.isArray(data && data.itemList) ? data.itemList : [];
       items.push.apply(items, batch);
       var next = data && data.pagination && data.pagination.nextPageUrl;
-      if (!next) break;
-      url = ensureJson(next);
+      if (!next) break; url = ensureJson(next);
     }
     cacheSet(key, items, ttl || 300, useSession !== false);
     return items;
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 3. MAPPING
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   function mapItem(raw, sourcePath) {
     var assetUrl = raw.assetUrl || (raw.asset && raw.asset.url) || null;
@@ -287,9 +209,9 @@
     };
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 4. FILTRAGE
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   function matchesCats(item, cats) {
     return !cats || !cats.length || item.categories.some(function(c) {
@@ -336,15 +258,16 @@
     return true;
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 5. TRI
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   function tryNum(s) { var n = parseFloat(String(s || '').replace(',', '.')); return isFinite(n) ? n : null; }
 
   function sortItems(items, sort) {
     if (!sort) return items;
     var type = sort.type || 'collection', dir = (sort.direction || 'asc') === 'desc' ? -1 : 1;
+    if (type === 'random') return shuffle(items);
     return items.slice().sort(function(a, b) {
       if (type === 'date')     return (a.timestamp - b.timestamp) * dir;
       if (type === 'title')    return norm(a.title).localeCompare(norm(b.title)) * dir;
@@ -359,9 +282,9 @@
     });
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 6. LAZY-LOAD
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   var IO_LAZY = ('IntersectionObserver' in window)
     ? new IntersectionObserver(function(entries, obs) {
@@ -382,10 +305,8 @@
     var srcset = SRCSET_WIDTHS.map(function(w) { return assetUrl + '?format=' + w + 'w ' + w + 'w'; }).join(', ');
     var wrap = el('div', { class: 'sqb-card__img-wrap' });
     var img  = el('img', {
-      class:    'sqb-card__img',
-      alt:      alt || '',
-      sizes:    '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
-      decoding: 'async',
+      class: 'sqb-card__img', alt: alt || '',
+      sizes: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw', decoding: 'async',
     });
     img.style.objectPosition = focalPoint;
     if (IO_LAZY) { img.dataset.src = assetUrl; img.dataset.srcset = srcset; IO_LAZY.observe(img); }
@@ -395,38 +316,30 @@
     return wrap;
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 7. RENDU CARTE
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   var ROLE_CLASS = {
-    media:  'sqb-card__media',
-    header: 'sqb-card__header',
-    body:   'sqb-card__body',
-    meta:   'sqb-card__meta',
-    footer: 'sqb-card__footer',
+    media: 'sqb-card__media', header: 'sqb-card__header',
+    body:  'sqb-card__body',  meta:   'sqb-card__meta', footer: 'sqb-card__footer',
   };
 
-  function buildChild(def, item, disp) {
+  function buildChild(def, item) {
     var type = typeof def === 'string' ? def : (def && def.type);
-
     if (type === 'image') {
       return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title) : null;
     }
     if (type === 'categories') {
       if (!item.categories.length) return null;
       var w = el('div', { class: 'sqb-card__cats' });
-      item.categories.forEach(function(c) {
-        var s = el('span', { class: 'sqb-card__cat' }); s.textContent = c; w.appendChild(s);
-      });
+      item.categories.forEach(function(c) { var s = el('span', { class: 'sqb-card__cat' }); s.textContent = c; w.appendChild(s); });
       return w;
     }
     if (type === 'title') {
       if (!item.title) return null;
-      // div neutre + attributs accessibilité heading
       var t = el('div', { class: 'sqb-card__title', role: 'heading', 'aria-level': '3' });
-      t.textContent = item.title;
-      return t;
+      t.textContent = item.title; return t;
     }
     if (type === 'excerpt') {
       if (!item.excerpt) return null;
@@ -442,18 +355,14 @@
       var joinWith = (def && def.joinWith != null) ? def.joinWith : ', ';
       var vals = getTagValuesByPrefix(item, prefix);
       if (!vals.length) return null;
-
       var row = el('div', { class: 'sqb-card__tag-field', 'data-prefix': prefix });
-      if (label) {
-        var lbl = el('span', { class: 'sqb-card__tag-label' });
-        lbl.textContent = label + '\u00A0'; row.appendChild(lbl);
-      }
+      if (label) { var lbl = el('span', { class: 'sqb-card__tag-label' }); lbl.textContent = label + '\u00A0'; row.appendChild(lbl); }
       if (joinWith === '\n') {
         var vw = el('span', { class: 'sqb-card__tag-value sqb-card__tag-value--multiline' });
         vals.forEach(function(v, i) { if (i > 0) vw.appendChild(document.createElement('br')); vw.appendChild(document.createTextNode(v)); });
         row.appendChild(vw);
       } else {
-        var val = el('span', { class: 'sqb-card__tag-value' }); val.textContent = vals.join(joinWith); row.appendChild(val);
+        setText(row.appendChild(el('span', { class: 'sqb-card__tag-value' })), vals.join(joinWith));
       }
       return row;
     }
@@ -463,10 +372,7 @@
   function buildCard(item, cfg, index) {
     var disp = cfg.display || {};
     var link = disp.cardLink !== false;
-    var card = el(link ? 'a' : 'div', {
-      class: 'sqb-card',
-      'data-sqb-index': String(index),
-    });
+    var card = el(link ? 'a' : 'div', { class: 'sqb-card', 'data-sqb-index': String(index) });
     if (link) card.href = item.fullUrl;
 
     var groups = Array.isArray(disp.groups) && disp.groups.length ? disp.groups : null;
@@ -474,7 +380,7 @@
       groups.forEach(function(grp) {
         var wrapper = el('div', { class: ROLE_CLASS[grp.role] || 'sqb-card__group' });
         (grp.children || []).forEach(function(def) {
-          var node = buildChild(def, item, disp);
+          var node = buildChild(def, item);
           if (node) wrapper.appendChild(node);
         });
         if (wrapper.hasChildNodes()) card.appendChild(wrapper);
@@ -490,12 +396,9 @@
       item.categories.forEach(function(c) { var s = el('span', { class: 'sqb-card__cat' }); s.textContent = c; meta.appendChild(s); });
       body.appendChild(meta);
     }
-    if (item.title) {
-      var tt = el('div', { class: 'sqb-card__title', role: 'heading', 'aria-level': '3' });
-      tt.textContent = item.title; body.appendChild(tt);
-    }
+    if (item.title) { var tt = el('div', { class: 'sqb-card__title', role: 'heading', 'aria-level': '3' }); tt.textContent = item.title; body.appendChild(tt); }
     (Array.isArray(disp.tagPrefixFields) ? disp.tagPrefixFields : []).forEach(function(f) {
-      var node = buildChild({ type: 'tagPrefix', prefix: f.prefix, label: f.label, joinWith: f.joinWith }, item, disp);
+      var node = buildChild({ type: 'tagPrefix', prefix: f.prefix, label: f.label, joinWith: f.joinWith }, item);
       if (node) body.appendChild(node);
     });
     if (disp.excerpt !== false && item.excerpt) { var ep = el('p', { class: 'sqb-card__excerpt' }); ep.textContent = item.excerpt; body.appendChild(ep); }
@@ -504,9 +407,9 @@
     return card;
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 8. GROUPBY VISUEL
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   function getGroupKey(item, groupBy) {
     if (!groupBy) return null;
@@ -528,7 +431,7 @@
   }
 
   function renderGrouped(items, cfg, grid) {
-    var groupBy    = (cfg.display && cfg.display.groupBy)    || null;
+    var groupBy = (cfg.display && cfg.display.groupBy) || null;
     var groupOrder = (cfg.display && cfg.display.groupOrder) || 'collection';
     var idx = 0;
     if (!groupBy) { items.forEach(function(item) { grid.appendChild(buildCard(item, cfg, idx++)); }); return; }
@@ -539,17 +442,16 @@
       groups.get(key).push(item);
     });
     sortGroupKeys(orderedKeys, groupOrder).forEach(function(key) {
-      var gi = groups.get(key) || [];
-      if (!gi.length) return;
+      var gi = groups.get(key) || []; if (!gi.length) return;
       var h = el('div', { class: 'sqb-group-heading', 'data-group': key, style: 'grid-column:1 / -1' });
       setText(h, key); grid.appendChild(h);
       gi.forEach(function(item) { grid.appendChild(buildCard(item, cfg, idx++)); });
     });
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 9. TRI CHRONOLOGIQUE DATES
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   var MONTH_MAP = {
     january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12,
@@ -573,34 +475,31 @@
     });
   }
 
-  /* ═══════════════════════════════════════
-   * 10. STICKY (IntersectionObserver)
-   * ═══════════════════════════════════════ */
+  /* ════════════════════════════════════════
+   * 10. STICKY
+   * ════════════════════════════════════════ */
 
-  function setupSticky(sentinel, filtersWrapper, stickyTop) {
+  function setupSticky(sentinel, wrapper, stickyTop) {
     if (!('IntersectionObserver' in window)) return;
-    var io = new IntersectionObserver(function(entries) {
-      var stuck = !entries[0].isIntersecting;
-      filtersWrapper.classList.toggle('sqb-filters-wrapper--is-sticky', stuck);
-    }, { threshold: 0 });
-    io.observe(sentinel);
-    // Position sticky sur le wrapper
-    filtersWrapper.style.position = 'sticky';
-    filtersWrapper.style.top      = stickyTop || '0px';
-    filtersWrapper.style.zIndex   = '10';
+    wrapper.style.position = 'sticky';
+    wrapper.style.top      = stickyTop || '0px';
+    wrapper.style.zIndex   = '10';
+    new IntersectionObserver(function(entries) {
+      wrapper.classList.toggle('sqb-filters-wrapper--is-sticky', !entries[0].isIntersecting);
+    }, { threshold: 0 }).observe(sentinel);
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 11. FILTRES UI
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   function buildFilterBar(baseItems, cfg, onFilter) {
     if (cfg.filters === false) return null;
-    var fc         = cfg.filters || {};
+    var fc          = cfg.filters || {};
     var globalLayout = fc.layout || 'pills';
     var datePrefix   = fc.datePrefix || null;
     var i18n         = Object.assign({ all: 'Tout', searchPlaceholder: 'Rechercher\u2026' }, cfg.i18n || {});
-    var tagPrefixDefs = normalizeTagPrefixes(fc.tagPrefixes, globalLayout);
+    var prefixDefs   = normalizePrefixes(fc.tagPrefixes, globalLayout);
 
     var wrapper = el('div', { class: 'sqb-filters-wrapper' });
     var bar     = el('div', { class: 'sqb-filters' });
@@ -616,47 +515,51 @@
     function tabPool() { return state.tab ? applyTabFilter(baseItems, state.tab) : baseItems; }
     function resetSec() { state.category = null; state.tags = {}; state.search = ''; }
 
-    // ── Constructeur générique de groupe pills ──
-    function buildPillGroup(vals, getCurrent, onSelect, allLabel) {
-      var group = el('div', { class: 'sqb-filter-group' });
-      var allBtn = el('button', { class: 'sqb-filter-btn' + (getCurrent() == null ? ' sqb-filter-btn--active' : ''), type: 'button' });
-      setText(allBtn, allLabel || i18n.all);
-      allBtn.addEventListener('click', function() {
-        onSelect(null);
-        group.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
-        allBtn.classList.add('sqb-filter-btn--active'); emit();
-      });
-      group.appendChild(allBtn);
+    // ── Groupe pills (toggle pour désélectionner, pas de bouton "Tout") ──
+    function buildPillGroup(vals, label, showLabel, getCurrent, onSelect) {
+      var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--pills' });
+
+      if (showLabel && label) {
+        var lbl = el('span', { class: 'sqb-filter-label' });
+        lbl.textContent = label;
+        wrap.appendChild(lbl);
+      }
+
+      var btns = el('div', { class: 'sqb-filter-pills' });
       vals.forEach(function(v) {
         var active = getCurrent() !== null && norm(String(v)) === norm(String(getCurrent()));
         var btn = el('button', { class: 'sqb-filter-btn' + (active ? ' sqb-filter-btn--active' : ''), type: 'button' });
         setText(btn, v);
         btn.addEventListener('click', function() {
-          onSelect(v);
-          group.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
-          btn.classList.add('sqb-filter-btn--active'); emit();
+          // Toggle : re-cliquer désélectionne
+          var isCurrent = norm(String(v)) === norm(String(getCurrent() || ''));
+          onSelect(isCurrent ? null : v);
+          btns.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
+          if (!isCurrent) btn.classList.add('sqb-filter-btn--active');
+          emit();
         });
-        group.appendChild(btn);
+        btns.appendChild(btn);
       });
-      return group;
+      wrap.appendChild(btns);
+      return wrap;
     }
 
-    // ── Constructeur dropdown ──
-    function buildDropdown(vals, labelText, getCurrent, onSelect) {
-      var group = el('div', { class: 'sqb-filter-group' });
-      var sel   = el('select', { class: 'sqb-filter-select', 'aria-label': labelText });
-      var o0    = el('option', { value: '' }); o0.textContent = labelText + '\u00a0: ' + i18n.all; sel.appendChild(o0);
+    // ── Dropdown ──
+    function buildDropdown(vals, label, getCurrent, onSelect) {
+      var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--dropdown' });
+      var sel  = el('select', { class: 'sqb-filter-select', 'aria-label': label });
+      var o0   = el('option', { value: '' }); o0.textContent = label + '\u00a0: ' + i18n.all; sel.appendChild(o0);
       vals.forEach(function(v) {
         var o = el('option', { value: v }); o.textContent = v;
         if (getCurrent() && norm(v) === norm(getCurrent())) o.selected = true;
         sel.appendChild(o);
       });
       sel.addEventListener('change', function() { onSelect(sel.value || null); emit(); });
-      group.appendChild(sel); return group;
+      wrap.appendChild(sel); return wrap;
     }
 
     function appendSecondary(pool, container) {
-      // Catégories
+      // Catégories (toujours en pills si activé)
       if (fc.categories !== false) {
         var cats = uniqBy(
           pool.reduce(function(a, i) { return a.concat(i.categories); }, []).filter(Boolean), norm
@@ -664,19 +567,16 @@
 
         if (cats.length > 1) {
           if (fc.defaultCategory && state.category == null) state.category = fc.defaultCategory;
-          var catGrp;
-          if (globalLayout !== 'dropdown') {
-            catGrp = buildPillGroup(cats, function() { return state.category; }, function(v) { state.category = v; });
-          } else {
-            catGrp = buildDropdown(cats, 'Catégorie', function() { return state.category; }, function(v) { state.category = v; });
-          }
-          catGrp.classList.add('sqb-filter-group--cats');
-          container.appendChild(catGrp);
+          var grp = buildPillGroup(cats, 'Catégorie', true,
+            function() { return state.category; }, function(v) { state.category = v; }
+          );
+          grp.classList.add('sqb-filter-group--cats');
+          container.appendChild(grp);
         }
       }
 
-      // Tag-prefixes (layout individuel par préfixe)
-      tagPrefixDefs.forEach(function(pd) {
+      // Tag-prefixes
+      prefixDefs.forEach(function(pd) {
         var raw  = uniqBy(pool.reduce(function(a, i) { return a.concat(getTagValuesByPrefix(i, pd.prefix)); }, []).filter(Boolean), norm);
         var vals = sortTagValues(raw, pd.prefix, datePrefix);
         if (!vals.length) return;
@@ -691,10 +591,9 @@
             function(v) { state.tags[pd.prefix] = v; }
           );
         } else {
-          grp = buildPillGroup(vals,
+          grp = buildPillGroup(vals, pd.prefix, pd.showLabel,
             function() { return state.tags[pd.prefix] || null; },
-            function(v) { state.tags[pd.prefix] = v; },
-            pd.prefix + '\u00a0: ' + i18n.all
+            function(v) { state.tags[pd.prefix] = v; }
           );
         }
         grp.classList.add('sqb-filter-group--tag');
@@ -750,9 +649,9 @@
     return wrapper;
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 12. RUNNER
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   async function runConfig(cfg) {
     if (!cfg || cfg.enabled === false) return;
@@ -767,27 +666,23 @@
     if (pag.loadMoreLabel)          i18n.loadMoreLabel = pag.loadMoreLabel;
     if (pag.endLabel !== undefined) i18n.endLabel      = pag.endLabel;
 
-    var perPage       = Number(pag.perPage || 12);
-    var mode          = pag.mode || 'load-more';
-    var displayLayout = disp.layout   || 'grid';
-    var filterPos     = fc.position   || 'top';
+    var perPage    = Number(pag.perPage || 12);
+    var mode       = pag.mode || 'load-more';
+    var dispLayout = disp.layout  || 'grid';
+    var filterPos  = fc.position  || 'top';
 
-    // Classes conteneur
     target.classList.add('sqb-block');
     target.setAttribute('data-sqb-key', cfg.key || 'sqb');
     if (cfg.key)     target.classList.add('sqb--' + cfg.key);
     if (cfg.classes) cfg.classes.trim().split(/\s+/).forEach(function(c) { if (c) target.classList.add(c); });
-    if (displayLayout === 'list')    target.classList.add('sqb-block--list');
-    if (filterPos === 'sidebar')     target.classList.add('sqb-block--sidebar');
-
-    // Badge édition : visible tant que le contenu n'est pas rendu
+    if (dispLayout === 'list')   target.classList.add('sqb-block--list');
+    if (filterPos === 'sidebar') target.classList.add('sqb-block--sidebar');
     target.classList.add('sqb-block--loading');
 
     injectLoaderStyles();
     var loader = buildLoader(i18n.loading);
     target.appendChild(loader);
 
-    // Fetch
     var rawItems = [];
     try {
       var results = await Promise.all((Array.isArray(cfg.sources) ? cfg.sources : []).map(function(src) {
@@ -809,10 +704,8 @@
     loader.remove();
     target.classList.remove('sqb-block--loading');
 
-    // Init état
     var activeFilters = { tab: null, category: null, tags: {}, search: '' };
-    var currentPage   = 1;
-    var ioInfinite    = null;
+    var currentPage   = 1, ioInfinite = null;
 
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
       var di = Number(fc.defaultTab != null ? fc.defaultTab : 0);
@@ -822,27 +715,24 @@
     if (fc.defaultTags)     Object.assign(activeFilters.tags, fc.defaultTags);
 
     var root = el('div', { class: 'sqb-root' });
-
-    // Filtres
     var filterWrapper = buildFilterBar(rawItems, cfg, function(f) {
       activeFilters = f; currentPage = 1; render();
     });
 
-    var grid     = el('div', { class: displayLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid' });
-    var counter  = el('p',   { class: 'sqb-counter', 'aria-live': 'polite' });
-    var footerEl = el('div', { class: 'sqb-footer' });
+    var gridClass = dispLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid';
+    var grid      = el('div', { class: gridClass });
+    var counter   = el('p',   { class: 'sqb-counter', 'aria-live': 'polite' });
+    var footerEl  = el('div', { class: 'sqb-footer' });
 
     if (filterPos === 'sidebar' && filterWrapper) {
-      var sideLayout = el('div', { class: 'sqb-sidebar-layout' });
-      var sidePanel  = el('div', { class: 'sqb-sidebar-panel' });
-      var mainPanel  = el('div', { class: 'sqb-main-panel' });
-      sidePanel.appendChild(filterWrapper);
-      mainPanel.appendChild(grid);
-      if (disp.counter !== false) mainPanel.appendChild(counter);
-      mainPanel.appendChild(footerEl);
-      sideLayout.appendChild(sidePanel);
-      sideLayout.appendChild(mainPanel);
-      root.appendChild(sideLayout);
+      var sl = el('div', { class: 'sqb-sidebar-layout' });
+      var sp = el('div', { class: 'sqb-sidebar-panel' });
+      var mp = el('div', { class: 'sqb-main-panel' });
+      sp.appendChild(filterWrapper);
+      mp.appendChild(grid);
+      if (disp.counter !== false) mp.appendChild(counter);
+      mp.appendChild(footerEl);
+      sl.appendChild(sp); sl.appendChild(mp); root.appendChild(sl);
     } else {
       if (filterWrapper) root.appendChild(filterWrapper);
       root.appendChild(grid);
@@ -852,19 +742,17 @@
 
     target.appendChild(root);
 
-    // Sticky — sur le wrapper, après insertion DOM
+    // Sticky sur le wrapper, après insertion DOM
     if (filterWrapper && fc.sticky) {
-      var sentinel = el('div', { class: 'sqb-sticky-sentinel', style: 'height:1px;pointer-events:none;visibility:hidden' });
-      filterWrapper.parentNode.insertBefore(sentinel, filterWrapper);
-      setupSticky(sentinel, filterWrapper, fc.stickyTop || '0px');
+      var stickySentinel = el('div', { style: 'height:1px;pointer-events:none;visibility:hidden' });
+      filterWrapper.parentNode.insertBefore(stickySentinel, filterWrapper);
+      setupSticky(stickySentinel, filterWrapper, fc.stickyTop || '0px');
     }
 
-    // Hook post-render
     var hook = window.SQB_HOOKS && window.SQB_HOOKS[cfg.key];
 
     function render() {
       if (ioInfinite) { ioInfinite.disconnect(); ioInfinite = null; }
-
       var pool     = activeFilters.tab ? applyTabFilter(rawItems, activeFilters.tab) : rawItems;
       var filtered = pool.filter(function(item) { return matchesUIFilters(item, activeFilters); });
       var total    = filtered.length;
@@ -881,8 +769,6 @@
 
       renderGrouped(shown, cfg, grid);
       if (disp.counter !== false) counter.textContent = shown.length + '\u00a0/\u00a0' + total;
-
-      // Hook
       if (hook) hook(grid, shown, cfg);
 
       var hasMore = shown.length < total;
@@ -895,22 +781,22 @@
         btn.addEventListener('click', function() { currentPage++; render(); });
         footerEl.appendChild(btn);
       } else if (mode === 'infinite' && 'IntersectionObserver' in window) {
-        var infSentinel = el('div', { class: 'sqb-sentinel', 'aria-hidden': 'true' });
-        footerEl.appendChild(infSentinel);
+        var infS = el('div', { class: 'sqb-sentinel', 'aria-hidden': 'true' });
+        footerEl.appendChild(infS);
         ioInfinite = new IntersectionObserver(function(entries) {
           if (!entries[0].isIntersecting) return;
           ioInfinite.disconnect(); ioInfinite = null; currentPage++; render();
         }, { rootMargin: '400px' });
-        ioInfinite.observe(infSentinel);
+        ioInfinite.observe(infS);
       }
     }
 
     render();
   }
 
-  /* ═══════════════════════════════════════
+  /* ════════════════════════════════════════
    * 13. POINT D'ENTRÉE
-   * ═══════════════════════════════════════ */
+   * ════════════════════════════════════════ */
 
   function init() {
     var configs = Array.isArray(window.SQB_CONFIGS) ? window.SQB_CONFIGS : [];
