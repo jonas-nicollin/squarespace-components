@@ -1,6 +1,6 @@
 /*!
- * Squarespace Query Block (SQB) v1.4.0
- * Fetch JSON paginé · tabs · groupBy · sticky filters · lazy-load · cache
+ * Squarespace Query Block (SQB) v1.8.0
+ * Fetch JSON paginé · tabs · groupBy · sticky · hooks · lazy-load · cache
  * Compatible Weglot · zéro dépendance
  *
  * ─── RÉFÉRENCE CONFIGURATION ─────────────────────────────────────────────────
@@ -15,104 +15,103 @@
  *
  *   sources: [{ path: '/programme-2026' }],
  *
- *   // Pré-filtre fixe (invisible dans l'UI)
  *   preFilter: {
  *     categories:        ['Exposition'],
  *     excludeCategories: ['Brouillon'],
  *     tagValues:         [{ prefix: 'Sélection', value: 'Homepage' }],
  *   },
  *
- *   filters: false,  // ou objet ci-dessous
+ *   filters: false,  // ou :
  *   filters: {
- *     // Nature des contrôles
- *     layout: 'pills',        // 'pills' | 'dropdowns'
- *
- *     // Position des filtres
- *     position: 'top',        // 'top' | 'sidebar'
- *
- *     // Sticky
- *     sticky: false,          // true = barre sticky + classe sqb-filters--is-sticky
- *     stickyTop: '0px',       // compense un header fixe (ex: '80px')
+ *     layout:   'pills',     // layout par défaut pour les contrôles
+ *     position: 'top',       // 'top' | 'sidebar'
+ *     sticky:   true,
+ *     stickyTop: '0px',
  *
  *     tabs: [
  *       { label: 'Expositions', filter: { categories: ['Exposition'] } },
- *       { label: 'Événements',  filter: { categories: ['Talk', 'Visite guidée'] } },
  *     ],
  *     defaultTab: 0,
  *
- *     categories:      true,
+ *     categories: true,
  *     defaultCategory: null,
  *
- *     // Préfixes exposés comme filtres
- *     // datePrefix : ce préfixe est trié chronologiquement (parse "DD mois YYYY")
- *     tagPrefixes: ['Zone', 'Lieu', 'Date'],
- *     datePrefix:  'Date',
+ *     // tagPrefixes : tableau de strings (layout global) ou d'objets (layout par préfixe)
+ *     tagPrefixes: ['Zone', 'Date', 'Lieu'],
+ *     tagPrefixes: [
+ *       { prefix: 'Zone', layout: 'pills' },
+ *       { prefix: 'Date', layout: 'pills' },
+ *       { prefix: 'Lieu', layout: 'dropdown' },
+ *     ],
+ *     datePrefix: 'Date',   // tri chronologique
  *     defaultTags: {},
- *
  *     search: true,
  *   },
  *
  *   display: {
- *     layout:  'grid',        // 'grid' | 'list'
- *     counter: true,
+ *     layout:   'grid',      // 'grid' | 'list'
+ *     counter:  true,
  *     cardLink: true,
  *
- *     groupBy:    null,       // null | 'category' | { tagPrefix: 'Date' }
- *     groupOrder: 'collection', // 'collection' | 'alpha' | ['Val1', 'Val2', …]
+ *     groupBy:    null,      // null | 'category' | { tagPrefix: 'Date' }
+ *     groupOrder: 'collection',
  *
  *     // Rendu par groupes sémantiques
  *     // Rôles  : 'media' | 'header' | 'body' | 'meta' | 'footer'
  *     // Enfants: 'image' | 'title' | 'categories' | 'excerpt' | 'location'
- *     //          { type: 'tagPrefix', prefix: 'Artiste', label: 'Artiste·s', joinWith: '\n' }
+ *     //          { type: 'tagPrefix', prefix: 'Date', label: '', joinWith: '\n' }
  *     groups: [
- *       { role: 'media', children: ['image', 'title'] },
+ *       { role: 'media', children: ['image'] },
  *       { role: 'body',  children: [
  *           'categories',
- *           { type: 'tagPrefix', prefix: 'Numéro',  label: 'Étape' },
- *           { type: 'tagPrefix', prefix: 'Période',  label: 'Dates' },
- *           { type: 'tagPrefix', prefix: 'Date',     label: 'Séances', joinWith: '\n' },
- *           { type: 'tagPrefix', prefix: 'Artiste',  label: 'Artiste·s' },
- *           { type: 'tagPrefix', prefix: 'Lieu',     label: 'Lieu' },
- *           'excerpt',
+ *           'title',
+ *           { type: 'tagPrefix', prefix: 'Numéro', label: 'Étape' },
+ *           { type: 'tagPrefix', prefix: 'Date',   label: '', joinWith: '\n' },
+ *           { type: 'tagPrefix', prefix: 'Lieu',   label: '' },
  *       ]},
  *     ],
  *
  *     // Rendu plat (si groups absent) :
  *     image: true, title: true, categories: true, excerpt: true, location: false,
  *     tagPrefixFields: [
- *       { prefix: 'Numéro',  label: 'Étape' },
- *       { prefix: 'Période', label: 'Dates' },
- *       { prefix: 'Date',    label: 'Séances', joinWith: '\n' },
- *       { prefix: 'Artiste', label: 'Artiste·s' },
+ *       { prefix: 'Numéro', label: 'Étape' },
+ *       { prefix: 'Date',   label: '',     joinWith: '\n' },
  *     ],
- *
- *     imageRatio: '4/3',
  *   },
  *
- *   // type: 'collection' | 'date' | 'title' | 'category' | { tagPrefix: 'Numéro' }
  *   sort: { type: 'collection', direction: 'asc' },
  *
  *   pagination: {
  *     mode:          'load-more',  // 'load-more' | 'infinite' | 'none'
  *     perPage:       12,
  *     loadMoreLabel: 'Voir plus',
- *     endLabel:      false,        // false | string
+ *     endLabel:      false,
  *   },
  *
  *   performance: { maxPages: 10, sessionCache: true, sessionCacheTTL: 300 },
  *
- *   // loading: false = animation points (défaut) | string = texte
+ *   // loading: false = animation points | string = texte
  *   i18n: { loading: false, all: 'Tout', noResults: 'Aucun résultat', searchPlaceholder: 'Rechercher…' },
  * }
  * ];
+ *
+ * ─── HOOKS ────────────────────────────────────────────────────────────────────
+ *
+ * // Appelé après chaque render() d'un bloc.
+ * // Paramètres : grid (élément DOM), items (items affichés), cfg (config du bloc)
+ * window.SQB_HOOKS = {
+ *   'homepage': function(grid, items, cfg) {
+ *     // manipulation post-rendu
+ *   },
+ * };
  */
 
 (function () {
   'use strict';
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 0. UTILITAIRES
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   function noop() {}
 
@@ -176,9 +175,18 @@
     }, []);
   }
 
-  /* ═══════════════════════════════════════════
-   * 1. LOADER (styles injectés une seule fois)
-   * ═══════════════════════════════════════════ */
+  // Normalise tagPrefixes : string[] | object[] → object[] uniforme
+  function normalizeTagPrefixes(tagPrefixes, globalLayout) {
+    if (!Array.isArray(tagPrefixes)) return [];
+    return tagPrefixes.map(function(p) {
+      if (typeof p === 'string') return { prefix: p, layout: globalLayout || 'pills' };
+      return { prefix: p.prefix, layout: p.layout || globalLayout || 'pills' };
+    });
+  }
+
+  /* ═══════════════════════════════════════
+   * 1. LOADER
+   * ═══════════════════════════════════════ */
 
   function injectLoaderStyles() {
     if (document.getElementById('sqb-loader-styles')) return;
@@ -203,9 +211,9 @@
     return wrap;
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 2. FETCH & CACHE
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   var MEM = new Map();
 
@@ -232,7 +240,7 @@
   }
 
   async function fetchAllItems(path, maxPages, useSession, ttl) {
-    var key = 'sqb::v4::' + path + '::' + (maxPages || 10);
+    var key = 'sqb::v8::' + path + '::' + (maxPages || 10);
     var cached = cacheGet(key);
     if (cached) return cached;
     var items = [], url = ensureJson(path);
@@ -253,9 +261,9 @@
     return items;
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 3. MAPPING
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   function mapItem(raw, sourcePath) {
     var assetUrl = raw.assetUrl || (raw.asset && raw.asset.url) || null;
@@ -279,9 +287,9 @@
     };
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 4. FILTRAGE
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   function matchesCats(item, cats) {
     return !cats || !cats.length || item.categories.some(function(c) {
@@ -328,9 +336,9 @@
     return true;
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 5. TRI
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   function tryNum(s) { var n = parseFloat(String(s || '').replace(',', '.')); return isFinite(n) ? n : null; }
 
@@ -351,9 +359,9 @@
     });
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 6. LAZY-LOAD
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   var IO_LAZY = ('IntersectionObserver' in window)
     ? new IntersectionObserver(function(entries, obs) {
@@ -370,10 +378,15 @@
 
   var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500, 2500];
 
-  function buildImg(assetUrl, focalPoint, alt, ratio) {
+  function buildImg(assetUrl, focalPoint, alt) {
     var srcset = SRCSET_WIDTHS.map(function(w) { return assetUrl + '?format=' + w + 'w ' + w + 'w'; }).join(', ');
-    var wrap = el('div', { class: 'sqb-card__img-wrap', style: 'aspect-ratio:' + (ratio || '4/3') });
-    var img  = el('img', { class: 'sqb-card__img', alt: alt || '', sizes: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw', decoding: 'async' });
+    var wrap = el('div', { class: 'sqb-card__img-wrap' });
+    var img  = el('img', {
+      class:    'sqb-card__img',
+      alt:      alt || '',
+      sizes:    '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+      decoding: 'async',
+    });
     img.style.objectPosition = focalPoint;
     if (IO_LAZY) { img.dataset.src = assetUrl; img.dataset.srcset = srcset; IO_LAZY.observe(img); }
     else         { img.srcset = srcset; img.src = assetUrl; }
@@ -382,54 +395,65 @@
     return wrap;
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 7. RENDU CARTE
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   var ROLE_CLASS = {
-    media: 'sqb-card__media', header: 'sqb-card__header',
-    body:  'sqb-card__body',  meta:   'sqb-card__meta', footer: 'sqb-card__footer',
+    media:  'sqb-card__media',
+    header: 'sqb-card__header',
+    body:   'sqb-card__body',
+    meta:   'sqb-card__meta',
+    footer: 'sqb-card__footer',
   };
 
   function buildChild(def, item, disp) {
     var type = typeof def === 'string' ? def : (def && def.type);
 
     if (type === 'image') {
-      return (disp.image !== false && item.assetUrl)
-        ? buildImg(item.assetUrl, item.focalPoint, item.title, disp.imageRatio || '4/3') : null;
+      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title) : null;
     }
     if (type === 'categories') {
-      if (disp.categories === false || !item.categories.length) return null;
+      if (!item.categories.length) return null;
       var w = el('div', { class: 'sqb-card__cats' });
-      item.categories.forEach(function(c) { var s = el('span', { class: 'sqb-card__cat' }); s.textContent = c; w.appendChild(s); });
+      item.categories.forEach(function(c) {
+        var s = el('span', { class: 'sqb-card__cat' }); s.textContent = c; w.appendChild(s);
+      });
       return w;
     }
-    if (type === 'title')    return (disp.title !== false && item.title)     ? setText(el('h3', { class: 'sqb-card__title' }), item.title)     : null;
-    if (type === 'excerpt')  return (disp.excerpt !== false && item.excerpt)  ? setText(el('p',  { class: 'sqb-card__excerpt' }), item.excerpt)  : null;
-    if (type === 'location') return item.location                             ? setText(el('p',  { class: 'sqb-card__location' }), item.location) : null;
-
+    if (type === 'title') {
+      if (!item.title) return null;
+      // div neutre + attributs accessibilité heading
+      var t = el('div', { class: 'sqb-card__title', role: 'heading', 'aria-level': '3' });
+      t.textContent = item.title;
+      return t;
+    }
+    if (type === 'excerpt') {
+      if (!item.excerpt) return null;
+      var p = el('p', { class: 'sqb-card__excerpt' }); p.textContent = item.excerpt; return p;
+    }
+    if (type === 'location') {
+      if (!item.location) return null;
+      var pl = el('p', { class: 'sqb-card__location' }); pl.textContent = item.location; return pl;
+    }
     if (type === 'tagPrefix') {
-      var prefix  = (def && def.prefix)  || '';
-      var label   = (def && def.label)   || '';
+      var prefix   = (def && def.prefix)   || '';
+      var label    = (def && def.label != null) ? def.label : '';
       var joinWith = (def && def.joinWith != null) ? def.joinWith : ', ';
       var vals = getTagValuesByPrefix(item, prefix);
       if (!vals.length) return null;
 
       var row = el('div', { class: 'sqb-card__tag-field', 'data-prefix': prefix });
-      if (label) { var lbl = el('span', { class: 'sqb-card__tag-label' }); lbl.textContent = label + '\u00A0'; row.appendChild(lbl); }
-
-      // joinWith '\n' → une ligne par valeur
+      if (label) {
+        var lbl = el('span', { class: 'sqb-card__tag-label' });
+        lbl.textContent = label + '\u00A0'; row.appendChild(lbl);
+      }
       if (joinWith === '\n') {
-        var vwrap = el('span', { class: 'sqb-card__tag-value sqb-card__tag-value--multiline' });
-        vals.forEach(function(v, i) {
-          if (i > 0) vwrap.appendChild(document.createElement('br'));
-          vwrap.appendChild(document.createTextNode(v));
-        });
-        row.appendChild(vwrap);
+        var vw = el('span', { class: 'sqb-card__tag-value sqb-card__tag-value--multiline' });
+        vals.forEach(function(v, i) { if (i > 0) vw.appendChild(document.createElement('br')); vw.appendChild(document.createTextNode(v)); });
+        row.appendChild(vw);
       } else {
-        var val = el('span', { class: 'sqb-card__tag-value' });
-        val.textContent = vals.join(joinWith);
-        row.appendChild(val);
+        var val = el('span', { class: 'sqb-card__tag-value' }); val.textContent = vals.join(joinWith); row.appendChild(val);
       }
       return row;
     }
@@ -439,8 +463,10 @@
   function buildCard(item, cfg, index) {
     var disp = cfg.display || {};
     var link = disp.cardLink !== false;
-    var cardClass = 'sqb-card' + (index === 0 ? ' sqb-card--featured' : '');
-    var card = el(link ? 'a' : 'div', { class: cardClass, 'data-sqb-index': String(index) });
+    var card = el(link ? 'a' : 'div', {
+      class: 'sqb-card',
+      'data-sqb-index': String(index),
+    });
     if (link) card.href = item.fullUrl;
 
     var groups = Array.isArray(disp.groups) && disp.groups.length ? disp.groups : null;
@@ -457,27 +483,30 @@
     }
 
     // Rendu plat
-    if (disp.image !== false && item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, disp.imageRatio || '4/3'));
+    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title));
     var body = el('div', { class: 'sqb-card__body' });
-    if (disp.categories !== false && item.categories.length) {
+    if (item.categories.length) {
       var meta = el('div', { class: 'sqb-card__cats' });
       item.categories.forEach(function(c) { var s = el('span', { class: 'sqb-card__cat' }); s.textContent = c; meta.appendChild(s); });
       body.appendChild(meta);
     }
-    if (disp.title !== false && item.title) body.appendChild(setText(el('h3', { class: 'sqb-card__title' }), item.title));
+    if (item.title) {
+      var tt = el('div', { class: 'sqb-card__title', role: 'heading', 'aria-level': '3' });
+      tt.textContent = item.title; body.appendChild(tt);
+    }
     (Array.isArray(disp.tagPrefixFields) ? disp.tagPrefixFields : []).forEach(function(f) {
       var node = buildChild({ type: 'tagPrefix', prefix: f.prefix, label: f.label, joinWith: f.joinWith }, item, disp);
       if (node) body.appendChild(node);
     });
-    if (disp.excerpt !== false && item.excerpt) body.appendChild(setText(el('p', { class: 'sqb-card__excerpt' }), item.excerpt));
-    if (disp.location && item.location)         body.appendChild(setText(el('p', { class: 'sqb-card__location' }), item.location));
+    if (disp.excerpt !== false && item.excerpt) { var ep = el('p', { class: 'sqb-card__excerpt' }); ep.textContent = item.excerpt; body.appendChild(ep); }
+    if (disp.location && item.location)         { var lp = el('p', { class: 'sqb-card__location' }); lp.textContent = item.location; body.appendChild(lp); }
     card.appendChild(body);
     return card;
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 8. GROUPBY VISUEL
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   function getGroupKey(item, groupBy) {
     if (!groupBy) return null;
@@ -499,14 +528,10 @@
   }
 
   function renderGrouped(items, cfg, grid) {
-    var groupBy = (cfg.display && cfg.display.groupBy) || null;
+    var groupBy    = (cfg.display && cfg.display.groupBy)    || null;
     var groupOrder = (cfg.display && cfg.display.groupOrder) || 'collection';
-    var globalIndex = 0;
-
-    if (!groupBy) {
-      items.forEach(function(item) { grid.appendChild(buildCard(item, cfg, globalIndex++)); });
-      return;
-    }
+    var idx = 0;
+    if (!groupBy) { items.forEach(function(item) { grid.appendChild(buildCard(item, cfg, idx++)); }); return; }
     var orderedKeys = [], groups = new Map();
     items.forEach(function(item) {
       var key = getGroupKey(item, groupBy);
@@ -518,13 +543,13 @@
       if (!gi.length) return;
       var h = el('div', { class: 'sqb-group-heading', 'data-group': key, style: 'grid-column:1 / -1' });
       setText(h, key); grid.appendChild(h);
-      gi.forEach(function(item) { grid.appendChild(buildCard(item, cfg, globalIndex++)); });
+      gi.forEach(function(item) { grid.appendChild(buildCard(item, cfg, idx++)); });
     });
   }
 
-  /* ═══════════════════════════════════════════
-   * 9. TRI CHRONOLOGIQUE DES TAGS DATE
-   * ═══════════════════════════════════════════ */
+  /* ═══════════════════════════════════════
+   * 9. TRI CHRONOLOGIQUE DATES
+   * ═══════════════════════════════════════ */
 
   var MONTH_MAP = {
     january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12,
@@ -548,43 +573,40 @@
     });
   }
 
-  /* ═══════════════════════════════════════════
-   * 10. STICKY FILTERS (IntersectionObserver)
-   * ═══════════════════════════════════════════ */
+  /* ═══════════════════════════════════════
+   * 10. STICKY (IntersectionObserver)
+   * ═══════════════════════════════════════ */
 
-  function setupSticky(sentinel, filtersEl, stickyTop) {
+  function setupSticky(sentinel, filtersWrapper, stickyTop) {
     if (!('IntersectionObserver' in window)) return;
     var io = new IntersectionObserver(function(entries) {
-      var isStuck = !entries[0].isIntersecting;
-      filtersEl.classList.toggle('sqb-filters--is-sticky', isStuck);
-      if (isStuck) {
-        filtersEl.style.top = stickyTop || '0px';
-      } else {
-        filtersEl.style.top = '';
-      }
-    }, { threshold: 0, rootMargin: '0px 0px 0px 0px' });
+      var stuck = !entries[0].isIntersecting;
+      filtersWrapper.classList.toggle('sqb-filters-wrapper--is-sticky', stuck);
+    }, { threshold: 0 });
     io.observe(sentinel);
+    // Position sticky sur le wrapper
+    filtersWrapper.style.position = 'sticky';
+    filtersWrapper.style.top      = stickyTop || '0px';
+    filtersWrapper.style.zIndex   = '10';
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 11. FILTRES UI
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   function buildFilterBar(baseItems, cfg, onFilter) {
     if (cfg.filters === false) return null;
-    var fc      = cfg.filters || {};
-    var layout  = fc.layout   || 'pills';
-    var usePills = layout !== 'dropdowns';
-    var i18n    = Object.assign({ all: 'Tout', searchPlaceholder: 'Rechercher\u2026' }, cfg.i18n || {});
-    var datePrefix = fc.datePrefix || null;
+    var fc         = cfg.filters || {};
+    var globalLayout = fc.layout || 'pills';
+    var datePrefix   = fc.datePrefix || null;
+    var i18n         = Object.assign({ all: 'Tout', searchPlaceholder: 'Rechercher\u2026' }, cfg.i18n || {});
+    var tagPrefixDefs = normalizeTagPrefixes(fc.tagPrefixes, globalLayout);
 
-    // Wrapper externe (peut être sticky)
     var wrapper = el('div', { class: 'sqb-filters-wrapper' });
-    var bar     = el('div', { class: 'sqb-filters sqb-filters--' + layout + (fc.sticky ? ' sqb-filters--sticky-enabled' : '') });
-    if (fc.sticky) bar.style.cssText = 'position:sticky;top:' + (fc.stickyTop || '0px') + ';z-index:10';
+    var bar     = el('div', { class: 'sqb-filters' });
     wrapper.appendChild(bar);
 
-    var state = { tab: null, category: null, tags: {}, search: '' };
+    var state       = { tab: null, category: null, tags: {}, search: '' };
     var secondaryEl = null;
 
     function emit() {
@@ -594,6 +616,7 @@
     function tabPool() { return state.tab ? applyTabFilter(baseItems, state.tab) : baseItems; }
     function resetSec() { state.category = null; state.tags = {}; state.search = ''; }
 
+    // ── Constructeur générique de groupe pills ──
     function buildPillGroup(vals, getCurrent, onSelect, allLabel) {
       var group = el('div', { class: 'sqb-filter-group' });
       var allBtn = el('button', { class: 'sqb-filter-btn' + (getCurrent() == null ? ' sqb-filter-btn--active' : ''), type: 'button' });
@@ -605,7 +628,7 @@
       });
       group.appendChild(allBtn);
       vals.forEach(function(v) {
-        var active = getCurrent() !== null && norm(v) === norm(getCurrent());
+        var active = getCurrent() !== null && norm(String(v)) === norm(String(getCurrent()));
         var btn = el('button', { class: 'sqb-filter-btn' + (active ? ' sqb-filter-btn--active' : ''), type: 'button' });
         setText(btn, v);
         btn.addEventListener('click', function() {
@@ -618,10 +641,11 @@
       return group;
     }
 
-    function buildDropdown(vals, label, getCurrent, onSelect) {
+    // ── Constructeur dropdown ──
+    function buildDropdown(vals, labelText, getCurrent, onSelect) {
       var group = el('div', { class: 'sqb-filter-group' });
-      var sel   = el('select', { class: 'sqb-filter-select', 'aria-label': label });
-      var o0    = el('option', { value: '' }); o0.textContent = label + '\u00a0: ' + i18n.all; sel.appendChild(o0);
+      var sel   = el('select', { class: 'sqb-filter-select', 'aria-label': labelText });
+      var o0    = el('option', { value: '' }); o0.textContent = labelText + '\u00a0: ' + i18n.all; sel.appendChild(o0);
       vals.forEach(function(v) {
         var o = el('option', { value: v }); o.textContent = v;
         if (getCurrent() && norm(v) === norm(getCurrent())) o.selected = true;
@@ -639,46 +663,48 @@
         ).sort(function(a, b) { return norm(a).localeCompare(norm(b)); });
 
         if (cats.length > 1) {
-          var defCat = fc.defaultCategory || null;
-          if (defCat && state.category == null) state.category = defCat;
-          var grp;
-          if (usePills) {
-            grp = buildPillGroup(cats, function() { return state.category; }, function(v) { state.category = v; });
+          if (fc.defaultCategory && state.category == null) state.category = fc.defaultCategory;
+          var catGrp;
+          if (globalLayout !== 'dropdown') {
+            catGrp = buildPillGroup(cats, function() { return state.category; }, function(v) { state.category = v; });
           } else {
-            grp = buildDropdown(cats, 'Catégorie', function() { return state.category; }, function(v) { state.category = v; });
+            catGrp = buildDropdown(cats, 'Catégorie', function() { return state.category; }, function(v) { state.category = v; });
           }
-          grp.classList.add('sqb-filter-group--cats');
-          container.appendChild(grp);
+          catGrp.classList.add('sqb-filter-group--cats');
+          container.appendChild(catGrp);
         }
       }
 
-      // Tag-prefix
-      (Array.isArray(fc.tagPrefixes) ? fc.tagPrefixes : []).forEach(function(prefix) {
-        var raw  = uniqBy(pool.reduce(function(a, i) { return a.concat(getTagValuesByPrefix(i, prefix)); }, []).filter(Boolean), norm);
-        var vals = sortTagValues(raw, prefix, datePrefix);
+      // Tag-prefixes (layout individuel par préfixe)
+      tagPrefixDefs.forEach(function(pd) {
+        var raw  = uniqBy(pool.reduce(function(a, i) { return a.concat(getTagValuesByPrefix(i, pd.prefix)); }, []).filter(Boolean), norm);
+        var vals = sortTagValues(raw, pd.prefix, datePrefix);
         if (!vals.length) return;
 
-        var defVal = fc.defaultTags && fc.defaultTags[prefix];
-        if (defVal && !state.tags[prefix]) state.tags[prefix] = defVal;
+        var defVal = fc.defaultTags && fc.defaultTags[pd.prefix];
+        if (defVal && !state.tags[pd.prefix]) state.tags[pd.prefix] = defVal;
 
         var grp;
-        if (usePills) {
-          grp = buildPillGroup(vals,
-            function() { return state.tags[prefix] || null; },
-            function(v) { state.tags[prefix] = v; },
-            prefix + '\u00a0: ' + i18n.all
+        if (pd.layout === 'dropdown') {
+          grp = buildDropdown(vals, pd.prefix,
+            function() { return state.tags[pd.prefix] || null; },
+            function(v) { state.tags[pd.prefix] = v; }
           );
         } else {
-          grp = buildDropdown(vals, prefix, function() { return state.tags[prefix] || null; }, function(v) { state.tags[prefix] = v; });
+          grp = buildPillGroup(vals,
+            function() { return state.tags[pd.prefix] || null; },
+            function(v) { state.tags[pd.prefix] = v; },
+            pd.prefix + '\u00a0: ' + i18n.all
+          );
         }
         grp.classList.add('sqb-filter-group--tag');
-        grp.setAttribute('data-prefix', prefix);
+        grp.setAttribute('data-prefix', pd.prefix);
         container.appendChild(grp);
       });
 
       // Recherche
       if (fc.search !== false) {
-        var sg = el('div', { class: 'sqb-filter-group sqb-filter-group--search' });
+        var sg  = el('div', { class: 'sqb-filter-group sqb-filter-group--search' });
         var inp = el('input', { class: 'sqb-filter-search', type: 'search', placeholder: i18n.searchPlaceholder, 'aria-label': i18n.searchPlaceholder });
         var timer;
         inp.addEventListener('input', function() {
@@ -699,7 +725,7 @@
     var tabs = Array.isArray(fc.tabs) ? fc.tabs : [];
     if (tabs.length) {
       var tabGroup = el('div', { class: 'sqb-filter-group sqb-filter-group--tabs' });
-      var defIdx = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      var defIdx   = Number(fc.defaultTab != null ? fc.defaultTab : 0);
       tabs.forEach(function(tab, idx) {
         var active = idx === defIdx;
         var btn = el('button', { class: 'sqb-tab-btn' + (active ? ' sqb-tab-btn--active' : ''), type: 'button' });
@@ -721,22 +747,12 @@
     appendSecondary(tabPool(), secondaryEl);
     bar.appendChild(secondaryEl);
 
-    // Sticky via IntersectionObserver
-    if (fc.sticky) {
-      var sentinel = el('div', { class: 'sqb-sticky-sentinel', style: 'height:1px;pointer-events:none;visibility:hidden' });
-      wrapper.insertBefore(sentinel, bar);
-      // Observer après insertion dans le DOM (doit être appelé après append)
-      wrapper._sqbSentinel = sentinel;
-      wrapper._sqbBar      = bar;
-      wrapper._sqbStickyTop = fc.stickyTop || '0px';
-    }
-
     return wrapper;
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 12. RUNNER
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   async function runConfig(cfg) {
     if (!cfg || cfg.enabled === false) return;
@@ -745,22 +761,27 @@
 
     var perf = cfg.performance || {}, pag = cfg.pagination || {}, disp = cfg.display || {};
     var fc   = (cfg.filters && cfg.filters !== false) ? cfg.filters : {};
-    var i18n = Object.assign({ loading: false, all: 'Tout', noResults: 'Aucun r\u00e9sultat', loadMoreLabel: 'Voir plus', endLabel: '' }, cfg.i18n || {});
+    var i18n = Object.assign({
+      loading: false, all: 'Tout', noResults: 'Aucun r\u00e9sultat', loadMoreLabel: 'Voir plus', endLabel: '',
+    }, cfg.i18n || {});
     if (pag.loadMoreLabel)          i18n.loadMoreLabel = pag.loadMoreLabel;
     if (pag.endLabel !== undefined) i18n.endLabel      = pag.endLabel;
 
-    var perPage = Number(pag.perPage || 12);
-    var mode    = pag.mode || 'load-more';
+    var perPage       = Number(pag.perPage || 12);
+    var mode          = pag.mode || 'load-more';
     var displayLayout = disp.layout   || 'grid';
-    var filterPosition = fc.position  || 'top';   // 'top' | 'sidebar'
+    var filterPos     = fc.position   || 'top';
 
     // Classes conteneur
     target.classList.add('sqb-block');
     target.setAttribute('data-sqb-key', cfg.key || 'sqb');
     if (cfg.key)     target.classList.add('sqb--' + cfg.key);
     if (cfg.classes) cfg.classes.trim().split(/\s+/).forEach(function(c) { if (c) target.classList.add(c); });
-    if (displayLayout === 'list')           target.classList.add('sqb-block--list');
-    if (filterPosition === 'sidebar')       target.classList.add('sqb-block--sidebar');
+    if (displayLayout === 'list')    target.classList.add('sqb-block--list');
+    if (filterPos === 'sidebar')     target.classList.add('sqb-block--sidebar');
+
+    // Badge édition : visible tant que le contenu n'est pas rendu
+    target.classList.add('sqb-block--loading');
 
     injectLoaderStyles();
     var loader = buildLoader(i18n.loading);
@@ -786,43 +807,43 @@
     rawItems = sortItems(rawItems, cfg.sort);
     if (cfg.debug) console.log('[SQB]', cfg.key, rawItems.length, 'items');
     loader.remove();
+    target.classList.remove('sqb-block--loading');
 
     // Init état
     var activeFilters = { tab: null, category: null, tags: {}, search: '' };
-    var currentPage = 1, ioInfinite = null;
+    var currentPage   = 1;
+    var ioInfinite    = null;
+
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
       var di = Number(fc.defaultTab != null ? fc.defaultTab : 0);
       if (fc.tabs[di]) activeFilters.tab = fc.tabs[di].filter || null;
     }
     if (fc.defaultCategory) activeFilters.category = fc.defaultCategory;
-    if (fc.defaultTags) Object.assign(activeFilters.tags, fc.defaultTags);
+    if (fc.defaultTags)     Object.assign(activeFilters.tags, fc.defaultTags);
 
     var root = el('div', { class: 'sqb-root' });
 
-    // Barre de filtres
+    // Filtres
     var filterWrapper = buildFilterBar(rawItems, cfg, function(f) {
       activeFilters = f; currentPage = 1; render();
     });
 
-    // Grille
     var grid     = el('div', { class: displayLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid' });
     var counter  = el('p',   { class: 'sqb-counter', 'aria-live': 'polite' });
     var footerEl = el('div', { class: 'sqb-footer' });
 
-    if (filterPosition === 'sidebar' && filterWrapper) {
-      // Sidebar : filtres à gauche, contenu à droite
-      var sidebarLayout = el('div', { class: 'sqb-sidebar-layout' });
-      var sidePanel = el('div', { class: 'sqb-sidebar-panel' });
-      var mainPanel = el('div', { class: 'sqb-main-panel' });
+    if (filterPos === 'sidebar' && filterWrapper) {
+      var sideLayout = el('div', { class: 'sqb-sidebar-layout' });
+      var sidePanel  = el('div', { class: 'sqb-sidebar-panel' });
+      var mainPanel  = el('div', { class: 'sqb-main-panel' });
       sidePanel.appendChild(filterWrapper);
       mainPanel.appendChild(grid);
       if (disp.counter !== false) mainPanel.appendChild(counter);
       mainPanel.appendChild(footerEl);
-      sidebarLayout.appendChild(sidePanel);
-      sidebarLayout.appendChild(mainPanel);
-      root.appendChild(sidebarLayout);
+      sideLayout.appendChild(sidePanel);
+      sideLayout.appendChild(mainPanel);
+      root.appendChild(sideLayout);
     } else {
-      // Top (défaut)
       if (filterWrapper) root.appendChild(filterWrapper);
       root.appendChild(grid);
       if (disp.counter !== false) root.appendChild(counter);
@@ -831,27 +852,38 @@
 
     target.appendChild(root);
 
-    // Activer sticky après insertion DOM
-    if (filterWrapper && filterWrapper._sqbSentinel) {
-      setupSticky(filterWrapper._sqbSentinel, filterWrapper._sqbBar, filterWrapper._sqbStickyTop);
+    // Sticky — sur le wrapper, après insertion DOM
+    if (filterWrapper && fc.sticky) {
+      var sentinel = el('div', { class: 'sqb-sticky-sentinel', style: 'height:1px;pointer-events:none;visibility:hidden' });
+      filterWrapper.parentNode.insertBefore(sentinel, filterWrapper);
+      setupSticky(sentinel, filterWrapper, fc.stickyTop || '0px');
     }
+
+    // Hook post-render
+    var hook = window.SQB_HOOKS && window.SQB_HOOKS[cfg.key];
 
     function render() {
       if (ioInfinite) { ioInfinite.disconnect(); ioInfinite = null; }
+
       var pool     = activeFilters.tab ? applyTabFilter(rawItems, activeFilters.tab) : rawItems;
       var filtered = pool.filter(function(item) { return matchesUIFilters(item, activeFilters); });
       var total    = filtered.length;
       var shown    = filtered.slice(0, currentPage * perPage);
+
       grid.innerHTML = ''; footerEl.innerHTML = '';
 
       if (!shown.length) {
         setText(grid.appendChild(el('p', { class: 'sqb-empty' })), i18n.noResults);
         if (disp.counter !== false) counter.textContent = '';
+        if (hook) hook(grid, [], cfg);
         return;
       }
 
       renderGrouped(shown, cfg, grid);
       if (disp.counter !== false) counter.textContent = shown.length + '\u00a0/\u00a0' + total;
+
+      // Hook
+      if (hook) hook(grid, shown, cfg);
 
       var hasMore = shown.length < total;
       if (!hasMore) {
@@ -863,22 +895,22 @@
         btn.addEventListener('click', function() { currentPage++; render(); });
         footerEl.appendChild(btn);
       } else if (mode === 'infinite' && 'IntersectionObserver' in window) {
-        var sentinel = el('div', { class: 'sqb-sentinel', 'aria-hidden': 'true' });
-        footerEl.appendChild(sentinel);
+        var infSentinel = el('div', { class: 'sqb-sentinel', 'aria-hidden': 'true' });
+        footerEl.appendChild(infSentinel);
         ioInfinite = new IntersectionObserver(function(entries) {
           if (!entries[0].isIntersecting) return;
           ioInfinite.disconnect(); ioInfinite = null; currentPage++; render();
         }, { rootMargin: '400px' });
-        ioInfinite.observe(sentinel);
+        ioInfinite.observe(infSentinel);
       }
     }
 
     render();
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════════════════
    * 13. POINT D'ENTRÉE
-   * ═══════════════════════════════════════════ */
+   * ═══════════════════════════════════════ */
 
   function init() {
     var configs = Array.isArray(window.SQB_CONFIGS) ? window.SQB_CONFIGS : [];
