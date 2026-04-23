@@ -123,7 +123,7 @@
       '.sqb-loader-dot:nth-child(2){animation-delay:.4s}',
       '.sqb-loader-dot:nth-child(3){animation-delay:.8s}',
       '@keyframes sqb-pulse{0%,100%{opacity:.2}33%{opacity:.7}66%{opacity:.4}}',
-      '.sqb-loader--text{display:block;font-style:italic;opacity:.5;text-align:center;padding:3rem 1rem}',
+      '.sqb-loader--text{display:block;opacity:.5;text-align:center;padding:3rem 1rem}',
     ].join('');
     var s = document.createElement('style');
     s.id = 'sqb-loader-styles'; s.textContent = css;
@@ -493,29 +493,63 @@
    * 11. FILTRES UI
    * ════════════════════════════════════════ */
 
+
+  /* ════════════════════════════════════════
+   * 11. FILTRES UI
+   * Desktop : tout inline sur une seule ligne (label + contrôles)
+   * Mobile  : bouton "Filtrer" → panneau plein écran
+   * ════════════════════════════════════════ */
+
   function buildFilterBar(baseItems, cfg, onFilter) {
     if (cfg.filters === false) return null;
-    var fc          = cfg.filters || {};
+    var fc           = cfg.filters || {};
     var globalLayout = fc.layout || 'pills';
     var datePrefix   = fc.datePrefix || null;
-    var i18n         = Object.assign({ all: 'Tout', searchPlaceholder: 'Rechercher\u2026' }, cfg.i18n || {});
+    var i18n         = Object.assign({
+      all: 'Tout', searchPlaceholder: 'Rechercher\u2026',
+      filterToggle: 'Filtrer', filterClose: 'Fermer',
+    }, cfg.i18n || {});
     var prefixDefs   = normalizePrefixes(fc.tagPrefixes, globalLayout);
 
-    var wrapper = el('div', { class: 'sqb-filters-wrapper' });
-    var bar     = el('div', { class: 'sqb-filters' });
+    var wrapper   = el('div', { class: 'sqb-filters-wrapper' });
+    var bar       = el('div', { class: 'sqb-filters' });
     wrapper.appendChild(bar);
 
     var state       = { tab: null, category: null, tags: {}, search: '' };
     var secondaryEl = null;
+    var panelEl     = null;
+    var toggleBtn   = null;
 
     function emit() {
       var t = {}; Object.keys(state.tags).forEach(function(k) { t[k] = state.tags[k]; });
       onFilter({ tab: state.tab, category: state.category, tags: t, search: state.search });
+      updateToggleBadge();
     }
+
+    function countActiveFilters() {
+      var n = 0;
+      if (state.category) n++;
+      Object.keys(state.tags).forEach(function(k) { if (state.tags[k]) n++; });
+      if (state.search) n++;
+      return n;
+    }
+
+    function updateToggleBadge() {
+      if (!toggleBtn) return;
+      var n = countActiveFilters();
+      var badge = toggleBtn.querySelector('.sqb-mobile-toggle-badge');
+      if (n > 0) {
+        if (!badge) { badge = el('span', { class: 'sqb-mobile-toggle-badge' }); toggleBtn.appendChild(badge); }
+        badge.textContent = String(n);
+      } else {
+        if (badge) badge.remove();
+      }
+    }
+
     function tabPool() { return state.tab ? applyTabFilter(baseItems, state.tab) : baseItems; }
     function resetSec() { state.category = null; state.tags = {}; state.search = ''; }
 
-    // ── Groupe pills (toggle pour désélectionner, pas de bouton "Tout") ──
+    // ── Pills : label inline + boutons toggle (tout sur une ligne) ──
     function buildPillGroup(vals, label, showLabel, getCurrent, onSelect) {
       var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--pills' });
 
@@ -525,22 +559,19 @@
         wrap.appendChild(lbl);
       }
 
-      var btns = el('div', { class: 'sqb-filter-pills' });
       vals.forEach(function(v) {
         var active = getCurrent() !== null && norm(String(v)) === norm(String(getCurrent()));
         var btn = el('button', { class: 'sqb-filter-btn' + (active ? ' sqb-filter-btn--active' : ''), type: 'button' });
         setText(btn, v);
         btn.addEventListener('click', function() {
-          // Toggle : re-cliquer désélectionne
           var isCurrent = norm(String(v)) === norm(String(getCurrent() || ''));
           onSelect(isCurrent ? null : v);
-          btns.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
+          wrap.querySelectorAll('.sqb-filter-btn').forEach(function(b) { b.classList.remove('sqb-filter-btn--active'); });
           if (!isCurrent) btn.classList.add('sqb-filter-btn--active');
           emit();
         });
-        btns.appendChild(btn);
+        wrap.appendChild(btn);
       });
-      wrap.appendChild(btns);
       return wrap;
     }
 
@@ -559,15 +590,13 @@
     }
 
     function appendSecondary(pool, container) {
-      // Catégories (toujours en pills si activé)
       if (fc.categories !== false) {
         var cats = uniqBy(
           pool.reduce(function(a, i) { return a.concat(i.categories); }, []).filter(Boolean), norm
         ).sort(function(a, b) { return norm(a).localeCompare(norm(b)); });
-
         if (cats.length > 1) {
           if (fc.defaultCategory && state.category == null) state.category = fc.defaultCategory;
-          var grp = buildPillGroup(cats, 'Catégorie', true,
+          var grp = buildPillGroup(cats, 'Cat\u00e9gorie', true,
             function() { return state.category; }, function(v) { state.category = v; }
           );
           grp.classList.add('sqb-filter-group--cats');
@@ -575,15 +604,12 @@
         }
       }
 
-      // Tag-prefixes
       prefixDefs.forEach(function(pd) {
         var raw  = uniqBy(pool.reduce(function(a, i) { return a.concat(getTagValuesByPrefix(i, pd.prefix)); }, []).filter(Boolean), norm);
         var vals = sortTagValues(raw, pd.prefix, datePrefix);
         if (!vals.length) return;
-
         var defVal = fc.defaultTags && fc.defaultTags[pd.prefix];
         if (defVal && !state.tags[pd.prefix]) state.tags[pd.prefix] = defVal;
-
         var grp;
         if (pd.layout === 'dropdown') {
           grp = buildDropdown(vals, pd.prefix,
@@ -601,10 +627,10 @@
         container.appendChild(grp);
       });
 
-      // Recherche
       if (fc.search !== false) {
         var sg  = el('div', { class: 'sqb-filter-group sqb-filter-group--search' });
-        var inp = el('input', { class: 'sqb-filter-search', type: 'search', placeholder: i18n.searchPlaceholder, 'aria-label': i18n.searchPlaceholder });
+        var inp = el('input', { class: 'sqb-filter-search', type: 'search',
+          placeholder: i18n.searchPlaceholder, 'aria-label': i18n.searchPlaceholder });
         var timer;
         inp.addEventListener('input', function() {
           clearTimeout(timer);
@@ -615,12 +641,11 @@
     }
 
     function rebuildSecondary() {
-      if (!secondaryEl) return;
-      secondaryEl.innerHTML = '';
-      appendSecondary(tabPool(), secondaryEl);
+      if (secondaryEl) { secondaryEl.innerHTML = ''; appendSecondary(tabPool(), secondaryEl); }
+      if (panelEl)     { panelEl.innerHTML = '';     appendSecondary(tabPool(), panelEl); }
     }
 
-    // Tabs
+    // ── Tabs ──
     var tabs = Array.isArray(fc.tabs) ? fc.tabs : [];
     if (tabs.length) {
       var tabGroup = el('div', { class: 'sqb-filter-group sqb-filter-group--tabs' });
@@ -642,12 +667,47 @@
       bar.appendChild(tabGroup);
     }
 
+    // ── Desktop : filtres secondaires inline ──
     secondaryEl = el('div', { class: 'sqb-filters-secondary' });
     appendSecondary(tabPool(), secondaryEl);
     bar.appendChild(secondaryEl);
 
+    // ── Mobile : bouton toggle + panneau ──
+    var mobileRow = el('div', { class: 'sqb-mobile-filter-row' });
+
+    toggleBtn = el('button', { class: 'sqb-mobile-toggle', type: 'button' });
+    toggleBtn.textContent = i18n.filterToggle;
+    mobileRow.appendChild(toggleBtn);
+
+    panelEl = el('div', { class: 'sqb-mobile-panel', 'aria-hidden': 'true' });
+    var panelInner = el('div', { class: 'sqb-mobile-panel-inner' });
+    var closeBtn   = el('button', { class: 'sqb-mobile-panel-close', type: 'button' });
+    closeBtn.textContent = i18n.filterClose;
+    panelInner.appendChild(closeBtn);
+    appendSecondary(tabPool(), panelInner);
+    panelEl.appendChild(panelInner);
+
+    function openPanel() {
+      panelEl.classList.add('sqb-mobile-panel--open');
+      panelEl.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('sqb-panel-open');
+    }
+    function closePanel() {
+      panelEl.classList.remove('sqb-mobile-panel--open');
+      panelEl.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('sqb-panel-open');
+    }
+
+    toggleBtn.addEventListener('click', openPanel);
+    closeBtn.addEventListener('click', closePanel);
+    panelEl.addEventListener('click', function(e) { if (e.target === panelEl) closePanel(); });
+
+    bar.appendChild(mobileRow);
+    wrapper.appendChild(panelEl);
+
     return wrapper;
   }
+
 
   /* ════════════════════════════════════════
    * 12. RUNNER
@@ -715,8 +775,18 @@
     if (fc.defaultTags)     Object.assign(activeFilters.tags, fc.defaultTags);
 
     var root = el('div', { class: 'sqb-root' });
+    // Scroll vers la grille lors d'un changement de filtre
+    function scrollToGrid() {
+      if (fc.scrollOnFilter === false) return;
+      // Ne scroller que si la grille est hors du viewport
+      var rect = grid.getBoundingClientRect();
+      if (rect.top < 0 || rect.top > window.innerHeight * 0.5) {
+        grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
     var filterWrapper = buildFilterBar(rawItems, cfg, function(f) {
-      activeFilters = f; currentPage = 1; render();
+      activeFilters = f; currentPage = 1; render(true);
     });
 
     var gridClass = dispLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid';
@@ -751,8 +821,9 @@
 
     var hook = window.SQB_HOOKS && window.SQB_HOOKS[cfg.key];
 
-    function render() {
+    function render(fromFilter) {
       if (ioInfinite) { ioInfinite.disconnect(); ioInfinite = null; }
+      if (fromFilter) scrollToGrid();
       var pool     = activeFilters.tab ? applyTabFilter(rawItems, activeFilters.tab) : rawItems;
       var filtered = pool.filter(function(item) { return matchesUIFilters(item, activeFilters); });
       var total    = filtered.length;
