@@ -638,7 +638,7 @@
    * 12. FILTRES UI
    * ════════════════════════════════════ */
 
-  function buildFilterBar(baseItems, cfg, onFilter) {
+  function buildFilterBar(baseItems, cfg, onFilter, onTabChange) {
     if (cfg.filters === false) return null;
     var fc           = cfg.filters || {};
     var globalLayout = fc.layout || 'pills';
@@ -775,13 +775,15 @@
         var active = idx === defIdx;
         var btn = el('button', { class: 'sqb-tab-btn' + (active ? ' sqb-tab-btn--active' : ''), type: 'button' });
         setText(btn, tab.label || 'Tab');
-        if (active) state.tab = tab.filter || null;
+        if (active) { state.tab = tab.filter || null; if (onTabChange) onTabChange(tab); }
         btn.addEventListener('click', function() {
           if (btn.classList.contains('sqb-tab-btn--active')) return;
           tabGroup.querySelectorAll('.sqb-tab-btn').forEach(function(b) { b.classList.remove('sqb-tab-btn--active'); });
           btn.classList.add('sqb-tab-btn--active');
           state.tab = tab.filter || null;
-          resetSec(); rebuildSecondary(); emit();
+          resetSec(); rebuildSecondary();
+          if (onTabChange) onTabChange(tab);
+          emit();
         });
         tabGroup.appendChild(btn);
       });
@@ -903,9 +905,19 @@
       }
     }
 
+    // Sort courant (peut changer par tab)
+    var currentSort = cfg.sort || null;
+
+    function onTabChange(tab) {
+      updateTabClass(tab.label || '');
+      // Sort spécifique au tab
+      if (tab.sort !== undefined) { currentSort = tab.sort; }
+      else { currentSort = cfg.sort || null; }
+    }
+
     var filterWrapper = buildFilterBar(rawItems, cfg, function(f) {
       activeFilters = f; currentPage = 1; render(true);
-    });
+    }, onTabChange);
 
     var gridClass = dispLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid';
     var grid    = el('div', { class: gridClass });
@@ -944,7 +956,10 @@
     // Init classe tab
     if (Array.isArray(fc.tabs) && fc.tabs.length) {
       var initTab = fc.tabs[Number(fc.defaultTab != null ? fc.defaultTab : 0)];
-      if (initTab) updateTabClass(initTab.label || '');
+      if (initTab) {
+        updateTabClass(initTab.label || '');
+        if (initTab.sort !== undefined) currentSort = initTab.sort;
+      }
     }
 
     // Intercept tab changes pour mettre à jour la classe
@@ -958,7 +973,8 @@
       if (fromFilter) scrollToGrid();
 
       var pool     = activeFilters.tab ? applyTabFilter(rawItems, activeFilters.tab) : rawItems;
-      var filtered = pool.filter(function(item) { return matchesUIFilters(item, activeFilters); });
+      var poolSorted = currentSort ? sortItems(pool, currentSort) : pool;
+      var filtered = poolSorted.filter(function(item) { return matchesUIFilters(item, activeFilters); });
       var total    = filtered.length;
       var shown    = filtered.slice(0, currentPage * perPage);
 
