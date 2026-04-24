@@ -6,12 +6,13 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ─────────────────────────────────────────────
-   MODE ÉDITION — badge pendant le fetch uniquement
+   BADGE ÉDITEUR — via data-sqb-label sur le conteneur
+   Toujours visible dans l'éditeur (le bloc est vide pendant le fetch).
+   Invisible pour les visiteurs (fetch rapide, classe loading retirée).
    ───────────────────────────────────────────── */
 
-.sqs-edit-mode-active .sqb-block--loading::before,
-.sqs-edit-mode .sqb-block--loading::before {
-  content: 'SQB — ' attr(data-sqb-key);
+.sqb-block[data-sqb-label]::before {
+  content: attr(data-sqb-label);
   display: block;
   background: #0050ff;
   color: #fff;
@@ -21,6 +22,10 @@
   border-radius: 3px;
   width: fit-content;
   margin-bottom: 0.75rem;
+  /* Masquer dès que le contenu est rendu */
+}
+.sqb-block:not(.sqb-block--loading)[data-sqb-label]::before {
+  display: none;
 }
 
 /* ─────────────────────────────────────────────
@@ -71,6 +76,13 @@
   transition: opacity 0.2s ease;
 }
 .sqb-heading__cta:hover { opacity: 1; }
+
+.sqb-heading__cta-below {
+  display: block;
+  text-align: center;
+  margin-top: 1.5rem;
+  text-decoration: none;
+}
 
 /* ─────────────────────────────────────────────
    TABS
@@ -242,8 +254,15 @@
   position: fixed;
   inset: 0;
   background: var(--siteBackgroundColor);
+  color: var(--paragraphMediumColor);
   z-index: 9999;
   overflow-y: auto;
+  font-family:    var(--body-font-font-family);
+  font-style:     var(--body-font-font-style);
+  font-weight:    var(--body-font-font-weight);
+  letter-spacing: var(--body-font-letter-spacing);
+  text-transform: var(--body-font-text-transform);
+  line-height:    var(--body-font-line-height, 1.5);
 }
 .sqb-mobile-panel--open { display: block; }
 body.sqb-panel-open { overflow: hidden; }
@@ -342,7 +361,7 @@ body.sqb-panel-open { overflow: hidden; }
   border-radius: 0; padding: 1rem 0; transform: none !important;
 }
 .sqb-grid--list .sqb-card__media,
-.sqb-grid--list .sqb-card__img-wrap { width: 6rem; min-width: 6rem; aspect-ratio: 1; flex-shrink: 0; margin-right: 1.25rem; }
+.sqb-grid--list .sqb-card__img-wrap { width: 6rem; min-width: 6rem; aspect-ratio: 3 / 2; flex-shrink: 0; margin-right: 1.25rem; }
 .sqb-grid--list .sqb-card__body  { padding-top: 0; }
 .sqb-grid--list .sqb-card__excerpt { display: none; }
 
@@ -363,7 +382,6 @@ body.sqb-panel-open { overflow: hidden; }
   text-decoration: none; color: inherit;
   transition: transform 0.2s ease;
 }
-.sqb-card[href]:hover { transform: translateY(-2px); }
 
 .sqb-card__img-wrap {
   overflow: hidden; width: 100%; aspect-ratio: 3 / 2;
@@ -387,14 +405,15 @@ body.sqb-panel-open { overflow: hidden; }
   gap: 0.4em; padding: 0.8em 0 0.5em;
 }
 
-/* Titre — typographie heading Squarespace */
+/* Titre — typographie body Squarespace (overridable via classe custom) */
 .sqb-card__title {
-  font-family:    var(--heading-font-font-family);
-  font-style:     var(--heading-font-font-style);
-  font-weight:    var(--heading-font-font-weight);
-  letter-spacing: var(--heading-font-letter-spacing);
-  text-transform: var(--heading-font-text-transform);
-  line-height: 1.2; margin: 0;
+  font-family:    var(--body-font-font-family);
+  font-style:     var(--body-font-font-style);
+  font-weight:    var(--body-font-font-weight);
+  letter-spacing: var(--body-font-letter-spacing);
+  text-transform: var(--body-font-text-transform);
+  line-height:    var(--body-font-line-height, 1.2);
+  margin: 0;
 }
 
 /* Tout le reste dans body : même style, opacité uniforme */
