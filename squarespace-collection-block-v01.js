@@ -771,12 +771,18 @@
 
     // ── Filtres secondaires ─────────────────────────────────────────────────
     function appendSecondary(pool, container) {
+      // Catégories
+      // fc.categories : false = masqué | true = affiché avec label | { order, showLabel } = config détaillée
       if (fc.categories !== false) {
+        var catsCfg      = (fc.categories && typeof fc.categories === 'object') ? fc.categories : {};
+        var catsOrder    = catsCfg.order    || null;
+        var catsShowLbl  = catsCfg.showLabel !== false; // true par défaut
         var cats = uniqBy(pool.reduce(function(a, i) { return a.concat(i.categories); }, []).filter(Boolean), norm)
           .sort(function(a, b) { return norm(a).localeCompare(norm(b)); });
+        if (catsOrder) cats = applyCustomOrder(cats, catsOrder);
         if (cats.length > 1) {
           if (fc.defaultCategory && state.category == null) state.category = fc.defaultCategory;
-          var grp = buildPillGroup(cats, 'Cat\u00e9gorie', catShowLabel,
+          var grp = buildPillGroup(cats, 'Cat\u00e9gorie', catsShowLbl,
             function() { return state.category; }, function(v) { state.category = v; });
           grp.classList.add('sqb-filter-group--cats'); container.appendChild(grp);
         }
