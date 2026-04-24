@@ -435,3 +435,11 @@ body.sqb-panel-open { overflow: hidden; }
 .sqb-load-more:hover { opacity: 1; }
 .sqb-end-label { font-size: 0.9em; opacity: 0.5; }
 .sqb-sentinel  { height: 1px; pointer-events: none; }
+
+/* ─────────────────────────────────────────────
+   ACCESSIBILITÉ
+   ───────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .sqb-card, .sqb-card__img, .sqb-filter-btn, .sqb-tab-btn, .sqb-load-more { transition: none; }
+}
