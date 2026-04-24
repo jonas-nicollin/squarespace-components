@@ -481,6 +481,22 @@
     var card = el(link ? 'a' : 'div', { class: 'sqb-card', 'data-sqb-index': String(index) });
     if (link) card.href = item.fullUrl;
 
+    // cardClasses : ajouter des classes selon catégories et tag-prefixes
+    var cardClassesCfg = disp.cardClasses || null;
+    if (cardClassesCfg) {
+      if (cardClassesCfg.categories) {
+        item.categories.forEach(function(cat) {
+          card.classList.add('sqb-cat--' + slugify(cat));
+        });
+      }
+      var tagPfxList = Array.isArray(cardClassesCfg.tagPrefixes) ? cardClassesCfg.tagPrefixes : [];
+      tagPfxList.forEach(function(pfx) {
+        getTagValuesByPrefix(item, pfx).forEach(function(val) {
+          card.classList.add('sqb-tag--' + slugify(pfx) + '--' + slugify(val));
+        });
+      });
+    }
+
     var groups = Array.isArray(disp.groups) && disp.groups.length ? disp.groups : null;
     if (groups) {
       groups.forEach(function(grp) {
@@ -534,7 +550,9 @@
       a.textContent = cta.text;
       if (ctaPos === 'below') {
         a.className = 'sqb-heading__cta-below sqb-load-more';
-        ctaBelow = a;
+        var ctaBelowWrapper = el('div', { class: 'sqb-footer--cta' });
+        ctaBelowWrapper.appendChild(a);
+        ctaBelow = ctaBelowWrapper;
       } else {
         a.className = 'sqb-heading__cta';
         wrap.appendChild(a);
@@ -699,7 +717,7 @@
     }, cfg.i18n || {});
     var prefixDefs   = normalizePrefixes(fc.tagPrefixes, globalLayout);
     var useMobilePanel     = fc.mobilePanel !== false;
-    var mobilePanelBp      = Number(fc.mobilePanelBreakpoint || 768);
+    var mobilePanelBp      = fc.mobilePanelBreakpoint === 'always' ? Infinity : Number(fc.mobilePanelBreakpoint || 768);
 
     var wrapper = el('div', { class: 'sqb-filters-wrapper' });
     var bar     = el('div', { class: 'sqb-filters' });
@@ -714,6 +732,18 @@
       var t = {}; Object.keys(state.tags).forEach(function(k) { t[k] = state.tags[k]; });
       onFilter({ tab: state.tab, category: state.category, tags: t, search: state.search });
       updateToggleBadge();
+    }
+
+    // resetOtherFilters : si fc.resetOthers === true, vide catégorie + tags + search sauf le filtre courant
+    function resetOtherFilters(exceptType, exceptKey) {
+      if (!fc.resetOthers) return;
+      if (exceptType !== 'category') state.category = null;
+      prefixDefs.forEach(function(pd) {
+        if (exceptType !== 'tag' || exceptKey !== pd.prefix) state.tags[pd.prefix] = null;
+      });
+      if (exceptType !== 'search') state.search = '';
+      // Mettre à jour visuellement les boutons (on rebuild)
+      if (secondaryEl) { secondaryEl.innerHTML = ''; appendSecondary(tabPool(), secondaryEl); }
     }
 
     function countActive() {
@@ -783,7 +813,8 @@
         if (cats.length > 1) {
           if (fc.defaultCategory && state.category == null) state.category = fc.defaultCategory;
           var grp = buildPillGroup(cats, 'Cat\u00e9gorie', catsShowLbl,
-            function() { return state.category; }, function(v) { state.category = v; });
+            function() { return state.category; },
+            function(v) { state.category = v; resetOtherFilters('category', null); });
           grp.classList.add('sqb-filter-group--cats'); container.appendChild(grp);
         }
       }
@@ -795,13 +826,17 @@
         var defVal = fc.defaultTags && fc.defaultTags[pd.prefix];
         if (defVal && !state.tags[pd.prefix]) state.tags[pd.prefix] = defVal;
         var grp;
-        if (pd.layout === 'dropdown') {
-          grp = buildDropdown(vals, pd.prefix,
-            function() { return state.tags[pd.prefix] || null; }, function(v) { state.tags[pd.prefix] = v; });
-        } else {
-          grp = buildPillGroup(vals, pd.prefix, pd.showLabel,
-            function() { return state.tags[pd.prefix] || null; }, function(v) { state.tags[pd.prefix] = v; });
-        }
+        (function(prefix) {
+          if (pd.layout === 'dropdown') {
+            grp = buildDropdown(vals, prefix,
+              function() { return state.tags[prefix] || null; },
+              function(v) { state.tags[prefix] = v; resetOtherFilters('tag', prefix); });
+          } else {
+            grp = buildPillGroup(vals, prefix, pd.showLabel,
+              function() { return state.tags[prefix] || null; },
+              function(v) { state.tags[prefix] = v; resetOtherFilters('tag', prefix); });
+          }
+        })(pd.prefix);
         grp.classList.add('sqb-filter-group--tag');
         grp.setAttribute('data-prefix', pd.prefix);
         container.appendChild(grp);
@@ -1060,6 +1095,13 @@
       }
 
       renderGrouped(shown, cfg, grid);
+      if (disp.fadeIn !== false) {
+        var cards = grid.querySelectorAll('.sqb-card');
+        cards.forEach(function(c, i) {
+          c.style.animationDelay = (i * 0.04) + 's';
+          c.classList.add('sqb-card--fade-in');
+        });
+      }
       if (disp.counter !== false) counter.textContent = shown.length + '\u00a0/\u00a0' + total;
       if (hook) hook(grid, shown, cfg);
 
