@@ -398,7 +398,7 @@ body.sqb-panel-open { overflow: hidden; }
 }
 
 /* Tout le reste dans body : même style, opacité uniforme */
-.sqb-card__body > *       { opacity: 0.666; color: red !important; }
+.sqb-card__body > *       { opacity: 0.666; }
 .sqb-card__body > .sqb-card__title { opacity: 1; }
 
 .sqb-card__cats { display: flex; flex-wrap: wrap; gap: 0.3em; }
