@@ -5,28 +5,6 @@
                --tweak-line-block-line-color
    ═══════════════════════════════════════════════════════════════ */
 
-/* ─────────────────────────────────────────────
-   BADGE ÉDITEUR — via data-sqb-label sur le conteneur
-   Toujours visible dans l'éditeur (le bloc est vide pendant le fetch).
-   Invisible pour les visiteurs (fetch rapide, classe loading retirée).
-   ───────────────────────────────────────────── */
-
-.sqb-block[data-sqb-label]::before {
-  content: attr(data-sqb-label);
-  display: block;
-  background: #0050ff;
-  color: #fff;
-  font-size: 11px;
-  font-family: ui-monospace, monospace;
-  padding: 4px 10px;
-  border-radius: 3px;
-  width: fit-content;
-  margin-bottom: 0.75rem;
-  /* Masquer dès que le contenu est rendu */
-}
-.sqb-block:not(.sqb-block--loading)[data-sqb-label]::before {
-  display: none;
-}
 
 /* ─────────────────────────────────────────────
    ICÔNES (Material Symbols ou texte fallback)
