@@ -1,5 +1,5 @@
 /*!
- * Squarespace Query Block (SQB) v12.0.0
+ * Squarespace Query Block (Squarespace Collection Block (SQB) v12.0.0
  * Fetch JSON paginé · tabs · groupBy · sticky · hooks · lazy-load · cache
  * Compatible Weglot · zéro dépendance
  *
@@ -776,7 +776,7 @@
           .sort(function(a, b) { return norm(a).localeCompare(norm(b)); });
         if (cats.length > 1) {
           if (fc.defaultCategory && state.category == null) state.category = fc.defaultCategory;
-          var grp = buildPillGroup(cats, 'Cat\u00e9gorie', true,
+          var grp = buildPillGroup(cats, 'Cat\u00e9gorie', catShowLabel,
             function() { return state.category; }, function(v) { state.category = v; });
           grp.classList.add('sqb-filter-group--cats'); container.appendChild(grp);
         }
@@ -974,9 +974,7 @@
       updateTabClass(tab.labelIcon ? (tab.label || '') : (tab.label || ''));
       if (tab.sort !== undefined) { currentSort = tab.sort; } else { currentSort = cfg.sort || null; }
       if (tab.layout !== undefined) { currentLayout = tab.layout; } else { currentLayout = dispLayout; }
-      // Mettre à jour la classe de layout sur la grille
-      grid.className = currentLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid';
-      target.classList.toggle('sqb-block--list', currentLayout === 'list');
+      // grid sera mis à jour dans render() via currentLayout
     }
 
     var filterWrapper = buildFilterBar(rawItems, cfg, function(f) {
@@ -1022,7 +1020,8 @@
       var initTab = fc.tabs[Number(fc.defaultTab != null ? fc.defaultTab : 0)];
       if (initTab) {
         updateTabClass(initTab.label || '');
-        if (initTab.sort !== undefined) currentSort = initTab.sort;
+        if (initTab.sort   !== undefined) currentSort   = initTab.sort;
+        if (initTab.layout !== undefined) currentLayout = initTab.layout;
       }
     }
 
@@ -1034,6 +1033,9 @@
 
     function render(fromFilter) {
       if (ioInfinite) { ioInfinite.disconnect(); ioInfinite = null; }
+      // Appliquer le layout du tab actif sur la grille
+      grid.className = currentLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid';
+      target.classList.toggle('sqb-block--list', currentLayout === 'list');
       if (fromFilter) scrollToGrid();
 
       var pool     = activeFilters.tab ? applyTabFilter(rawItems, activeFilters.tab) : rawItems;
