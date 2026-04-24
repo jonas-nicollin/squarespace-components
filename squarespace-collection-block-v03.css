@@ -6,31 +6,6 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ─────────────────────────────────────────────
-   BADGE ÉDITEUR
-   Classe sqb-target sur le conteneur HTML.
-   Visible uniquement en mode édition Squarespace.
-   Exemple HTML : <div id="sqb-membres" class="sqb-target"
-                       data-sqb-label="SQB — Membres"></div>
-   ───────────────────────────────────────────── */
-
-.sqs-edit-mode-active .sqb-target[data-sqb-label]::before {
-  content: attr(data-sqb-label);
-  display: block;
-  background: #0050ff;
-  color: #fff;
-  font-size: 11px;
-  font-family: ui-monospace, monospace;
-  padding: 4px 10px;
-  border-radius: 3px;
-  width: fit-content;
-  margin-bottom: 0.75rem;
-}
-
-body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
-  display: none;
-}
-
-/* ─────────────────────────────────────────────
    ICÔNES (Material Symbols ou texte fallback)
    ───────────────────────────────────────────── */
 
@@ -87,8 +62,17 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
 .sqb-heading__cta-below {
   display: inline-block;
   text-decoration: none;
-  /* Reprend le style du bouton load-more */
+  border: 1px solid var(--paragraphMediumColor);
+  color: var(--paragraphMediumColor);
+  background: var(--siteBackgroundColor);
+  font: inherit;
+  font-size: 0.9em;
+  padding: 0.5em 2.5em;
+  border-radius: 2em;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
 }
+.sqb-heading__cta-below:hover { opacity: 1; }
 
 /* ─────────────────────────────────────────────
    TABS
@@ -217,6 +201,7 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
   font: inherit; font-size: 0.9em; padding: 0.3em 0.9em;
   border-radius: 2em; min-width: 10em; max-width: 16em; opacity: 0.6;
 }
+.sqb-filter-search::placeholder { color: var(--paragraphMediumColor); opacity: 0.5; }
 .sqb-filter-search:focus { outline: 2px solid var(--paragraphMediumColor); outline-offset: 2px; opacity: 1; }
 
 /* ─────────────────────────────────────────────
@@ -395,7 +380,7 @@ body.sqb-panel-open { overflow: hidden; }
 }
 .sqb-card__img {
   display: block; width: 100%; height: 100%; object-fit: cover;
-  opacity: 0; transition: opacity 0.3s ease, transform 0.4s ease;
+  opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;
 }
 .sqb-card__img--loaded            { opacity: 1; }
 .sqb-card[href]:hover .sqb-card__img { transform: scale(1.03); }
@@ -460,6 +445,25 @@ body.sqb-panel-open { overflow: hidden; }
 .sqb-load-more:hover { opacity: 1; }
 .sqb-end-label { font-size: 0.9em; opacity: 0.5; }
 .sqb-sentinel  { height: 1px; pointer-events: none; }
+
+
+/* ─────────────────────────────────────────────
+   ANIMATION FADE-IN DES CARTES
+   Activée par défaut (display.fadeIn: false pour désactiver)
+   ───────────────────────────────────────────── */
+
+@keyframes sqbFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sqb-card--fade-in {
+  animation: sqbFadeIn 0.4s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sqb-card--fade-in { animation: none; }
+}
 
 /* ─────────────────────────────────────────────
    ACCESSIBILITÉ
