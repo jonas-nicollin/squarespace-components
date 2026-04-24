@@ -30,7 +30,6 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
   display: none;
 }
 
-
 /* ─────────────────────────────────────────────
    ICÔNES (Material Symbols ou texte fallback)
    ───────────────────────────────────────────── */
