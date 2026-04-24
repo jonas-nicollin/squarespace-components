@@ -499,6 +499,29 @@
     return card;
   }
 
+
+  /* ════════════════════════════════════
+   * 7b. HEADING DU BLOC
+   * heading: { text, tag, cta: { text, href, newTab } }
+   * ════════════════════════════════════ */
+
+  function buildHeading(headingCfg) {
+    if (!headingCfg || !headingCfg.text) return null;
+    var wrap = el('div', { class: 'sqb-heading' });
+    var tag  = headingCfg.tag || 'h2';
+    var h    = el(tag, { class: 'sqb-heading__text' });
+    h.textContent = headingCfg.text;
+    wrap.appendChild(h);
+    var cta = headingCfg.cta;
+    if (cta && cta.text && cta.href) {
+      var a = el('a', { class: 'sqb-heading__cta', href: cta.href });
+      if (cta.newTab) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+      a.textContent = cta.text;
+      wrap.appendChild(a);
+    }
+    return wrap;
+  }
+
   /* ════════════════════════════════════
    * 8. GROUPBY VISUEL
    * ════════════════════════════════════ */
@@ -894,6 +917,10 @@
     if (fc.defaultTags)     Object.assign(activeFilters.tags, fc.defaultTags);
 
     var root = el('div', { class: 'sqb-root' });
+
+    // Heading
+    var headingEl = buildHeading(cfg.heading || null);
+    if (headingEl) root.appendChild(headingEl);
 
     // Scroll vers la grille au changement de filtre
     var scrollOnFilter = fc.scrollOnFilter !== false;
