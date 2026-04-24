@@ -5,6 +5,30 @@
                --tweak-line-block-line-color
    ═══════════════════════════════════════════════════════════════ */
 
+/* ─────────────────────────────────────────────
+   BADGE ÉDITEUR
+   Classe sqb-target sur le conteneur HTML.
+   Visible uniquement en mode édition Squarespace.
+   Exemple HTML : <div id="sqb-membres" class="sqb-target"
+                       data-sqb-label="SQB — Membres"></div>
+   ───────────────────────────────────────────── */
+
+.sqs-edit-mode-active .sqb-target[data-sqb-label]::before {
+  content: attr(data-sqb-label);
+  display: block;
+  background: #0050ff;
+  color: #fff;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  padding: 4px 10px;
+  border-radius: 3px;
+  width: fit-content;
+  margin-bottom: 0.75rem;
+}
+
+body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
+  display: none;
+}
 
 /* ─────────────────────────────────────────────
    ICÔNES (Material Symbols ou texte fallback)
@@ -55,11 +79,15 @@
 }
 .sqb-heading__cta:hover { opacity: 1; }
 
-.sqb-heading__cta-below {
-  display: block;
+.sqb-footer--cta {
   text-align: center;
   margin-top: 1.5rem;
+}
+
+.sqb-heading__cta-below {
+  display: inline-block;
   text-decoration: none;
+  /* Reprend le style du bouton load-more */
 }
 
 /* ─────────────────────────────────────────────
