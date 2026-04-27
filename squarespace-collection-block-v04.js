@@ -716,7 +716,7 @@
       filterToggle: 'Filtrer', filterClose: 'close',
     }, cfg.i18n || {});
     var prefixDefs   = normalizePrefixes(fc.tagPrefixes, globalLayout);
-    var useMobilePanel     = fc.mobilePanel !== false;
+    var useMobilePanel     = fc.mobilePanel === true;
     var mobilePanelBp      = fc.mobilePanelBreakpoint === 'always' ? Infinity : Number(fc.mobilePanelBreakpoint || 768);
 
     var wrapper = el('div', { class: 'sqb-filters-wrapper' });
@@ -789,7 +789,7 @@
     function buildDropdown(vals, label, getCurrent, onSelect) {
       var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--dropdown' });
       var sel  = el('select', { class: 'sqb-filter-select', 'aria-label': label });
-      var o0   = el('option', { value: '' }); o0.textContent = label + '\u00a0: ' + i18n.all; sel.appendChild(o0);
+      var o0   = el('option', { value: '' }); o0.textContent = label + ': ' + i18n.all; sel.appendChild(o0);
       vals.forEach(function(v) {
         var o = el('option', { value: v }); o.textContent = v;
         if (getCurrent() && norm(v) === norm(getCurrent())) o.selected = true;
@@ -1007,14 +1007,16 @@
       }
     }
 
-    // Sort et layout courants (peuvent changer par tab)
+    // Sort, layout et groups courants (peuvent changer par tab)
     var currentSort   = cfg.sort || null;
     var currentLayout = dispLayout;
+    var currentGroups = (disp.groups && disp.groups.length) ? disp.groups : null;
 
     function onTabChange(tab) {
       updateTabClass(tab.labelIcon ? (tab.label || '') : (tab.label || ''));
-      if (tab.sort !== undefined) { currentSort = tab.sort; } else { currentSort = cfg.sort || null; }
+      if (tab.sort   !== undefined) { currentSort   = tab.sort;   } else { currentSort   = cfg.sort || null; }
       if (tab.layout !== undefined) { currentLayout = tab.layout; } else { currentLayout = dispLayout; }
+      if (tab.groups !== undefined) { currentGroups = tab.groups; } else { currentGroups = (disp.groups && disp.groups.length) ? disp.groups : null; }
       // grid sera mis à jour dans render() via currentLayout
     }
 
@@ -1063,6 +1065,7 @@
         updateTabClass(initTab.label || '');
         if (initTab.sort   !== undefined) currentSort   = initTab.sort;
         if (initTab.layout !== undefined) currentLayout = initTab.layout;
+        if (initTab.groups !== undefined) currentGroups = initTab.groups;
       }
     }
 
@@ -1094,8 +1097,10 @@
         return;
       }
 
-      renderGrouped(shown, cfg, grid);
-      if (disp.fadeIn !== false) {
+      // Appliquer les groups du tab actif si définis
+      var cfgForRender = currentGroups ? Object.assign({}, cfg, { display: Object.assign({}, disp, { groups: currentGroups }) }) : cfg;
+      renderGrouped(shown, cfgForRender, grid);
+      if ((cfgForRender.display || disp).fadeIn !== false) {
         var cards = grid.querySelectorAll('.sqb-card');
         cards.forEach(function(c, i) {
           c.style.animationDelay = (i * 0.04) + 's';
