@@ -584,9 +584,11 @@
     };
   }
 
+  function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
   // Formate une valeur de tag ISO en texte lisible
   // Supporte les intervalles : 2026-09-14/2026-09-22 → '14–22 septembre 2026'
-  // format: 'datetime' | 'date' | 'day' | 'time' | 'range'
+  // format: 'datetime' | 'date' | 'day' | 'time'
   function formatISOTag(str, format, locale) {
     // Détecter intervalle
     if (String(str || '').indexOf('/') !== -1) {
@@ -627,9 +629,9 @@
       var dayStr = dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' });
       if (d.hour !== null) {
         var timeStr = dt.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: false });
-        return dayStr + ', ' + timeStr;
+        return capitalize(dayStr) + ', ' + timeStr;
       }
-      return dayStr;
+      return capitalize(dayStr);
     } catch (_) { return str; }
   }
 
@@ -646,7 +648,7 @@
     var dt = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
     var loc = locale || document.documentElement.lang || 'fr-CH';
     try {
-      return dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' });
+      return capitalize(dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' }));
     } catch (_) { return dateStr; }
   }
 
@@ -767,10 +769,18 @@
     inner.appendChild(filtersZone);
     panel.appendChild(inner);
 
+    // Backdrop
+    var backdrop = el('div', { class: 'sqb-backdrop' });
+    backdrop.addEventListener('click', close);
+
     function open() {
       if (!panel.parentNode || panel.parentNode !== document.body) {
         document.body.appendChild(panel);
       }
+      if (!backdrop.parentNode || backdrop.parentNode !== document.body) {
+        document.body.insertBefore(backdrop, panel);
+      }
+      backdrop.classList.add('sqb-backdrop--visible');
       // Hériter du thème de couleur de la section
       var sourceBlock = document.querySelector('[data-sqb-key]');
       if (sourceBlock) {
@@ -790,6 +800,7 @@
     function close() {
       panel.setAttribute('aria-hidden', 'true');
       panel.classList.remove('sqb-mobile-panel--open');
+      backdrop.classList.remove('sqb-backdrop--visible');
       document.body.classList.remove('sqb-panel-open');
     }
 
@@ -999,11 +1010,21 @@
 
     // ── Bouton mobile ─────────────────────────────────────────────────────
     if (useMobilePanel) {
-      var mobileRow = el('div', { class: 'sqb-mobile-filter-row' });
       toggleBtn = el('button', { class: 'sqb-mobile-toggle', type: 'button' });
       toggleBtn.textContent = i18n.filterToggle;
-      mobileRow.appendChild(toggleBtn);
-      bar.appendChild(mobileRow);
+
+      // Si tabs présents, placer le bouton à côté — sinon en ligne séparée
+      var tabsGroupEl = bar.querySelector('.sqb-filter-group--tabs');
+      if (tabsGroupEl) {
+        var tabsRow = el('div', { class: 'sqb-tabs-row' });
+        bar.replaceChild(tabsRow, tabsGroupEl);
+        tabsRow.appendChild(tabsGroupEl);
+        tabsRow.appendChild(toggleBtn);
+      } else {
+        var mobileRow = el('div', { class: 'sqb-mobile-filter-row' });
+        mobileRow.appendChild(toggleBtn);
+        bar.appendChild(mobileRow);
+      }
 
       mobileObj = buildMobilePanel(appendSecondary, tabPool, i18n);
 
@@ -1049,7 +1070,6 @@
     var perPage    = Number(pag.perPage || 12);
     var mode       = pag.mode || 'load-more';
     var dispLayout = disp.layout  || 'grid';
-    var filterPos  = fc.position  || 'top';
 
     target.classList.add('sqb-block');
     target.setAttribute('data-sqb-key', cfg.key || 'sqb');
@@ -1057,8 +1077,7 @@
     if (cfg.label) target.setAttribute('data-sqb-label', cfg.label);
     if (cfg.key)     target.classList.add('sqb--' + cfg.key);
     if (cfg.classes) cfg.classes.trim().split(/\s+/).forEach(function(c) { if (c) target.classList.add(c); });
-    if (dispLayout === 'list')   target.classList.add('sqb-block--list');
-    if (filterPos === 'sidebar') target.classList.add('sqb-block--sidebar');
+    if (dispLayout === 'list') target.classList.add('sqb-block--list');
     target.classList.add('sqb-block--loading');
 
     injectLoaderStyles();
@@ -1141,19 +1160,10 @@
     var counter = el('p',   { class: 'sqb-counter', 'aria-live': 'polite' });
     var footer  = el('div', { class: 'sqb-footer' });
 
-    if (filterPos === 'sidebar' && filterWrapper) {
-      var sl = el('div', { class: 'sqb-sidebar-layout' });
-      var sp = el('div', { class: 'sqb-sidebar-panel' });
-      var mp = el('div', { class: 'sqb-main-panel' });
-      sp.appendChild(filterWrapper); mp.appendChild(grid);
-      if (disp.counter !== false) mp.appendChild(counter);
-      mp.appendChild(footer); sl.appendChild(sp); sl.appendChild(mp); root.appendChild(sl);
-    } else {
-      if (filterWrapper) root.appendChild(filterWrapper);
-      root.appendChild(grid);
-      if (disp.counter !== false) root.appendChild(counter);
-      root.appendChild(footer);
-    }
+    if (filterWrapper) root.appendChild(filterWrapper);
+    root.appendChild(grid);
+    if (disp.counter !== false) root.appendChild(counter);
+    root.appendChild(footer);
     target.appendChild(root);
 
     // Sticky
@@ -1190,9 +1200,8 @@
 
     var hook = window.SQB_HOOKS && window.SQB_HOOKS[cfg.key];
 
-    function render(fromFilter) {
+    function render(fromFilter, fromPagination) {
       if (ioInfinite) { ioInfinite.disconnect(); ioInfinite = null; }
-      // Appliquer le layout du tab actif sur la grille
       grid.className = currentLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid';
       target.classList.toggle('sqb-block--list', currentLayout === 'list');
       if (fromFilter) scrollToGrid();
@@ -1203,7 +1212,8 @@
       var total    = filtered.length;
       var shown    = filtered.slice(0, currentPage * perPage);
 
-      grid.innerHTML = ''; footer.innerHTML = '';
+      if (!fromPagination) grid.innerHTML = '';
+      footer.innerHTML = '';
 
       if (!shown.length) {
         setText(grid.appendChild(el('p', { class: 'sqb-empty' })), i18n.noResults);
@@ -1244,14 +1254,14 @@
       }
       if (mode === 'load-more') {
         var btn = setText(el('button', { class: 'sqb-load-more', type: 'button' }), i18n.loadMoreLabel);
-        btn.addEventListener('click', function() { currentPage++; render(false); });
+        btn.addEventListener('click', function() { currentPage++; render(false, true); });
         footer.appendChild(btn);
       } else if (mode === 'infinite' && 'IntersectionObserver' in window) {
         var infS = el('div', { class: 'sqb-sentinel', 'aria-hidden': 'true' });
         footer.appendChild(infS);
         ioInfinite = new IntersectionObserver(function(entries) {
           if (!entries[0].isIntersecting) return;
-          ioInfinite.disconnect(); ioInfinite = null; currentPage++; render(false);
+          ioInfinite.disconnect(); ioInfinite = null; currentPage++; render(false, true);
         }, { rootMargin: '400px' });
         ioInfinite.observe(infS);
       }
