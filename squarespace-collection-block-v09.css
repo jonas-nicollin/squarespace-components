@@ -292,9 +292,13 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
   background: var(--siteBackgroundColor); color: var(--paragraphMediumColor);
   font: inherit; font-size: 0.9em;
   padding: 0.4em 1.25em; border-radius: 2em;
-  cursor: pointer; width: 100%;
-  display: flex; align-items: center; justify-content: center; gap: 0.5em;
+  cursor: pointer;
+  width: auto;     /* auto par défaut — pleine largeur seulement sur mobile */
+  display: inline-flex; align-items: center; gap: 0.5em;
   opacity: 0.7;
+}
+@media (max-width: 639px) {
+  .sqb-mobile-filter-row .sqb-mobile-toggle { width: 100%; justify-content: center; }
 }
 .sqb-mobile-toggle:hover { opacity: 1; }
 
@@ -308,6 +312,26 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
 /* ─────────────────────────────────────────────
    PANNEAU MOBILE (téléporté dans body)
    ───────────────────────────────────────────── */
+
+
+/* ─────────────────────────────────────────────
+   BACKDROP (derrière le panneau filtre)
+   ───────────────────────────────────────────── */
+
+.sqb-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9998; /* juste sous le panneau (9999) */
+  background: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.sqb-backdrop--visible {
+  display: block;
+  opacity: 1;
+}
+body.sqb-panel-open { overflow: hidden; }
 
 .sqb-mobile-panel {
   display: none;
@@ -384,21 +408,6 @@ body.sqb-panel-open { overflow: hidden; }
   width: 100%; max-width: 100%; box-sizing: border-box; font-size: 1em;
 }
 
-/* ─────────────────────────────────────────────
-   LAYOUT SIDEBAR
-   ───────────────────────────────────────────── */
-
-.sqb-sidebar-layout { display: flex; gap: 3rem; align-items: flex-start; }
-.sqb-sidebar-panel  { flex-shrink: 0; width: 14em; }
-.sqb-sidebar-panel .sqb-filters-wrapper { margin-bottom: 0; }
-.sqb-sidebar-panel .sqb-filters-secondary { flex-direction: column; padding-top: 0; }
-.sqb-main-panel { flex: 1; min-width: 0; }
-
-@media (max-width: 768px) {
-  .sqb-sidebar-layout { flex-direction: column; }
-  .sqb-sidebar-panel  { width: 100%; }
-  .sqb-sidebar-panel .sqb-filters-secondary { flex-direction: row; flex-wrap: wrap; }
-}
 
 /* ─────────────────────────────────────────────
    GRILLE
@@ -421,7 +430,7 @@ body.sqb-panel-open { overflow: hidden; }
   border-radius: 0; padding: 1rem 0; transform: none !important;
 }
 .sqb-grid--list .sqb-card__media,
-.sqb-grid--list .sqb-card__img-wrap { width: 6rem; min-width: 6rem; aspect-ratio: 3 / 2; flex-shrink: 0; margin-right: 1.25rem; }
+.sqb-grid--list .sqb-card__img-wrap { width: 6rem; min-width: 6rem; flex-shrink: 0; margin-right: 1.25rem; }
 .sqb-grid--list .sqb-card__body  { padding-top: 0; }
 .sqb-grid--list .sqb-card__excerpt { display: none; }
 
