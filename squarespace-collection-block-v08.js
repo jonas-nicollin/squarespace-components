@@ -585,11 +585,32 @@
   }
 
   // Formate une valeur de tag ISO en texte lisible
-  // locale : 'fr-CH' par défaut
-  // format: 'datetime' | 'date' | 'day' | 'time'
+  // Supporte les intervalles : 2026-09-14/2026-09-22 → '14–22 septembre 2026'
+  // format: 'datetime' | 'date' | 'day' | 'time' | 'range'
   function formatISOTag(str, format, locale) {
+    // Détecter intervalle
+    if (String(str || '').indexOf('/') !== -1) {
+      var parts = str.split('/');
+      var d1 = parseISO(parts[0]), d2 = parseISO(parts[1]);
+      if (d1 && d2) {
+        var loc = locale || document.documentElement.lang || 'fr-CH';
+        try {
+          var dt1 = new Date(d1.year, d1.month, d1.day);
+          var dt2 = new Date(d2.year, d2.month, d2.day);
+          // Même mois : '14–22 septembre 2026'
+          if (d1.month === d2.month && d1.year === d2.year) {
+            var m = dt1.toLocaleDateString(loc, { month: 'long' });
+            var y = d1.year;
+            return d1.day + '\u2013' + d2.day + '\u00a0' + m + '\u00a0' + y;
+          }
+          return dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long' }) +
+                 '\u00a0\u2013\u00a0' +
+                 dt2.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
+        } catch (_) { return str; }
+      }
+    }
     var d = parseISO(str);
-    if (!d) return str; // pas ISO → retourner tel quel
+    if (!d) return str;
     var dt = new Date(d.year, d.month, d.day, d.hour || 0, d.min || 0);
     var loc = locale || document.documentElement.lang || 'fr-CH';
     try {
@@ -787,7 +808,7 @@
    * 12. FILTRES UI
    * ════════════════════════════════════ */
 
-  function buildFilterBar(baseItems, cfg, onFilter, onTabChange) {
+  function buildFilterBar(baseItems, cfg, onFilter, onTabChange, getTabPrefixes) {
     if (cfg.filters === false) return null;
     var fc           = cfg.filters || {};
     var globalLayout = fc.layout || 'pills';
@@ -819,7 +840,9 @@
     function resetOtherFilters(exceptType, exceptKey) {
       if (!fc.resetOthers) return;
       if (exceptType !== 'category') state.category = null;
-      prefixDefs.forEach(function(pd) {
+      // Utiliser les tagPrefixes du tab actif si définis
+      var activePrefixDefs = (getTabPrefixes && getTabPrefixes()) ? normalizePrefixes(getTabPrefixes(), globalLayout) : prefixDefs;
+      activePrefixDefs.forEach(function(pd) {
         if (exceptType !== 'tag' || exceptKey !== pd.prefix) state.tags[pd.prefix] = null;
       });
       if (exceptType !== 'search') state.search = '';
@@ -899,7 +922,9 @@
           grp.classList.add('sqb-filter-group--cats'); container.appendChild(grp);
         }
       }
-      prefixDefs.forEach(function(pd) {
+      // Utiliser les tagPrefixes du tab actif si définis
+      var activePrefixDefs = (getTabPrefixes && getTabPrefixes()) ? normalizePrefixes(getTabPrefixes(), globalLayout) : prefixDefs;
+      activePrefixDefs.forEach(function(pd) {
         var raw  = uniqBy(pool.reduce(function(a, i) { return a.concat(getTagValuesByPrefix(i, pd.prefix)); }, []).filter(Boolean), norm);
         var vals = sortTagValues(raw, pd.prefix, datePrefix);
         if (pd.order) vals = applyCustomOrder(vals, pd.order);
@@ -1089,11 +1114,12 @@
     }
 
     // Sort, layout, groups et groupBy courants (peuvent changer par tab)
-    var currentSort    = cfg.sort || null;
-    var currentLayout  = dispLayout;
-    var currentGroups  = (disp.groups && disp.groups.length) ? disp.groups : null;
-    var currentGroupBy = disp.groupBy || null;
+    var currentSort       = cfg.sort || null;
+    var currentLayout     = dispLayout;
+    var currentGroups     = (disp.groups && disp.groups.length) ? disp.groups : null;
+    var currentGroupBy    = disp.groupBy    || null;
     var currentGroupOrder = disp.groupOrder || 'collection';
+    var currentTagPrefixes = null; // null = utiliser fc.tagPrefixes
 
     function onTabChange(tab) {
       updateTabClass(tab.labelIcon ? (tab.label || '') : (tab.label || ''));
@@ -1101,13 +1127,14 @@
       if (tab.layout !== undefined) { currentLayout = tab.layout; } else { currentLayout = dispLayout; }
       if (tab.groups    !== undefined) { currentGroups    = tab.groups;    } else { currentGroups    = (disp.groups && disp.groups.length) ? disp.groups : null; }
       if (tab.groupBy   !== undefined) { currentGroupBy   = tab.groupBy;   } else { currentGroupBy   = disp.groupBy    || null; }
-      if (tab.groupOrder !== undefined) { currentGroupOrder = tab.groupOrder; } else { currentGroupOrder = disp.groupOrder || 'collection'; }
+      if (tab.groupOrder   !== undefined) { currentGroupOrder  = tab.groupOrder;   } else { currentGroupOrder  = disp.groupOrder  || 'collection'; }
+      if (tab.tagPrefixes !== undefined) { currentTagPrefixes = tab.tagPrefixes; } else { currentTagPrefixes = null; }
       // grid sera mis à jour dans render() via currentLayout
     }
 
     var filterWrapper = buildFilterBar(rawItems, cfg, function(f) {
       activeFilters = f; currentPage = 1; render(true);
-    }, onTabChange);
+    }, onTabChange, function() { return currentTagPrefixes; });
 
     var gridClass = dispLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid';
     var grid    = el('div', { class: gridClass });
@@ -1152,7 +1179,8 @@
         if (initTab.layout !== undefined) currentLayout = initTab.layout;
         if (initTab.groups     !== undefined) currentGroups    = initTab.groups;
         if (initTab.groupBy   !== undefined) currentGroupBy   = initTab.groupBy;
-        if (initTab.groupOrder !== undefined) currentGroupOrder = initTab.groupOrder;
+        if (initTab.groupOrder   !== undefined) currentGroupOrder  = initTab.groupOrder;
+        if (initTab.tagPrefixes !== undefined) currentTagPrefixes = initTab.tagPrefixes;
       }
     }
 
