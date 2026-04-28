@@ -105,11 +105,15 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
 
 .sqb-filter-group--tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   border-bottom: 1px solid var(--tweak-line-block-line-color, var(--paragraphMediumColor));
   margin-bottom: 1.25rem;
 }
+.sqb-filter-group--tabs::-webkit-scrollbar { display: none; }
 
 .sqb-tab-btn {
   appearance: none;
@@ -118,14 +122,54 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
   background: transparent;
   color: var(--paragraphMediumColor);
   font: inherit;
+  font-size: 0.9em;
   padding: 0.5em 1.25em;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   opacity: 0.5;
   margin-bottom: -1px;
   transition: opacity 0.2s ease, border-color 0.2s ease;
 }
+@media (max-width: 639px) {
+  .sqb-tab-btn { padding: 0.5em 0.75em; }
+}
 .sqb-tab-btn:hover   { opacity: 0.8; }
 .sqb-tab-btn--active { opacity: 1; border-bottom-color: var(--paragraphMediumColor); }
+
+
+/* ─────────────────────────────────────────────
+   TABS + BOUTON FILTRER sur la même ligne
+   Quand mobilePanelBreakpoint: 'always', le bouton
+   Filtrer s'aligne à droite des tabs.
+   La classe .sqb-filters--tabs-with-toggle est ajoutée
+   par le JS quand les deux coexistent.
+   ───────────────────────────────────────────── */
+
+.sqb-tabs-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--tweak-line-block-line-color, var(--paragraphMediumColor));
+  margin-bottom: 1.25rem;
+}
+
+.sqb-tabs-row .sqb-filter-group--tabs {
+  border-bottom: none;
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.sqb-tabs-row .sqb-mobile-toggle {
+  flex-shrink: 0;
+  width: auto;
+  margin-bottom: 4px;
+  font-size: 0.8em;
+  padding: 0.3em 0.9em;
+  opacity: 0.5;
+}
+.sqb-tabs-row .sqb-mobile-toggle:hover { opacity: 1; }
 
 /* ─────────────────────────────────────────────
    FILTRES — wrapper + sticky
