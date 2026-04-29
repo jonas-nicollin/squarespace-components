@@ -186,8 +186,14 @@
   function normalizePrefixes(tagPrefixes, globalLayout) {
     if (!Array.isArray(tagPrefixes)) return [];
     return tagPrefixes.map(function(p) {
-      if (typeof p === 'string') return { prefix: p, layout: globalLayout || 'pills', showLabel: true, order: null };
-      return { prefix: p.prefix, layout: p.layout || globalLayout || 'pills', showLabel: p.showLabel !== false, order: p.order || null };
+      if (typeof p === 'string') return { prefix: p, layout: globalLayout || 'pills', showLabel: true, order: null, filterFormat: null };
+      return {
+        prefix:       p.prefix,
+        layout:       p.layout       || globalLayout || 'pills',
+        showLabel:    p.showLabel    !== false,
+        order:        p.order        || null,
+        filterFormat: p.filterFormat || null,  // format des valeurs dans le filtre
+      };
     });
   }
 
@@ -683,7 +689,7 @@
     return keys;
   }
 
-  function renderGrouped(items, cfg, grid) {
+  function renderGrouped(items, cfg, grid, activeGroupFilter) {
     var groupBy = (cfg.display && cfg.display.groupBy) || null;
     var groupOrder = (cfg.display && cfg.display.groupOrder) || 'collection';
     var idx = 0;
@@ -702,6 +708,8 @@
       }
       if (!keys.length) keys = [getGroupKey(item, groupBy)];
       keys.forEach(function(key) {
+        // Si un filtre de groupe est actif, ne placer l'item que dans le groupe correspondant
+        if (activeGroupFilter && norm(key) !== norm(activeGroupFilter)) return;
         if (!groups.has(key)) { groups.set(key, []); orderedKeys.push(key); }
         groups.get(key).push(item);
       });
@@ -909,13 +917,14 @@
     function resetSec() { state.category = null; state.tags = {}; state.search = ''; }
 
     // ── Pills ──────────────────────────────────────────────────────────────
-    function buildPillGroup(vals, label, showLabel, getCurrent, onSelect) {
+    function buildPillGroup(vals, displayVals, label, showLabel, getCurrent, onSelect) {
       var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--pills' });
       if (showLabel && label) { var lbl = el('span', { class: 'sqb-filter-label' }); lbl.textContent = label; wrap.appendChild(lbl); }
-      vals.forEach(function(v) {
+      vals.forEach(function(v, vi) {
+        var dv = (displayVals && displayVals[vi]) ? displayVals[vi] : v;
         var active = getCurrent() !== null && norm(String(v)) === norm(String(getCurrent()));
         var btn = el('button', { class: 'sqb-filter-btn' + (active ? ' sqb-filter-btn--active' : ''), type: 'button' });
-        setText(btn, v);
+        setText(btn, dv);
         btn.addEventListener('click', function() {
           var isCurrent = norm(String(v)) === norm(String(getCurrent() || ''));
           onSelect(isCurrent ? null : v);
@@ -929,12 +938,13 @@
     }
 
     // ── Dropdown ───────────────────────────────────────────────────────────
-    function buildDropdown(vals, label, getCurrent, onSelect) {
+    function buildDropdown(vals, displayVals, label, getCurrent, onSelect) {
       var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--dropdown' });
       var sel  = el('select', { class: 'sqb-filter-select', 'aria-label': label });
       var o0   = el('option', { value: '' }); o0.textContent = label + ': ' + i18n.all; sel.appendChild(o0);
-      vals.forEach(function(v) {
-        var o = el('option', { value: v }); o.textContent = v;
+      vals.forEach(function(v, vi) {
+        var dv = (displayVals && displayVals[vi]) ? displayVals[vi] : v;
+        var o = el('option', { value: v }); o.textContent = dv;
         if (getCurrent() && norm(v) === norm(getCurrent())) o.selected = true;
         sel.appendChild(o);
       });
@@ -956,7 +966,7 @@
         if (catsOrder) cats = applyCustomOrder(cats, catsOrder);
         if (cats.length > 1) {
           if (fc.defaultCategory && state.category == null) state.category = fc.defaultCategory;
-          var grp = buildPillGroup(cats, catsLabel, catsShowLbl,
+          var grp = buildPillGroup(cats, null, catsLabel, catsShowLbl,
             function() { return state.category; },
             function(v) { state.category = v; resetOtherFilters('category', null); });
           grp.classList.add('sqb-filter-group--cats'); container.appendChild(grp);
@@ -968,17 +978,20 @@
         var raw  = uniqBy(pool.reduce(function(a, i) { return a.concat(getTagValuesByPrefix(i, pd.prefix)); }, []).filter(Boolean), norm);
         var vals = sortTagValues(raw, pd.prefix, datePrefix);
         if (pd.order) vals = applyCustomOrder(vals, pd.order);
+        // Formater les valeurs pour l'affichage dans le filtre (tout en gardant la valeur brute pour le match)
+        var fmt = pd.filterFormat || (datePrefix && norm(pd.prefix) === norm(datePrefix) ? 'day' : null);
+        var displayVals = fmt ? vals.map(function(v) { return formatISOTag(v, fmt) || v; }) : vals;
         if (!vals.length) return;
         var defVal = fc.defaultTags && fc.defaultTags[pd.prefix];
         if (defVal && !state.tags[pd.prefix]) state.tags[pd.prefix] = defVal;
         var grp;
         (function(prefix) {
           if (pd.layout === 'dropdown') {
-            grp = buildDropdown(vals, prefix,
+            grp = buildDropdown(vals, displayVals, prefix,
               function() { return state.tags[prefix] || null; },
               function(v) { state.tags[prefix] = v; resetOtherFilters('tag', prefix); });
           } else {
-            grp = buildPillGroup(vals, prefix, pd.showLabel,
+            grp = buildPillGroup(vals, displayVals, prefix, pd.showLabel,
               function() { return state.tags[prefix] || null; },
               function(v) { state.tags[prefix] = v; resetOtherFilters('tag', prefix); });
           }
@@ -1177,8 +1190,7 @@
       var isAbove = rect.top < 0;
       var isBelow = rect.top > window.innerHeight;
       if (isAbove || isBelow) {
-        // Scroller vers le wrapper de filtres (inclut les filtres sticky)
-        var scrollTarget = filterWrapper || grid;
+        var scrollTarget = (filterWrapper && filterWrapper.parentNode) ? filterWrapper : grid;
         scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }
@@ -1281,7 +1293,16 @@
             groupOrder: currentGroupOrder,
           }) })
         : cfg;
-      renderGrouped(shown, cfgForRender, grid);
+      // Filtre de groupe actif : si on filtre par le datePrefix, ne montrer que ce groupe
+      var activeGroupFilter = null;
+      if (currentGroupBy && currentGroupBy.tagPrefix && activeFilters.tags) {
+        activeGroupFilter = activeFilters.tags[currentGroupBy.tagPrefix] || null;
+        // Si la valeur est ISO, extraire la date part pour correspondre au groupe
+        if (activeGroupFilter && currentGroupBy.groupByDay) {
+          activeGroupFilter = getISODatePart(activeGroupFilter) || activeGroupFilter;
+        }
+      }
+      renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
       if ((cfgForRender.display || disp).fadeIn !== false) {
         var cards = grid.querySelectorAll('.sqb-card');
         cards.forEach(function(c, i) {
