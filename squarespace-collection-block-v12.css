@@ -186,6 +186,8 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
   position: sticky;
   top: var(--sqb-sticky-top, var(--header-height, 0px));
   z-index: 10;
+  /* Masquer le demi-pixel qui laisse passer les items sous le sticky */
+  box-shadow: 0 -2px 0 0 var(--siteBackgroundColor);
 }
 
 .sqb-filters-wrapper--is-sticky {
@@ -333,10 +335,22 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
   cursor: pointer;
   opacity: 0.5;
   padding: 0.3em 0;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
 }
 .sqb-clear-all:hover { opacity: 1; }
+
+/* Dans le panneau : à gauche dans le header */
+.sqb-mobile-panel-header {
+  justify-content: space-between; /* clearAll à gauche, close à droite */
+}
+.sqb-clear-all--panel {
+  font-size: 0.85em;
+  text-decoration: none;
+  opacity: 0.6;
+}
+.sqb-clear-all--panel .sqb-icon { font-size: 1em; }
 
 /* ─────────────────────────────────────────────
    PANNEAU MOBILE (téléporté dans body)
@@ -363,13 +377,16 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
 body.sqb-panel-open { overflow: hidden; }
 
 .sqb-mobile-panel {
-  display: none;
+  display: block;             /* toujours dans le DOM, caché par transform */
   position: fixed;
   inset: 0;
   background: var(--siteBackgroundColor);
   color: var(--paragraphMediumColor);
   z-index: 9999;
   overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform 0.3s ease, visibility 0.3s ease;
+  visibility: hidden;
   font-family:    var(--body-font-font-family);
   font-style:     var(--body-font-font-style);
   font-weight:    var(--body-font-font-weight);
@@ -377,7 +394,10 @@ body.sqb-panel-open { overflow: hidden; }
   text-transform: var(--body-font-text-transform);
   line-height:    var(--body-font-line-height, 1.5);
 }
-.sqb-mobile-panel--open { display: block; }
+.sqb-mobile-panel--open {
+  transform: translateY(0);
+  visibility: visible;
+}
 body.sqb-panel-open { overflow: hidden; }
 
 .sqb-mobile-panel-inner {
@@ -390,7 +410,8 @@ body.sqb-panel-open { overflow: hidden; }
 
 .sqb-mobile-panel-header {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 0.5rem;
 }
 
