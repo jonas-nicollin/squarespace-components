@@ -690,9 +690,21 @@
     if (!groupBy) { items.forEach(function(item) { grid.appendChild(buildCard(item, cfg, idx++)); }); return; }
     var orderedKeys = [], groups = new Map();
     items.forEach(function(item) {
-      var key = getGroupKey(item, groupBy);
-      if (!groups.has(key)) { groups.set(key, []); orderedKeys.push(key); }
-      groups.get(key).push(item);
+      // Multi-placement : si groupByDay et item a plusieurs dates,
+      // l'insérer dans chaque groupe jour (pas de duplication des données)
+      var keys = [];
+      if (groupBy.groupByDay && groupBy.tagPrefix) {
+        var allVals = getTagValuesByPrefix(item, groupBy.tagPrefix);
+        allVals.forEach(function(v) {
+          var part = getISODatePart(v) || v;
+          if (keys.indexOf(part) === -1) keys.push(part);
+        });
+      }
+      if (!keys.length) keys = [getGroupKey(item, groupBy)];
+      keys.forEach(function(key) {
+        if (!groups.has(key)) { groups.set(key, []); orderedKeys.push(key); }
+        groups.get(key).push(item);
+      });
     });
     sortGroupKeys(orderedKeys, groupOrder).forEach(function(key) {
       var gi = groups.get(key) || []; if (!gi.length) return;
@@ -832,6 +844,11 @@
       all: 'Tout', searchPlaceholder: 'Rechercher\u2026',
       filterToggle: 'Filtrer', filterClose: 'close',
     }, cfg.i18n || {});
+    // Passer clearAll au panneau mobile via i18n interne
+    if (fc.clearAll) {
+      i18n._hasClearAll  = true;
+      i18n._clearAllText = typeof fc.clearAll === 'string' ? fc.clearAll : 'Tout effacer';
+    }
     var prefixDefs   = normalizePrefixes(fc.tagPrefixes, globalLayout);
     var useMobilePanel     = fc.mobilePanel === true;
     var mobilePanelBp      = fc.mobilePanelBreakpoint === 'always' ? Infinity : Number(fc.mobilePanelBreakpoint || 768);
@@ -849,7 +866,9 @@
       var t = {}; Object.keys(state.tags).forEach(function(k) { t[k] = state.tags[k]; });
       onFilter({ tab: state.tab, category: state.category, tags: t, search: state.search });
       updateToggleBadge();
-      if (clearAllBtn) clearAllBtn.style.display = countActive() > 0 ? '' : 'none';
+      var hasActive = countActive() > 0;
+      if (clearAllBtn) clearAllBtn.style.display = hasActive ? '' : 'none';
+      if (typeof panelClearBtn !== 'undefined' && panelClearBtn) panelClearBtn.style.display = hasActive ? '' : 'none';
     }
 
     // resetOtherFilters : si fc.resetOthers === true, vide catégorie + tags + search sauf le filtre courant
@@ -1023,7 +1042,6 @@
       clearAllBtn.addEventListener('click', function() {
         state.category = null; state.tags = {}; state.search = '';
         secondaryEl.innerHTML = ''; appendSecondary(tabPool(), secondaryEl);
-        clearAllBtn.style.display = 'none';
         emit();
       });
       bar.appendChild(clearAllBtn);
@@ -1033,6 +1051,7 @@
     if (useMobilePanel) {
       toggleBtn = el('button', { class: 'sqb-mobile-toggle', type: 'button' });
       toggleBtn.textContent = i18n.filterToggle;
+      toggleBtn.style.display = 'none'; // masqué jusqu'à checkBreakpoint
 
       // Si tabs présents, placer le bouton à côté — sinon en ligne séparée
       var tabsGroupEl = bar.querySelector('.sqb-filter-group--tabs');
@@ -1058,6 +1077,8 @@
         if (shouldBeMobile === isMobileMode) return;
         isMobileMode = shouldBeMobile;
         wrapper.classList.toggle('sqb-filters--mobile-mode', isMobileMode);
+        // Afficher/masquer le toggle selon le mode
+        if (toggleBtn) toggleBtn.style.display = isMobileMode ? '' : 'none';
       }
       checkBreakpoint();
       if ('ResizeObserver' in window) {
@@ -1303,6 +1324,14 @@
   function init() {
     var configs = Array.isArray(window.SQB_CONFIGS) ? window.SQB_CONFIGS : [];
     if (!configs.length) return;
+    // Trier par position DOM (order visuel) — targets absents en dernier
+    configs = configs.slice().sort(function(a, b) {
+      var ta = document.querySelector(a.target || '');
+      var tb = document.querySelector(b.target || '');
+      var ya = ta ? ta.getBoundingClientRect().top + window.scrollY : Infinity;
+      var yb = tb ? tb.getBoundingClientRect().top + window.scrollY : Infinity;
+      return ya - yb;
+    });
     configs.forEach(function(cfg) {
       runConfig(cfg).catch(function(err) { if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err); });
     });
