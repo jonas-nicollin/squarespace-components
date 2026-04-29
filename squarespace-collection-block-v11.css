@@ -180,6 +180,14 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
   margin-bottom: 2rem;
 }
 
+/* Sticky actif — position définie ici, pas inline
+   → --header-height (script externe) est résolu dynamiquement */
+.sqb-filters-wrapper--sticky {
+  position: sticky;
+  top: var(--sqb-sticky-top, var(--header-height, 0px));
+  z-index: 10;
+}
+
 .sqb-filters-wrapper--is-sticky {
   background: var(--siteBackgroundColor);
   box-shadow: 0 1px 0 var(--tweak-line-block-line-color, rgba(0,0,0,0.1));
@@ -438,7 +446,7 @@ body.sqb-panel-open { overflow: hidden; }
   display: grid;
   grid-template-columns: 1fr;
   gap: 1.5rem;
-  scroll-margin-top: var(--sqb-scroll-margin, 3rem);
+  scroll-margin-top: var(--sqb-scroll-margin, var(--header-height, 0px));
 }
 @media (min-width: 640px)  { .sqb-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1024px) { .sqb-grid { grid-template-columns: repeat(3, 1fr); } }
