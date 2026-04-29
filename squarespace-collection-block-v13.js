@@ -847,7 +847,7 @@
     // Passer clearAll au panneau mobile via i18n interne
     if (fc.clearAll) {
       i18n._hasClearAll  = true;
-      i18n._clearAllText = typeof fc.clearAll === 'string' ? fc.clearAll : 'Tout effacer';
+      i18n._clearAllText = typeof fc.clearAll === 'string' ? fc.clearAll : 'R\u00e9initialiser';
     }
     var prefixDefs   = normalizePrefixes(fc.tagPrefixes, globalLayout);
     var useMobilePanel     = fc.mobilePanel === true;
@@ -867,7 +867,11 @@
       onFilter({ tab: state.tab, category: state.category, tags: t, search: state.search });
       updateToggleBadge();
       var hasActive = countActive() > 0;
-      if (clearAllBtn) clearAllBtn.style.display = hasActive ? '' : 'none';
+      // clearAllBtn dans la barre : masqué si le panneau est toujours actif (tout passe par le panneau)
+      if (clearAllBtn) {
+        var alwaysPanel = mobilePanelBp === Infinity;
+        clearAllBtn.style.display = (hasActive && !alwaysPanel) ? '' : 'none';
+      }
       if (typeof panelClearBtn !== 'undefined' && panelClearBtn) panelClearBtn.style.display = hasActive ? '' : 'none';
     }
 
@@ -1037,7 +1041,7 @@
     var clearAllBtn = null;
     if (fc.clearAll) {
       clearAllBtn = el('button', { class: 'sqb-clear-all', type: 'button' });
-      clearAllBtn.textContent = typeof fc.clearAll === 'string' ? fc.clearAll : 'Tout effacer';
+      clearAllBtn.textContent = typeof fc.clearAll === 'string' ? fc.clearAll : 'R\u00e9initialiser';
       clearAllBtn.style.display = 'none';
       clearAllBtn.addEventListener('click', function() {
         state.category = null; state.tags = {}; state.search = '';
