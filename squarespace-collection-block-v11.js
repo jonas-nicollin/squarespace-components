@@ -739,9 +739,13 @@
 
   function setupSticky(sentinel, wrapper, stickyTop) {
     if (!('IntersectionObserver' in window)) return;
-    wrapper.style.position = 'sticky';
-    wrapper.style.top      = stickyTop || '0px';
-    wrapper.style.zIndex   = '10';
+    // Appliquer sticky via classe CSS — top défini par variable CSS
+    // → permet à --header-height de s'appliquer dynamiquement sans JS
+    wrapper.classList.add('sqb-filters-wrapper--sticky');
+    if (stickyTop && stickyTop !== '0px') {
+      // Valeur custom (ex: 'var(--header-height, 0px)') → injectée comme var CSS locale
+      wrapper.style.setProperty('--sqb-sticky-top', stickyTop);
+    }
     new IntersectionObserver(function(entries) {
       wrapper.classList.toggle('sqb-filters-wrapper--is-sticky', !entries[0].isIntersecting);
     }, { threshold: 0 }).observe(sentinel);
@@ -1144,8 +1148,13 @@
     function scrollToGrid() {
       if (!scrollOnFilter) return;
       var rect = grid.getBoundingClientRect();
-      if (rect.top < 0 || rect.top > window.innerHeight * 0.5) {
-        grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Scroller seulement si la grille est hors du viewport (au-dessus ou en dessous)
+      var isAbove = rect.top < 0;
+      var isBelow = rect.top > window.innerHeight;
+      if (isAbove || isBelow) {
+        // Scroller vers le wrapper de filtres (inclut les filtres sticky)
+        var scrollTarget = filterWrapper || grid;
+        scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }
 
