@@ -845,6 +845,7 @@
       var t = {}; Object.keys(state.tags).forEach(function(k) { t[k] = state.tags[k]; });
       onFilter({ tab: state.tab, category: state.category, tags: t, search: state.search });
       updateToggleBadge();
+      if (clearAllBtn) clearAllBtn.style.display = countActive() > 0 ? '' : 'none';
     }
 
     // resetOtherFilters : si fc.resetOthers === true, vide catégorie + tags + search sauf le filtre courant
@@ -921,13 +922,14 @@
       if (fc.categories !== false) {
         var catsCfg      = (fc.categories && typeof fc.categories === 'object') ? fc.categories : {};
         var catsOrder    = catsCfg.order    || null;
-        var catsShowLbl  = catsCfg.showLabel !== false; // true par défaut
+        var catsShowLbl  = catsCfg.showLabel !== false;
+        var catsLabel    = catsCfg.label    || 'Cat\u00e9gorie';
         var cats = uniqBy(pool.reduce(function(a, i) { return a.concat(i.categories); }, []).filter(Boolean), norm)
           .sort(function(a, b) { return norm(a).localeCompare(norm(b)); });
         if (catsOrder) cats = applyCustomOrder(cats, catsOrder);
         if (cats.length > 1) {
           if (fc.defaultCategory && state.category == null) state.category = fc.defaultCategory;
-          var grp = buildPillGroup(cats, 'Cat\u00e9gorie', catsShowLbl,
+          var grp = buildPillGroup(cats, catsLabel, catsShowLbl,
             function() { return state.category; },
             function(v) { state.category = v; resetOtherFilters('category', null); });
           grp.classList.add('sqb-filter-group--cats'); container.appendChild(grp);
@@ -1007,6 +1009,21 @@
     secondaryEl = el('div', { class: 'sqb-filters-secondary' });
     appendSecondary(tabPool(), secondaryEl);
     bar.appendChild(secondaryEl);
+
+    // ── Bouton clearAll (optionnel) ─────────────────────────────────────────
+    var clearAllBtn = null;
+    if (fc.clearAll) {
+      clearAllBtn = el('button', { class: 'sqb-clear-all', type: 'button' });
+      clearAllBtn.textContent = typeof fc.clearAll === 'string' ? fc.clearAll : 'Tout effacer';
+      clearAllBtn.style.display = 'none';
+      clearAllBtn.addEventListener('click', function() {
+        state.category = null; state.tags = {}; state.search = '';
+        secondaryEl.innerHTML = ''; appendSecondary(tabPool(), secondaryEl);
+        clearAllBtn.style.display = 'none';
+        emit();
+      });
+      bar.appendChild(clearAllBtn);
+    }
 
     // ── Bouton mobile ─────────────────────────────────────────────────────
     if (useMobilePanel) {
