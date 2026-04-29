@@ -309,6 +309,27 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
   min-width: 1.4em; height: 1.4em; padding: 0 0.2em;
 }
 
+
+/* ─────────────────────────────────────────────
+   BOUTON TOUT EFFACER (clearAll)
+   Visible uniquement quand un filtre est actif
+   ───────────────────────────────────────────── */
+
+.sqb-clear-all {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.8em;
+  color: var(--paragraphMediumColor);
+  cursor: pointer;
+  opacity: 0.5;
+  padding: 0.3em 0;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.sqb-clear-all:hover { opacity: 1; }
+
 /* ─────────────────────────────────────────────
    PANNEAU MOBILE (téléporté dans body)
    ───────────────────────────────────────────── */
