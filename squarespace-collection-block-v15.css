@@ -484,6 +484,10 @@ body.sqb-panel-open { overflow: hidden; }
 .sqb-grid--list .sqb-card__excerpt { display: none; }
 
 /* Groupe visuel */
+.sqb-group-heading--past {
+  opacity: 0.4;
+}
+
 .sqb-group-heading {
   font-size: 0.8em; opacity: 0.5;
   color: var(--paragraphMediumColor);
