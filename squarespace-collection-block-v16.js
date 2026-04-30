@@ -299,6 +299,7 @@
       categories:   (raw.categories || []).map(cleanHTML).filter(Boolean),
       tags:         (raw.tags || []).map(cleanHTML).filter(Boolean),
       excerpt:      truncate(raw.excerpt || raw.body || '', 160),
+      excerptRaw:   raw.excerpt || raw.body || '',
       location:     loc ? cleanHTML(loc.addressTitle || loc.addressLine1 || '') : '',
       displayIndex: Number(raw.displayIndex != null ? raw.displayIndex : 999999),
       timestamp:    Number(raw.startDate || raw.publishOn || raw.addedOn || raw.updatedOn || 0),
@@ -453,7 +454,14 @@
     }
     if (type === 'excerpt') {
       if (!item.excerpt) return null;
-      var p = el('p', { class: 'sqb-card__excerpt' }); p.textContent = item.excerpt; return p;
+      var p = el('p', { class: 'sqb-card__excerpt' });
+      // excerptHTML: true → injecter HTML nettoyé (préserve br, h2-h6, strong, etc.)
+      if (def && def.excerptHTML) {
+        p.innerHTML = sanitizeHTML(item.excerptRaw || item.excerpt);
+      } else {
+        p.textContent = item.excerpt;
+      }
+      return p;
     }
     if (type === 'location') {
       if (!item.location) return null;
@@ -671,6 +679,37 @@
     } catch (_) { return dateStr; }
   }
 
+
+  // Nettoyage HTML léger : conserve br, p, h2-h6, strong, em, a
+  // Retire scripts, iframes, onclick, etc.
+  function sanitizeHTML(html) {
+    var allowed = /^(br|p|h[1-6]|strong|em|b|i|u|a|ul|ol|li|span|div)$/i;
+    var d = document.createElement('div');
+    d.innerHTML = String(html || '');
+    (function clean(node) {
+      var toRemove = [];
+      node.childNodes.forEach(function(child) {
+        if (child.nodeType === 1) {
+          if (!allowed.test(child.tagName)) {
+            toRemove.push(child);
+          } else {
+            // Retirer les attributs dangereux
+            ['onclick','onerror','onload','src','href'].forEach(function(attr) {
+              if (attr === 'href') return; // conserver href sur <a>
+              child.removeAttribute(attr);
+            });
+            clean(child);
+          }
+        }
+      });
+      toRemove.forEach(function(n) {
+        // Remplacer par son contenu texte
+        n.parentNode.replaceChild(document.createTextNode(n.textContent), n);
+      });
+    })(d);
+    return d.innerHTML;
+  }
+
   /* ════════════════════════════════════
    * 8. GROUPBY VISUEL
    * ════════════════════════════════════ */
@@ -730,7 +769,11 @@
     // Tri chronologique des clés date + Aujourd'hui en premier + Passés en dernier
     var isDateKey = function(k) { return /^\d{4}-\d{2}-\d{2}$/.test(k); };
     var todayStr  = (function() {
-      var now = new Date();
+      // debug.mockDate: '2026-09-21' pour simuler un jour de festival
+      var dbg = cfg.debug;
+      var now = (dbg && typeof dbg === 'object' && dbg.mockDate)
+        ? new Date(dbg.mockDate + 'T00:00:00')
+        : new Date();
       return now.getFullYear() + '-' +
         String(now.getMonth()+1).padStart(2,'0') + '-' +
         String(now.getDate()).padStart(2,'0');
@@ -1083,8 +1126,9 @@
           tabGroup.querySelectorAll('.sqb-tab-btn').forEach(function(b) { b.classList.remove('sqb-tab-btn--active'); });
           btn.classList.add('sqb-tab-btn--active');
           state.tab = tab.filter || null;
-          resetSec(); rebuildSecondary();
-          if (onTabChange) onTabChange(tab);
+          resetSec();
+          if (onTabChange) onTabChange(tab);  // met à jour currentTagPrefixes
+          rebuildSecondary();                  // utilise les nouveaux tagPrefixes
           emit();
         });
         tabGroup.appendChild(btn);
@@ -1373,7 +1417,12 @@
       }
       if (mode === 'load-more') {
         var btn = setText(el('button', { class: 'sqb-load-more', type: 'button' }), i18n.loadMoreLabel);
-        btn.addEventListener('click', function() { currentPage++; render(false, true); });
+        btn.addEventListener('click', function() {
+          // Afficher loader pendant le rendu
+          btn.style.display = 'none';
+          footer.appendChild(buildLoader(false));
+          requestAnimationFrame(function() { currentPage++; render(false, true); });
+        });
         footer.appendChild(btn);
       } else if (mode === 'infinite' && 'IntersectionObserver' in window) {
         var infS = el('div', { class: 'sqb-sentinel', 'aria-hidden': 'true' });
