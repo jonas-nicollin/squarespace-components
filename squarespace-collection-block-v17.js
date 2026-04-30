@@ -1488,8 +1488,11 @@
       var total    = filtered.length;
       var shown    = filtered.slice(0, currentPage * perPage);
 
-      if (!fromPagination) grid.innerHTML = '';
-      footer.innerHTML = '';
+      // Important : on re-render toujours l'état complet.
+// Sinon, en pagination, shown contient les anciens items + les nouveaux,
+// et les anciennes cards sont ajoutées une deuxième fois.
+grid.innerHTML = '';
+footer.innerHTML = '';
 
       if (!shown.length) {
         setText(grid.appendChild(el('p', { class: 'sqb-empty' })), i18n.noResults);
