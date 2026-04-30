@@ -1,104 +1,215 @@
 /*!
- * Squarespace Query Block (Squarespace Collection Block (SQB) v12.0.0
- * Fetch JSON paginé · tabs · groupBy · sticky · hooks · lazy-load · cache
- * Compatible Weglot · zéro dépendance
+ * Squarespace Collection Block (SQB) v12
+ * Fetch JSON paginé · filtres · tabs · groupBy · sticky · hooks · masonry · cache
+ * https://github.com/jonas-nicollin/squarespace-components
  *
- * ─── RÉFÉRENCE CONFIGURATION ─────────────────────────────────────────────────
+ * ════════════════════════════════════════════════════════════════════
+ * RÉFÉRENCE CONFIGURATION — OPTIONS EXHAUSTIVES
+ * ════════════════════════════════════════════════════════════════════
  *
- * window.SQB_CONFIGS = [{
- *   key:     'programme',
- *   target:  '#sqb-programme',
- *   classes: 'ma-classe',
- *   enabled: true,
- *   debug:   false,
+ * window.SQB_CONFIGS = [ { ...cfg }, ... ]
+ * window.SQB_HOOKS   = { 'key': function(grid, items, cfg) {} }
  *
- *   sources: [{ path: '/programme-2026' }],
+ * ── STRUCTURE PRINCIPALE ─────────────────────────────────────────────
+ * {
+ *   key:     'mon-bloc',        // identifiant unique → classe sqb--mon-bloc + SQB_HOOKS
+ *   target:  '#sqb-mon-bloc',   // sélecteur CSS du conteneur
+ *   label:   'SQB — Mon bloc',  // texte du badge éditeur (data-sqb-label sur le conteneur)
+ *   classes: 'ma-classe',       // classes CSS supplémentaires sur le conteneur
  *
+ * ── HEADING (titre + CTA au-dessus du bloc) ──────────────────────────
+ *   heading: {
+ *     text: 'Titre du bloc',      // optionnel — si absent, seul le CTA est rendu
+ *     tag:  'h2',                 // balise HTML : h1–h6, p (défaut: h3)
+ *     cta: {
+ *       text:     'Voir tout',    // texte du lien
+ *       href:     '/collection',  // URL
+ *       position: 'inline',       // 'inline' (à droite du titre) | 'below' (bouton centré sous la grille)
+ *       newTab:   false,          // ouvrir dans un nouvel onglet
+ *     },
+ *   },
+ *
+ * ── SOURCES ──────────────────────────────────────────────────────────
+ *   sources: [
+ *     { path: '/ma-collection' }, // chemin JSON Squarespace (plusieurs sources possibles)
+ *   ],
+ *
+ * ── PRÉ-FILTRE (appliqué avant tout filtrage UI) ─────────────────────
  *   preFilter: {
- *     categories:        ['Exposition'],
- *     excludeCategories: ['Brouillon'],
- *     tagValues:         [{ prefix: 'Sélection', value: 'Homepage' }],
+ *     categories:        ['Cat A'],                    // inclure seulement ces catégories
+ *     excludeCategories: ['Cat B'],                    // exclure ces catégories
+ *     tagValues: [                                     // inclure seulement si ces tags présents
+ *       { prefix: 'Statut', value: 'Case Study' },    // AND entre plusieurs tagValues
+ *     ],
  *   },
  *
- *   filters: false,  // ou :
+ * ── FILTRES UI ───────────────────────────────────────────────────────
+ *   filters: false,   // pas de filtres
+ *   // — ou —
  *   filters: {
- *     position:  'top',         // 'top' | 'sidebar'
- *     sticky:    true,
- *     stickyTop: '0px',
- *     scrollOnFilter: true,     // scroll vers la grille au changement de filtre
+ *     sticky:   true,             // filtre collant au scroll
+ *     stickyTop: 'var(--header-height, 0px)',  // top du filtre sticky (CSS ou valeur px)
+ *     scrollOnFilter: true,       // scroll vers la grille après filtrage
+ *     clearAll: true,             // bouton "Réinitialiser" (true | 'Mon texte')
+ *     resetOthers: true,          // réinitialiser les autres filtres au clic
  *
- *     mobilePanel:           true,   // panneau mobile (défaut true)
- *     mobilePanelBreakpoint: 768,    // px sous lequel le panneau s'active
+ *     // ── Panel mobile ───────────────────────────────────────────────
+ *     mobilePanel:           true,      // bouton Filtrer + panneau overlay
+ *     mobilePanelBreakpoint: 768,       // sous cette largeur (px) | 'always' | false
  *
+ *     // ── Tabs ───────────────────────────────────────────────────────
  *     tabs: [
- *       { label: 'Expositions', filter: { categories: ['Exposition'] } },
- *       { label: 'Événements',  filter: { categories: ['Talk'] } },
+ *       {
+ *         label:      'Tab A',           // texte du bouton (optionnel si labelIcon)
+ *         labelIcon:  'grid_view',       // icône Material Symbols (remplace le texte)
+ *         layout:     'grid',            // surcharge display.layout pour ce tab
+ *         filter:     {                  // filtre appliqué à ce tab (null = tous)
+ *           categories:        ['Cat A'],
+ *           excludeCategories: ['Cat B'],
+ *           tagValues: [{ prefix: 'P', value: 'V' }],
+ *         },
+ *         sort:       { type: 'date', direction: 'asc' },  // surcharge sort pour ce tab
+ *         groups:     [...],             // surcharge display.groups pour ce tab
+ *         groupBy:    { tagPrefix: 'Date', groupByDay: true, groupLabelFormat: 'date' },
+ *         groupOrder: 'collection',      // surcharge display.groupOrder pour ce tab
+ *         tagPrefixes: [...],            // filtres secondaires propres à ce tab
+ *       },
  *     ],
- *     defaultTab: 0,
+ *     defaultTab: 0,   // index du tab actif au chargement
  *
- *     categories:      true,
- *     defaultCategory: null,
+ *     // ── Catégories ─────────────────────────────────────────────────
+ *     categories: false,    // masquer
+ *     categories: true,     // afficher (label: 'Catégorie')
+ *     categories: {
+ *       label:     'Programme',   // label personnalisé
+ *       showLabel: true,          // afficher le label
+ *       order:     ['Cat A', 'Cat B'],  // ordre custom (reste en alpha après)
+ *     },
  *
- *     // tagPrefixes : string[] ou object[] avec layout individuel
+ *     // ── Tag préfixes (filtres secondaires) ─────────────────────────
  *     tagPrefixes: [
- *       { prefix: 'Zone', layout: 'pills',    showLabel: true },
- *       { prefix: 'Date', layout: 'pills',    showLabel: true },
- *       { prefix: 'Lieu', layout: 'dropdown', showLabel: true },
+ *       {
+ *         prefix:       'Zone',          // préfixe du tag Squarespace
+ *         layout:       'pills',         // 'pills' | 'dropdown'
+ *         showLabel:    true,            // afficher le label du groupe
+ *         order:        ['Val A'],       // ordre custom des valeurs
+ *         filterFormat: 'day',           // format d'affichage dans le filtre (voir Formats dates)
+ *       },
  *     ],
- *     datePrefix: 'Date',
- *     defaultTags: {},
- *     search: true,
+ *     datePrefix: 'Date',    // préfixe traité comme date (tri chronologique auto)
+ *
+ *     // ── Recherche ──────────────────────────────────────────────────
+ *     search: true,   // activer le champ de recherche
+ *
+ *     // ── i18n (textes UI) ───────────────────────────────────────────
+ *     // (voir section i18n ci-dessous)
  *   },
  *
+ * ── AFFICHAGE ────────────────────────────────────────────────────────
  *   display: {
  *     layout:   'grid',   // 'grid' | 'list'
- *     counter:  true,
- *     cardLink: true,
+ *     counter:  true,     // afficher le compteur de résultats
+ *     cardLink: true,     // la card entière est cliquable (true par défaut)
+ *     fadeIn:   true,     // animation d'apparition des cartes (true par défaut)
  *
- *     groupBy:    null,   // null | 'category' | { tagPrefix: 'Date' }
- *     groupOrder: 'collection',
+ *     // ── Classes sur les cartes ─────────────────────────────────────
+ *     cardClasses: {
+ *       categories: true,             // sqb-cat--[slug] sur chaque card
+ *       tagPrefixes: ['Statut'],      // sqb-tag--statut--[slug] sur chaque card
+ *     },
  *
- *     // Rendu par groupes sémantiques
- *     // Enfants : 'image' | 'title' | 'categories' | 'excerpt' | 'location'
- *     //   { type: 'tagPrefix', prefix: 'Lieu', label: 'Lieu', labelIcon: 'pin_drop', joinWith: '\n' }
+ *     // ── Groupement visuel ──────────────────────────────────────────
+ *     groupBy: null,              // pas de groupement
+ *     groupBy: 'category',        // grouper par catégorie
+ *     groupBy: {
+ *       tagPrefix:       'Date',  // grouper par valeur de ce préfixe
+ *       groupByDay:      true,    // extraire la date (YYYY-MM-DD) pour grouper par jour
+ *       groupLabelFormat: 'date', // format du titre de groupe (voir Formats dates)
+ *     },
+ *     groupOrder: 'collection',   // 'collection' | 'alpha' | ['Val A', 'Val B']
+ *
+ *     // ── Groupes de contenu dans la carte ──────────────────────────
  *     groups: [
- *       { role: 'media', children: ['image'] },
- *       { role: 'body',  children: [
- *           'categories', 'title',
- *           { type: 'tagPrefix', prefix: 'Numéro', label: 'Étape' },
- *           { type: 'tagPrefix', prefix: 'Lieu',   labelIcon: 'pin_drop' },
- *           { type: 'tagPrefix', prefix: 'Date',   labelIcon: 'event', joinWith: '\n' },
- *       ]},
+ *       {
+ *         role: 'media',   // 'media' | 'header' | 'body' | 'meta' | 'footer'
+ *         children: [
+ *           'image',        // image principale
+ *           'title',        // titre
+ *           'categories',   // catégories
+ *           { type: 'excerpt' },                          // extrait HTML (défaut)
+ *           { type: 'excerpt', excerptPlain: true },      // extrait texte brut
+ *           { type: 'tagPrefix',
+ *             prefix:        'Zone',       // préfixe du tag
+ *             label:         'Lieu',       // label affiché ('' pour masquer)
+ *             labelIcon:     'pin_drop',   // icône Material Symbols (remplace le label)
+ *             joinWith:      ', ',         // séparateur si plusieurs valeurs ('
+' pour retour ligne)
+ *             displayFormat: 'datetime',   // format d'affichage (voir Formats dates)
+ *             locale:        'fr-CH',      // surcharge de la locale
+ *           },
+ *         ],
+ *       },
  *     ],
- *
- *     // Rendu plat (si groups absent) :
- *     image: true, title: true, categories: true, excerpt: true, location: false,
- *     tagPrefixFields: [{ prefix: 'Lieu', label: '', labelIcon: 'pin_drop' }],
  *   },
  *
- *   // type: 'collection'|'date'|'title'|'category'|'random'|{ tagPrefix: 'Numéro' }
- *   sort: { type: { tagPrefix: 'Numéro' }, direction: 'asc' },
+ * ── TRI ──────────────────────────────────────────────────────────────
+ *   sort: {
+ *     type:      'collection',            // ordre de la collection Squarespace
+ *     type:      'date',                  // par date de publication
+ *     type:      'title',                 // alphabétique par titre
+ *     type:      'category',              // par première catégorie
+ *     type:      'random',                // aléatoire
+ *     type:      { tagPrefix: 'Numéro' }, // par valeur numérique de ce tag
+ *     direction: 'asc',                   // 'asc' | 'desc'
+ *   },
  *
+ * ── PAGINATION ───────────────────────────────────────────────────────
  *   pagination: {
- *     mode:          'load-more',  // 'load-more' | 'infinite' | 'none'
- *     perPage:       12,
- *     loadMoreLabel: 'Voir plus',
- *     endLabel:      false,
+ *     mode:          'load-more',    // 'load-more' | 'infinite' | 'none'
+ *     perPage:       12,             // items par page
+ *     loadMoreLabel: 'Voir plus',    // texte du bouton (défaut: 'Voir plus')
+ *     endLabel:      false,          // texte quand plus d'items (false = rien)
  *   },
  *
- *   performance: { maxPages: 10, sessionCache: true, sessionCacheTTL: 300 },
+ * ── PERFORMANCE ──────────────────────────────────────────────────────
+ *   performance: {
+ *     maxPages:        10,    // nombre max de pages JSON fetchées
+ *     sessionCache:    true,  // mettre en cache dans sessionStorage
+ *     sessionCacheTTL: 300,   // durée du cache en secondes
+ *   },
  *
+ * ── INTERNATIONALISATION ─────────────────────────────────────────────
  *   i18n: {
- *     loading:           false,   // false = animation | string = texte
- *     all:               'Tout',
+ *     loading:           false,         // texte pendant le chargement (false = aucun)
+ *     all:               'Tout',        // valeur "tous" dans les filtres
  *     noResults:         'Aucun résultat',
  *     searchPlaceholder: 'Rechercher…',
- *     filterToggle:      'Filtrer',
- *     filterClose:       'close',  // nom icône Material Symbols ou texte
+ *     filterToggle:      'Filtrer',     // texte du bouton panneau mobile
+ *     filterClose:       'close',       // icône Material ou texte du bouton fermer
+ *     loadMoreLabel:     'Voir plus',   // surcharge pagination.loadMoreLabel
  *   },
- * }];
  *
- * window.SQB_HOOKS = { 'key': function(grid, items, cfg) {} };
+ * ── FORMATS DE DATE ──────────────────────────────────────────────────
+ * Format recommandé des tags : Date: 2026-09-19T15:00  (ISO 8601)
+ * Plage de dates              : Date: 2026-09-14/2026-09-22
+ *
+ * displayFormat / filterFormat / groupLabelFormat :
+ *   'datetime' → Lundi 21 septembre, 15h00   (défaut pour displayFormat)
+ *   'date'     → Lundi 21 septembre 2026
+ *   'day'      → Lundi 21 septembre          (défaut pour groupLabelFormat)
+ *   'short'    → Lun. 21 sept.               (défaut pour filterFormat)
+ *   'numeric'  → 21.09.2026
+ *   'time'     → 15h00
+ *   { weekday:'long', day:'numeric', month:'long', year:'numeric' }  // objet Intl custom
+ *
+ * Fuseau horaire : lu automatiquement depuis Static.SQUARESPACE_CONTEXT.websiteTimeZone
+ *
+ * ── DEBUG ────────────────────────────────────────────────────────────
+ *   debug: {
+ *     mockDate: '2026-09-21',  // simuler une date (pour tester groupBy jour courant)
+ *   },
+ *
+ * ════════════════════════════════════════════════════════════════════
  */
 
 (function () {
@@ -455,11 +566,11 @@
     if (type === 'excerpt') {
       if (!item.excerpt) return null;
       var p = el('p', { class: 'sqb-card__excerpt' });
-      // excerptHTML: true → injecter HTML nettoyé (préserve br, h2-h6, strong, etc.)
-      if (def && def.excerptHTML) {
-        p.innerHTML = sanitizeHTML(item.excerptRaw || item.excerpt);
-      } else {
+      // Par défaut : HTML nettoyé. excerptPlain: true → texte brut uniquement
+      if (def && def.excerptPlain) {
         p.textContent = item.excerpt;
+      } else {
+        p.innerHTML = sanitizeHTML(item.excerptRaw || item.excerpt);
       }
       return p;
     }
@@ -552,12 +663,14 @@
    * ════════════════════════════════════ */
 
   function buildHeading(headingCfg) {
-    if (!headingCfg || !headingCfg.text) return { headingEl: null, ctaBelowEl: null };
+    if (!headingCfg) return { headingEl: null, ctaBelowEl: null };
     var wrap = el('div', { class: 'sqb-heading' });
-    var tag  = headingCfg.tag || 'h3';
-    var h    = el(tag, { class: 'sqb-heading__text' });
-    h.textContent = headingCfg.text;
-    wrap.appendChild(h);
+    if (headingCfg.text) {
+      var tag = headingCfg.tag || 'h3';
+      var h   = el(tag, { class: 'sqb-heading__text' });
+      h.textContent = headingCfg.text;
+      wrap.appendChild(h);
+    }
     var cta        = headingCfg.cta;
     var ctaBelow   = null;
     var ctaPos     = (cta && cta.position) || 'inline';
@@ -598,6 +711,15 @@
     };
   }
 
+
+  // Fuseau horaire du site Squarespace (si disponible)
+  var SQB_TZ = (function() {
+    try {
+      var ctx = window.Static && window.Static.SQUARESPACE_CONTEXT;
+      return (ctx && ctx.websiteTimeZone) ? ctx.websiteTimeZone : null;
+    } catch (_) { return null; }
+  })();
+
   function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
   // Formate une valeur de tag ISO en texte lisible
@@ -633,8 +755,9 @@
       if (format && typeof format === 'object') {
         return capitalize(dt.toLocaleDateString(loc, format));
       }
+      var tzOpt = SQB_TZ ? { timeZone: SQB_TZ } : {};
       if (format === 'time' && d.hour !== null) {
-        return dt.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: false });
+        return dt.toLocaleTimeString(loc, Object.assign({ hour: '2-digit', minute: '2-digit', hour12: false }, tzOpt));
       }
       if (format === 'day') {
         return capitalize(dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' }));
@@ -643,13 +766,13 @@
         return capitalize(dt.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' }));
       }
       if (format === 'numeric') {
-        return dt.toLocaleDateString(loc, { day: '2-digit', month: '2-digit', year: 'numeric' });
+        return dt.toLocaleDateString(loc, Object.assign({ day: '2-digit', month: '2-digit', year: 'numeric' }, tzOpt));
       }
       if (format === 'date') {
         return capitalize(dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
       }
       // 'datetime' (défaut) : jour + heure si heure présente
-      var dayStr = dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' });
+      var dayStr = dt.toLocaleDateString(loc, Object.assign({ weekday: 'long', day: 'numeric', month: 'long' }, tzOpt));
       if (d.hour !== null) {
         var timeStr = dt.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: false });
         return capitalize(dayStr) + ', ' + timeStr;
@@ -1276,14 +1399,11 @@
     var scrollOnFilter = fc.scrollOnFilter !== false;
     function scrollToGrid() {
       if (!scrollOnFilter) return;
-      var rect = grid.getBoundingClientRect();
-      // Scroller seulement si la grille est hors du viewport (au-dessus ou en dessous)
-      var isAbove = rect.top < 0;
-      var isBelow = rect.top > window.innerHeight;
-      if (isAbove || isBelow) {
-        var scrollTarget = (filterWrapper && filterWrapper.parentNode) ? filterWrapper : grid;
-        scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      // Scroller seulement si les filtres sont sticky (sinon on est déjà en haut)
+      var isSticky = filterWrapper && filterWrapper.classList.contains('sqb-filters-wrapper--is-sticky');
+      if (!isSticky) return;
+      // Scroller vers la grille (scroll-margin-top compense le wrapper sticky)
+      grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     // Sort, layout, groups et groupBy courants (peuvent changer par tab)
@@ -1306,6 +1426,8 @@
     }
 
     var filterWrapper = buildFilterBar(rawItems, cfg, function(f) {
+      // Désactiver l'observer infini pendant le changement de filtre
+      if (ioInfinite) { ioInfinite.disconnect(); ioInfinite = null; }
       activeFilters = f; currentPage = 1; render(true);
     }, onTabChange, function() { return currentTagPrefixes; });
 
