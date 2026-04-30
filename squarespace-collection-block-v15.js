@@ -622,14 +622,23 @@
     var dt = new Date(d.year, d.month, d.day, d.hour || 0, d.min || 0);
     var loc = locale || document.documentElement.lang || 'fr-CH';
     try {
+      if (format && typeof format === 'object') {
+        return capitalize(dt.toLocaleDateString(loc, format));
+      }
       if (format === 'time' && d.hour !== null) {
         return dt.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: false });
       }
       if (format === 'day') {
-        return dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' });
+        return capitalize(dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' }));
+      }
+      if (format === 'short') {
+        return capitalize(dt.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' }));
+      }
+      if (format === 'numeric') {
+        return dt.toLocaleDateString(loc, { day: '2-digit', month: '2-digit', year: 'numeric' });
       }
       if (format === 'date') {
-        return dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        return capitalize(dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
       }
       // 'datetime' (défaut) : jour + heure si heure présente
       var dayStr = dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -648,12 +657,16 @@
   }
 
   // Formate une date YYYY-MM-DD en label de groupe lisible
-  function formatGroupDate(dateStr, locale) {
+  function formatGroupDate(dateStr, locale, groupLabelFormat) {
     var m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return dateStr;
-    var dt = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+    var dt  = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
     var loc = locale || document.documentElement.lang || 'fr-CH';
+    var fmt = groupLabelFormat || 'day';
     try {
+      if (fmt && typeof fmt === 'object') return capitalize(dt.toLocaleDateString(loc, fmt));
+      if (fmt === 'date') return capitalize(dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+      if (fmt === 'short') return capitalize(dt.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' }));
       return capitalize(dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' }));
     } catch (_) { return dateStr; }
   }
@@ -714,11 +727,45 @@
         groups.get(key).push(item);
       });
     });
-    sortGroupKeys(orderedKeys, groupOrder).forEach(function(key) {
+    // Tri chronologique des clés date + Aujourd'hui en premier + Passés en dernier
+    var isDateKey = function(k) { return /^\d{4}-\d{2}-\d{2}$/.test(k); };
+    var todayStr  = (function() {
+      var now = new Date();
+      return now.getFullYear() + '-' +
+        String(now.getMonth()+1).padStart(2,'0') + '-' +
+        String(now.getDate()).padStart(2,'0');
+    })();
+    var gbCfg = cfg.display && cfg.display.groupBy;
+    var useSmartDate = gbCfg && gbCfg.groupByDay && isDateKey(orderedKeys[0] || '');
+
+    var sortedKeys;
+    if (useSmartDate) {
+      var futureKeys  = orderedKeys.filter(function(k) { return k >= todayStr; }).sort();
+      var pastKeys    = orderedKeys.filter(function(k) { return k <  todayStr; }).sort().reverse();
+      sortedKeys = futureKeys.concat(pastKeys);
+    } else {
+      sortedKeys = sortGroupKeys(orderedKeys, groupOrder);
+    }
+
+    var labelFmt = (gbCfg && gbCfg.groupLabelFormat) || 'date';
+
+    sortedKeys.forEach(function(key) {
       var gi = groups.get(key) || []; if (!gi.length) return;
       var h = el('div', { class: 'sqb-group-heading', 'data-group': key, style: 'grid-column:1 / -1' });
-      // Formater les clés date ISO (YYYY-MM-DD) en texte lisible
-      var headingLabel = /^\d{4}-\d{2}-\d{2}$/.test(key) ? formatGroupDate(key) : key;
+      var headingLabel;
+      if (isDateKey(key)) {
+        if (useSmartDate && key === todayStr) {
+          headingLabel = 'Aujourd\u2019hui';
+        } else if (useSmartDate && key < todayStr) {
+          headingLabel = formatGroupDate(key, null, labelFmt);
+          // Marquer visuellement les dates passées
+          h.classList.add('sqb-group-heading--past');
+        } else {
+          headingLabel = formatGroupDate(key, null, labelFmt);
+        }
+      } else {
+        headingLabel = key;
+      }
       setText(h, headingLabel); grid.appendChild(h);
       gi.forEach(function(item) { grid.appendChild(buildCard(item, cfg, idx++)); });
     });
