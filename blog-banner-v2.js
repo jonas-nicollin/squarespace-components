@@ -8,12 +8,18 @@ document.addEventListener("DOMContentLoaded", function () {
       config.bodyClassConditions.every(cls => bodyClasses.includes(cls))
     );
 
-    if (!activeConfig) return;
+    if (!activeConfig) {
+      document.body.classList.remove("has-banner-image", "has-banner-video");
+      return;
+    }
 
     applyBannerConfig(activeConfig);
   }
 
   function applyBannerConfig(config) {
+    let hasInsertedImageBanner = false;
+    let hasInsertedVideoBanner = false;
+
     document.querySelectorAll(".blog-item-content-wrapper").forEach(contentWrapper => {
       const viewItem = contentWrapper.closest(".view-item");
       if (!viewItem) return;
@@ -27,16 +33,25 @@ document.addEventListener("DOMContentLoaded", function () {
         : null;
 
       if (bannerBlock) {
-        insertImageBanner(destination, bannerBlock, config);
+        const inserted = insertImageBanner(destination, bannerBlock, config);
+        if (inserted) hasInsertedImageBanner = true;
       } else if (videoBlock) {
-        insertVideoBanner(destination, videoBlock, config);
+        const inserted = insertVideoBanner(destination, videoBlock, config);
+        if (inserted) hasInsertedVideoBanner = true;
       }
     });
+
+    document.body.classList.toggle("has-banner-image", hasInsertedImageBanner);
+    document.body.classList.toggle("has-banner-video", hasInsertedVideoBanner);
+    document.body.classList.toggle("has-banner", hasInsertedImageBanner || hasInsertedVideoBanner);
   }
 
   function insertImageBanner(destination, bannerBlock, config) {
     const sourceImg = bannerBlock.querySelector("img");
-    if (!sourceImg) return;
+    if (!sourceImg) return false;
+
+    const source = getBestImageSource(sourceImg);
+    if (!source) return false;
 
     const focal = sourceImg.getAttribute("data-image-focal-point") || "0.5,0.5";
     const [rawX = "0.5", rawY = "0.5"] = focal.split(",");
@@ -50,11 +65,12 @@ document.addEventListener("DOMContentLoaded", function () {
     banner.style.setProperty("--banner-aspect-ratio", config.bannerAspectRatio || "16 / 9");
 
     const img = document.createElement("img");
-    img.src = sourceImg.currentSrc || sourceImg.getAttribute("src") || "";
+    img.src = source;
 
     if (sourceImg.getAttribute("srcset")) {
       img.setAttribute("srcset", sourceImg.getAttribute("srcset"));
     }
+
     if (sourceImg.getAttribute("sizes")) {
       img.setAttribute("sizes", sourceImg.getAttribute("sizes"));
     }
@@ -80,15 +96,31 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!isEditMode()) {
       bannerBlock.style.display = "none";
     }
+
+    return true;
   }
 
   function insertVideoBanner(destination, videoBlock, config) {
+    if (!videoBlock) return false;
+
     const banner = document.createElement("div");
     banner.className = config.videoBannerClass || "blog-item-cover-video";
     banner.style.setProperty("--banner-aspect-ratio", config.bannerAspectRatio || "16 / 9");
 
     banner.appendChild(videoBlock);
     insertBanner(destination, banner, config.insertionMethod);
+
+    return true;
+  }
+
+  function getBestImageSource(img) {
+    return (
+      img.currentSrc ||
+      img.getAttribute("src") ||
+      img.getAttribute("data-src") ||
+      img.getAttribute("data-image") ||
+      ""
+    );
   }
 
   function extractCaptionData(bannerBlock, config) {
