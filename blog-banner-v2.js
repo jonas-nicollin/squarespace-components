@@ -8,10 +8,7 @@ document.addEventListener("DOMContentLoaded", function () {
       config.bodyClassConditions.every(cls => bodyClasses.includes(cls))
     );
 
-    if (!activeConfig) {
-      document.body.classList.remove("has-banner-image", "has-banner-video");
-      return;
-    }
+    if (!activeConfig) return;
 
     applyBannerConfig(activeConfig);
   }
@@ -41,9 +38,13 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
 
-    document.body.classList.toggle("has-banner-image", hasInsertedImageBanner);
-    document.body.classList.toggle("has-banner-video", hasInsertedVideoBanner);
-    document.body.classList.toggle("has-banner", hasInsertedImageBanner || hasInsertedVideoBanner);
+    if (hasInsertedImageBanner) {
+      document.body.classList.add("has-banner-image", "has-banner");
+    }
+
+    if (hasInsertedVideoBanner) {
+      document.body.classList.add("has-banner-video", "has-banner");
+    }
   }
 
   function insertImageBanner(destination, bannerBlock, config) {
@@ -60,7 +61,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const focalY = normalizeFocalPoint(rawY);
 
     const banner = document.createElement("div");
-    banner.className = config.imageBannerClass || "blog-item-cover-image";
+    banner.className = `${config.imageBannerClass || "blog-item-cover-image"} is-loading`;
     banner.style.setProperty("--image-focal-point", `${focalX} ${focalY}`);
     banner.style.setProperty("--banner-aspect-ratio", config.bannerAspectRatio || "16 / 9");
 
@@ -79,6 +80,21 @@ document.addEventListener("DOMContentLoaded", function () {
     img.setAttribute("loading", "eager");
     img.setAttribute("decoding", "async");
     img.style.objectPosition = `${focalX} ${focalY}`;
+
+    img.addEventListener("load", function () {
+      banner.classList.remove("is-loading");
+      banner.classList.add("is-loaded");
+    });
+
+    img.addEventListener("error", function () {
+      banner.classList.remove("is-loading");
+      banner.classList.add("is-loaded");
+    });
+
+    if (img.complete) {
+      banner.classList.remove("is-loading");
+      banner.classList.add("is-loaded");
+    }
 
     banner.appendChild(img);
 
