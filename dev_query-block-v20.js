@@ -582,7 +582,13 @@
       var prefix   = (def && def.prefix)   || '';
       var label    = (def && def.label != null) ? def.label : '';
       var labelIcon = (def && def.labelIcon) || null;
-      var joinWith = (def && def.joinWith != null) ? def.joinWith : ', ';
+      // joinWith OU inlineSeparator (alias plus clair)
+      // displayInline: true → forcer le rendu inline (même si joinWith contient '\n')
+      var joinWith = (def && def.joinWith != null) ? def.joinWith
+                  : (def && def.inlineSeparator != null) ? def.inlineSeparator
+                  : ', ';
+      // displayInline: true force le rendu inline quelle que soit la valeur de joinWith
+      if (def && def.displayInline) joinWith = def.inlineSeparator || joinWith || ', ';
       var displayFmt = (def && def.displayFormat) || null;
       var locale = (def && def.locale) || null;
       var rawVals = getTagValuesByPrefix(item, prefix);
@@ -1279,7 +1285,9 @@
     var clearAllBtn = null;
     if (fc.clearAll) {
       clearAllBtn = el('button', { class: 'sqb-clear-all', type: 'button' });
-      clearAllBtn.textContent = typeof fc.clearAll === 'string' ? fc.clearAll : 'R\u00e9initialiser';
+      var _cai = el('span', { class: 'sqb-icon' }); _cai.textContent = 'refresh';
+      clearAllBtn.appendChild(_cai);
+      clearAllBtn.appendChild(document.createTextNode(' ' + (typeof fc.clearAll === 'string' ? fc.clearAll : 'R\u00e9initialiser')));
       clearAllBtn.style.display = 'none';
       clearAllBtn.addEventListener('click', function() {
         state.category = null; state.tags = {}; state.search = '';
@@ -1319,8 +1327,8 @@
         if (shouldBeMobile === isMobileMode) return;
         isMobileMode = shouldBeMobile;
         wrapper.classList.toggle('sqb-filters--mobile-mode', isMobileMode);
-        // Afficher/masquer le toggle selon le mode
-        if (toggleBtn) toggleBtn.style.display = isMobileMode ? '' : 'none';
+        if (toggleBtn)   toggleBtn.style.display   = isMobileMode ? '' : 'none';
+        if (clearAllBtn) clearAllBtn.style.display  = isMobileMode ? 'none' : (countActive() > 0 ? '' : 'none');
       }
       checkBreakpoint();
       if ('ResizeObserver' in window) {
@@ -1410,17 +1418,21 @@
     var scrollOnFilter = fc.scrollOnFilter !== false;
     function scrollToGrid() {
       if (!scrollOnFilter) return;
-      // Ne scroller que si les filtres sont configurés sticky
       if (!filterWrapper) return;
       var isConfiguredSticky = fc.sticky;
       if (!isConfiguredSticky) return;
-      // Calculer la position cible : haut de sqb-grid corrigé par la hauteur du wrapper sticky
-      // window.scrollY + grid.getBoundingClientRect().top = position absolue du haut de la grille
-      // On retire la hauteur du wrapper pour que la grille apparaisse juste en dessous
-      var wrapperH = filterWrapper.offsetHeight || 0;
-      var gridAbsTop = window.scrollY + grid.getBoundingClientRect().top;
-      var targetY = gridAbsTop - wrapperH;
-      window.scrollTo({ top: targetY, behavior: 'smooth' });
+      // Attendre le prochain frame pour que le DOM soit stable après render()
+      requestAnimationFrame(function() {
+        // getBoundingClientRect().bottom du wrapper = position du bas du filtre dans le viewport
+        var wrapperBottom = filterWrapper.getBoundingClientRect().bottom;
+        // Position absolue du bas du filtre dans la page
+        var wrapperAbsBottom = window.scrollY + wrapperBottom;
+        // Position absolue du haut de la grille
+        var gridAbsTop = window.scrollY + grid.getBoundingClientRect().top;
+        // Scroll pour aligner le haut de la grille au bas du filtre
+        var targetY = gridAbsTop - wrapperBottom;
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+      });
     }
 
     // Sort, layout, groups et groupBy courants (peuvent changer par tab)
