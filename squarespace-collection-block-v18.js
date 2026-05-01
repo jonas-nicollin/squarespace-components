@@ -902,7 +902,7 @@
         String(now.getDate()).padStart(2,'0');
     })();
     var gbCfg = cfg.display && cfg.display.groupBy;
-    var useSmartDate = gbCfg && gbCfg.groupByDay && isDateKey(orderedKeys[0] || '');
+    var useSmartDate = gbCfg && gbCfg.groupByDay && gbCfg.highlightToday !== false && isDateKey(orderedKeys[0] || '');
 
     var sortedKeys;
     if (useSmartDate) {
@@ -994,6 +994,16 @@
 
     // Barre de titre + croix
     var header = el('div', { class: 'sqb-mobile-panel-header' });
+    // Bouton Réinitialiser dans le panneau (si clearAll activé)
+    var panelClearBtn = null;
+    if (i18n._hasClearAll) {
+      panelClearBtn = el('button', { class: 'sqb-clear-all sqb-clear-all--panel', type: 'button' });
+      var panelClearIcon = el('span', { class: 'sqb-icon' }); panelClearIcon.textContent = 'refresh';
+      panelClearBtn.appendChild(panelClearIcon);
+      panelClearBtn.appendChild(document.createTextNode(' ' + (i18n._clearAllText || 'Réinitialiser')));
+      panelClearBtn.style.display = 'none';
+      header.appendChild(panelClearBtn);
+    }
     var closeBtn = el('button', { class: 'sqb-mobile-panel-close sqb-icon-btn', type: 'button', 'aria-label': 'Fermer' });
     var closeIcon = el('span', { class: 'sqb-icon' });
     closeIcon.textContent = i18n.filterClose || 'close';
@@ -1049,7 +1059,7 @@
       if (e.key === 'Escape' && panel.classList.contains('sqb-mobile-panel--open')) close();
     });
 
-    return { panel: panel, open: open, close: close };
+    return { panel: panel, open: open, close: close, panelClearBtn: panelClearBtn };
   }
 
   /* ════════════════════════════════════
@@ -1088,12 +1098,11 @@
       onFilter({ tab: state.tab, category: state.category, tags: t, search: state.search });
       updateToggleBadge();
       var hasActive = countActive() > 0;
-      // clearAllBtn dans la barre : masqué si le panneau est toujours actif (tout passe par le panneau)
+      var alwaysPanel = mobilePanelBp === Infinity;
       if (clearAllBtn) {
-        var alwaysPanel = mobilePanelBp === Infinity;
         clearAllBtn.style.display = (hasActive && !alwaysPanel) ? '' : 'none';
       }
-      if (typeof panelClearBtn !== 'undefined' && panelClearBtn) panelClearBtn.style.display = hasActive ? '' : 'none';
+      if (panelClearBtn) panelClearBtn.style.display = hasActive ? '' : 'none';
     }
 
     // resetOtherFilters : si fc.resetOthers === true, vide catégorie + tags + search sauf le filtre courant
@@ -1196,6 +1205,8 @@
         var displayVals = fmt ? vals.map(function(v) { return formatISOTag(v, fmt) || v; }) : vals;
         if (!vals.length) return;
         var defVal = fc.defaultTags && fc.defaultTags[pd.prefix];
+        if (defVal === 'first' && vals.length) defVal = vals[0]; // premier jour disponible
+        if (defVal === 'last'  && vals.length) defVal = vals[vals.length - 1];
         if (defVal && !state.tags[pd.prefix]) state.tags[pd.prefix] = defVal;
         var grp;
         (function(prefix) {
@@ -1399,8 +1410,7 @@
     var scrollOnFilter = fc.scrollOnFilter !== false;
     function scrollToGrid() {
       if (!scrollOnFilter) return;
-      // Scroller seulement si les filtres sont sticky (sinon on est déjà en haut)
-      var isSticky = filterWrapper && filterWrapper.classList.contains('sqb-filters-wrapper--is-sticky');
+      var isSticky = filterWrapper && (filterWrapper.classList.contains('sqb-filters-wrapper--is-sticky') || filterWrapper.classList.contains('sqb-filters-wrapper--sticky'));
       if (!isSticky) return;
       // Scroller pour afficher le début de la grille SOUS le wrapper sticky
       // Le wrapper sticky a une hauteur connue — on scrolle vers lui + sa hauteur
@@ -1535,7 +1545,8 @@
         });
       }
       if (disp.counter !== false) counter.textContent = shown.length + '\u00a0/\u00a0' + total;
-      if (hook) hook(grid, shown, cfg);
+      // Passer fromPagination au hook pour que masonry sache s'il doit recalculer tout
+      if (hook) hook(grid, shown, cfg, { fromPagination: fromPagination, prevCount: prevCardCount });
 
       // CTA below heading (ajouté après le contenu)
       if (headingResult.ctaBelowEl) {
