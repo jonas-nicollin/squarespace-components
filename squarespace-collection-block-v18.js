@@ -1402,8 +1402,15 @@
       // Scroller seulement si les filtres sont sticky (sinon on est déjà en haut)
       var isSticky = filterWrapper && filterWrapper.classList.contains('sqb-filters-wrapper--is-sticky');
       if (!isSticky) return;
-      // Scroller vers la grille (scroll-margin-top compense le wrapper sticky)
-      grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Scroller pour afficher le début de la grille SOUS le wrapper sticky
+      // Le wrapper sticky a une hauteur connue — on scrolle vers lui + sa hauteur
+      var wrapperBottom = filterWrapper.getBoundingClientRect().bottom;
+      var gridTop = grid.getBoundingClientRect().top;
+      if (gridTop > wrapperBottom + 20) return; // déjà visible sous les filtres
+      var scrollTarget = window.scrollY + filterWrapper.getBoundingClientRect().top
+        - (filterWrapper.getBoundingClientRect().top < 0 ? 0 : 0);
+      // Scroll vers le wrapper sticky lui-même (aligne le haut du wrapper en haut du viewport)
+      filterWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     // Sort, layout, groups et groupBy courants (peuvent changer par tab)
@@ -1488,11 +1495,10 @@
       var total    = filtered.length;
       var shown    = filtered.slice(0, currentPage * perPage);
 
-      // Important : on re-render toujours l'état complet.
-// Sinon, en pagination, shown contient les anciens items + les nouveaux,
-// et les anciennes cards sont ajoutées une deuxième fois.
-grid.innerHTML = '';
-footer.innerHTML = '';
+      // Nombre de cartes déjà affichées avant ce render
+      var prevCardCount = fromPagination ? grid.querySelectorAll('.sqb-card').length : 0;
+      grid.innerHTML = '';
+      footer.innerHTML = '';
 
       if (!shown.length) {
         setText(grid.appendChild(el('p', { class: 'sqb-empty' })), i18n.noResults);
@@ -1520,9 +1526,11 @@ footer.innerHTML = '';
       }
       renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
       if ((cfgForRender.display || disp).fadeIn !== false) {
-        var cards = grid.querySelectorAll('.sqb-card');
+        var cards = Array.from(grid.querySelectorAll('.sqb-card'));
+        // N'animer que les nouvelles cartes (évite le flash sur les anciennes)
         cards.forEach(function(c, i) {
-          c.style.animationDelay = (i * 0.04) + 's';
+          if (i < prevCardCount) return; // déjà visible, pas d'animation
+          c.style.animationDelay = ((i - prevCardCount) * 0.04) + 's';
           c.classList.add('sqb-card--fade-in');
         });
       }
