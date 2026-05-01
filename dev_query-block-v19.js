@@ -1410,17 +1410,17 @@
     var scrollOnFilter = fc.scrollOnFilter !== false;
     function scrollToGrid() {
       if (!scrollOnFilter) return;
-      var isSticky = filterWrapper && (filterWrapper.classList.contains('sqb-filters-wrapper--is-sticky') || filterWrapper.classList.contains('sqb-filters-wrapper--sticky'));
-      if (!isSticky) return;
-      // Scroller pour afficher le début de la grille SOUS le wrapper sticky
-      // Le wrapper sticky a une hauteur connue — on scrolle vers lui + sa hauteur
-      var wrapperBottom = filterWrapper.getBoundingClientRect().bottom;
-      var gridTop = grid.getBoundingClientRect().top;
-      if (gridTop > wrapperBottom + 20) return; // déjà visible sous les filtres
-      var scrollTarget = window.scrollY + filterWrapper.getBoundingClientRect().top
-        - (filterWrapper.getBoundingClientRect().top < 0 ? 0 : 0);
-      // Scroll vers le wrapper sticky lui-même (aligne le haut du wrapper en haut du viewport)
-      filterWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Ne scroller que si les filtres sont configurés sticky
+      if (!filterWrapper) return;
+      var isConfiguredSticky = fc.sticky;
+      if (!isConfiguredSticky) return;
+      // Calculer la position cible : haut de sqb-grid corrigé par la hauteur du wrapper sticky
+      // window.scrollY + grid.getBoundingClientRect().top = position absolue du haut de la grille
+      // On retire la hauteur du wrapper pour que la grille apparaisse juste en dessous
+      var wrapperH = filterWrapper.offsetHeight || 0;
+      var gridAbsTop = window.scrollY + grid.getBoundingClientRect().top;
+      var targetY = gridAbsTop - wrapperH;
+      window.scrollTo({ top: targetY, behavior: 'smooth' });
     }
 
     // Sort, layout, groups et groupBy courants (peuvent changer par tab)
