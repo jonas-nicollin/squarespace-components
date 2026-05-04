@@ -1,0 +1,1630 @@
+/*!
+ * Related Block v7.0
+ * Blocs de contenu relatif pour collections Squarespace
+ * https://github.com/jonas-nicollin/squarespace-components
+ *
+ * SITES
+ *   — Parcours Céramique Carouge   pcc.jonasnicollin.ch
+ *   — Carneiro Architectes         carneiro.jonasnicollin.ch
+ *
+ * ════════════════════════════════════════════════════════════════════
+ * PRINCIPE
+ * ════════════════════════════════════════════════════════════════════
+ *
+ * Lit window.RELATED_BLOCK_CONFIGS (tableau de configurations).
+ * Pour chaque configuration active, le script :
+ *   1. Vérifie les body classes requises
+ *   2. Fetch le JSON paginé de la sourceCollection
+ *   3. Identifie l'item courant (par pathname)
+ *   4. Filtre et score les candidats selon les règles de sélection
+ *   5. Injecte le bloc HTML dans le DOM
+ *
+ * Rétrocompatibilité : window.COLLECTION_RELATED_BLOCK_CONFIGS est
+ * également accepté si RELATED_BLOCK_CONFIGS est absent.
+ *
+ * ════════════════════════════════════════════════════════════════════
+ * CONFIGURATION — OPTIONS EXHAUSTIVES
+ * ════════════════════════════════════════════════════════════════════
+ *
+ * window.RELATED_BLOCK_CONFIGS = [ { ...cfg }, ... ]
+ *
+ * ── STRUCTURE PRINCIPALE ─────────────────────────────────────────────
+ * {
+ *   enabled: true,               // activer/désactiver ce bloc
+ *   key: 'related-events',       // identifiant unique → data-related-key + body class
+ *   debug: false,                // logs console détaillés
+ *
+ * ── GARDE-FOUS ───────────────────────────────────────────────────────
+ *   devGuard: {
+ *     enabled: false,            // activer le garde-dev
+ *     bodyId: 'collection-...',  // restreindre à un body#id précis
+ *   },
+ *   requiredBodyClasses: ['view-item'],  // body classes toutes requises
+ *
+ * ── SOURCE ───────────────────────────────────────────────────────────
+ *   sourceCollection: {
+ *     path: '/ma-collection',         // chemin de la collection à fetcher
+ *     jsonFormatSuffix: '?format=json' // (défaut) suffixe JSON
+ *   },
+ *
+ * ── ITEM COURANT ─────────────────────────────────────────────────────
+ *   currentItem: {
+ *     matchBy: 'pathname',            // mode de détection (seul mode actuel)
+ *     sourceCollection: {             // si différent de sourceCollection
+ *       path: '/autre-collection',
+ *       jsonFormatSuffix: '?format=json'
+ *     },
+ *     overrideForDev: {               // surcharge pour tester en dev
+ *       enabled: false,
+ *       bodyId: 'page-...',
+ *       title: 'Mon item de test',
+ *       fullUrl: '/ma-collection/mon-item',
+ *       tags: ['Lieu: Atelier Dumont', 'Date: 2026-05-10T14:00'],
+ *       categories: ['Exposition'],
+ *       displayIndex: 3,
+ *     },
+ *   },
+ *
+ * ── INSERTION ────────────────────────────────────────────────────────
+ *   insertion: {
+ *     targetSelector: '.blog-item-wrapper',  // sélecteur CSS cible
+ *     mode: 'append',                        // 'append' | 'prepend'
+ *   },
+ *
+ * ── HEADING ──────────────────────────────────────────────────────────
+ *   heading: 'Événements en lien',       // titre si plusieurs items
+ *   headingSingular: 'Événement en lien',// titre si un seul item
+ *   headingTag: 'h3',                    // balise : h1–h6
+ *   headingCta: {
+ *     text: 'Voir tout',
+ *     href: '/ma-collection',
+ *     icon: '→',                         // texte ou HTML selon iconType
+ *     iconType: 'text',                  // 'text' | 'html'
+ *     newTab: false,
+ *   },
+ *
+ * ── CLASSES ──────────────────────────────────────────────────────────
+ *   classes: {
+ *     block: 'mon-bloc mon-bloc--grid',  // classes CSS supplémentaires sur <section>
+ *   },
+ *
+ * ── AFFICHAGE ────────────────────────────────────────────────────────
+ *   display: {
+ *     maxItems: 4,
+ *     showImage: true,
+ *     showTitle: true,
+ *     showCategories: true,
+ *     showExcerpt: false,
+ *     showLocation: false,
+ *
+ *     // Ordre des éléments en mode simple (sans groups)
+ *     order: ['meta', 'title', 'excerpt', 'location'],
+ *
+ *     // Champs basés sur les prefixes de tags
+ *     tagPrefixFields: [
+ *       {
+ *         prefix: 'Date:',
+ *         className: 'related-block__tag-prefix related-block__tag-prefix--date',
+ *         label: '',
+ *         joinWith: ' · ',
+ *         maxItems: 1,
+ *
+ *         // Formatage ISO (si valeurs au format 2026-09-19T15:00)
+ *         // 'datetime' → Samedi 19 septembre, 15h00   (défaut)
+ *         // 'date'     → Samedi 19 septembre 2026
+ *         // 'day'      → Samedi 19 septembre
+ *         // 'short'    → Sam. 19 sept.
+ *         // 'numeric'  → 19.09.2026
+ *         // 'time'     → 15h00
+ *         // objet Intl → { weekday: 'long', day: 'numeric', month: 'long' }
+ *         displayFormat: 'datetime',
+ *         locale: 'fr-CH',  // surcharge de locale (défaut: lang de la page)
+ *       },
+ *     ],
+ *
+ *     // Groupes de contenu dans la carte (remplace order si présent)
+ *     groups: [
+ *       {
+ *         tag: 'div',                     // balise HTML du wrapper (défaut: div)
+ *         className: 'mon-bloc__media',   // classe(s) CSS
+ *         children: [
+ *           'image',                      // image principale
+ *           'title',                      // titre
+ *           'meta',                       // catégories
+ *           'excerpt',                    // extrait
+ *           'location',                   // localisation
+ *           'tagPrefix',                  // tous les tagPrefixFields
+ *           { type: 'tagPrefix', prefix: 'Date:' },    // un seul préfixe
+ *           { type: 'tagPrefix', prefixes: ['Date:', 'Lieu:'] }, // plusieurs
+ *           {
+ *             type: 'tagPrefix',
+ *             prefix: 'Date:',
+ *             displayFormat: 'day',       // surcharge du format pour ce groupe
+ *             locale: 'fr-CH',
+ *           },
+ *         ],
+ *       },
+ *     ],
+ *
+ *     // Srcset
+ *     srcsetWidths: [100, 300, 500, 750, 1000, 1500, 2500],
+ *     imageSizes: '(max-width: 768px) 100vw, 50vw',
+ *   },
+ *
+ * ── CHARGEMENT ───────────────────────────────────────────────────────
+ *   loading: {
+ *     hideLoader: false,   // masquer l'animation de chargement
+ *   },
+ *
+ * ── ÉTAT VIDE ────────────────────────────────────────────────────────
+ *   emptyState: {
+ *     message: '',         // message affiché si aucun résultat
+ *   },
+ *
+ * ── SÉLECTION ────────────────────────────────────────────────────────
+ *   selection: {
+ *     constraints: {
+ *       requirePublished: true,    // exclure les items non publiés
+ *       requireImage: true,        // exclure les items sans image
+ *       excludeCurrentItem: true,  // exclure l'item courant
+ *     },
+ *
+ *     match: {
+ *       groups: [
+ *         {
+ *           logic: 'or',  // 'or' | 'and' — logique entre les rules de ce groupe
+ *           rules: [
+ *             // Types disponibles :
+ *             { type: 'sharedCategory' },
+ *             { type: 'sharedTagPrefix', prefixes: ['Lieu'] },
+ *             { type: 'sharedExactTag' },
+ *             { type: 'includeCategories', values: ['Exposition'] },
+ *             { type: 'excludeCategories', values: ['Brouillon'] },
+ *             { type: 'includeExactTags', values: ['Statut: Case Study'] },
+ *             { type: 'excludeExactTags', values: ['Statut: Archivé'] },
+ *             { type: 'titleMatchesCurrentTagValue', prefixes: ['Artiste'] },
+ *             { type: 'nextCollectionItemOfCategory', values: ['Exposition'] },
+ *             { type: 'nextCollectionItemWithTag', values: ['Statut: Case Study'] },
+ *           ],
+ *         },
+ *       ],
+ *     },
+ *
+ *     score: {
+ *       enabled: false,
+ *       minScore: 0,
+ *       rules: [
+ *         { type: 'sharedCategory',  weight: 5 },
+ *         { type: 'sharedTagPrefix', prefixes: ['Intervention:'], weight: 4 },
+ *         { type: 'sharedExactTag',  values: ['Tag exact'], weight: 2 },
+ *         { type: 'titleMatchesCurrentTagValue', prefixes: ['Artiste'], weight: 3 },
+ *       ],
+ *     },
+ *
+ *     sort: [
+ *       // Types disponibles :
+ *       { type: 'score',     direction: 'desc' },  // score calculé
+ *       { type: 'date',      direction: 'desc' },  // date de publication Squarespace
+ *       { type: 'title',     direction: 'asc' },   // alphabétique
+ *       { type: 'collection',direction: 'asc' },   // ordre de la collection
+ *       { type: 'tagPrefix', prefix: 'Date', direction: 'asc' }, // valeur ISO d'un tag
+ *       { type: 'random' },                        // aléatoire
+ *     ],
+ *
+ *     limit: 4,
+ *
+ *     fallback: {
+ *       enabled: false,
+ *       fillToLimit: false,
+ *       sort: [{ type: 'random' }],
+ *       matchGroups: null,  // groupes de match alternatifs pour le fallback
+ *     },
+ *   },
+ *
+ * ── PRÉCHARGEMENT ────────────────────────────────────────────────────
+ *   preload: {
+ *     enabled: false,
+ *     includeSourceCollection: true,
+ *     includeCurrentItemSource: false,
+ *     collections: [{ path: '/autre-collection' }],
+ *     maxPages: null,
+ *   },
+ *
+ * ── PERFORMANCE ──────────────────────────────────────────────────────
+ *   performance: {
+ *     useSessionStorage: true,            // cache session pour les items rendus
+ *     maxPages: 5,                        // pages JSON max à fetcher
+ *     useCollectionMemoryCache: true,     // cache mémoire des collections fetchées
+ *     useCollectionSessionCache: false,   // cache session des collections fetchées
+ *   },
+ * }
+ *
+ * ── FORMATS DE DATE ──────────────────────────────────────────────────
+ * Format recommandé des tags : Date: 2026-09-19T15:00    (ISO 8601)
+ * Plage de dates              : Date: 2026-09-14/2026-09-22
+ *
+ * displayFormat :
+ *   'datetime' → Samedi 19 septembre, 15h00    (défaut si heure présente)
+ *   'date'     → Samedi 19 septembre 2026
+ *   'day'      → Samedi 19 septembre
+ *   'short'    → Sam. 19 sept.
+ *   'numeric'  → 19.09.2026
+ *   'time'     → 15h00
+ *   objet Intl → { weekday: 'long', day: 'numeric', month: 'long' }
+ *
+ * Fuseau horaire : lu depuis Static.SQUARESPACE_CONTEXT.websiteTimeZone
+ * Locale         : défaut document.documentElement.lang, surcharge par locale:
+ *
+ * ════════════════════════════════════════════════════════════════════
+ */
+(function () {
+  'use strict';
+
+  // ── Rétrocompatibilité ─────────────────────────────────────────────
+  const CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS)
+    ? window.RELATED_BLOCK_CONFIGS
+    : Array.isArray(window.COLLECTION_RELATED_BLOCK_CONFIGS)
+      ? window.COLLECTION_RELATED_BLOCK_CONFIGS
+      : [];
+  if (!CONFIGS.length) return;
+
+  // ── Constantes ────────────────────────────────────────────────────
+  const DEFAULT_JSON_FORMAT_SUFFIX = '?format=json';
+  const DEFAULT_SRCSET_WIDTHS = [100, 300, 500, 750, 1000, 1500, 2500];
+  const DEFAULT_IMAGE_SIZES = '(max-width: 768px) 100vw, 50vw';
+  const COLLECTION_CACHE = new Map();
+  const BODY_CLASS_PREFIX = 'has-related-block--';
+
+  // ── Fuseau horaire Squarespace ────────────────────────────────────
+  const SITE_TZ = (function () {
+    try {
+      const ctx = window.Static && window.Static.SQUARESPACE_CONTEXT;
+      return (ctx && ctx.websiteTimeZone) ? ctx.websiteTimeZone : null;
+    } catch (_) { return null; }
+  })();
+
+  // ════════════════════════════════════════════════════════════════
+  // DATES ISO
+  // ════════════════════════════════════════════════════════════════
+
+  /**
+   * Parse une chaîne ISO partielle : YYYY-MM-DD, YYYY-MM-DDThh:mm, etc.
+   * Retourne { year, month (0-based), day, hour, min, ts } ou null.
+   */
+  function parseISO(str) {
+    const s = String(str || '').trim();
+    // Ignorer les intervalles ici (gérés dans formatISOTag)
+    if (s.indexOf('/') !== -1) return null;
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+    if (!m) return null;
+    const year  = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10) - 1;
+    const day   = parseInt(m[3], 10);
+    const hour  = m[4] != null ? parseInt(m[4], 10) : null;
+    const min   = m[5] != null ? parseInt(m[5], 10) : null;
+    return {
+      year, month, day, hour, min,
+      ts: new Date(year, month, day, hour ?? 0, min ?? 0).getTime()
+    };
+  }
+
+  function capitalize(s) {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  }
+
+  /**
+   * Formate une valeur de tag ISO en texte lisible.
+   * Supporte les intervalles : 2026-09-14/2026-09-22 → '14–22 septembre 2026'
+   *
+   * @param {string} str         - valeur brute du tag
+   * @param {string|object} fmt  - 'datetime'|'date'|'day'|'short'|'numeric'|'time'|objet Intl
+   * @param {string} locale      - locale BCP 47 (ex: 'fr-CH')
+   */
+  function formatISOTag(str, fmt, locale) {
+    const s = String(str || '').trim();
+    const loc = locale || document.documentElement.lang || 'fr-CH';
+    const tzOpt = SITE_TZ ? { timeZone: SITE_TZ } : {};
+
+    // Intervalle de dates
+    if (s.indexOf('/') !== -1) {
+      const parts = s.split('/');
+      const d1 = parseISO(parts[0]);
+      const d2 = parseISO(parts[1]);
+      if (d1 && d2) {
+        try {
+          const dt1 = new Date(d1.year, d1.month, d1.day);
+          const dt2 = new Date(d2.year, d2.month, d2.day);
+          if (d1.month === d2.month && d1.year === d2.year) {
+            const mth = dt1.toLocaleDateString(loc, { month: 'long' });
+            return `${d1.day}\u2013${d2.day}\u00a0${mth}\u00a0${d1.year}`;
+          }
+          return dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long' }) +
+            '\u00a0\u2013\u00a0' +
+            dt2.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
+        } catch (_) { return s; }
+      }
+      return s;
+    }
+
+    const d = parseISO(s);
+    if (!d) return s;
+
+    const dt = new Date(d.year, d.month, d.day, d.hour ?? 0, d.min ?? 0);
+
+    try {
+      // Objet Intl custom
+      if (fmt && typeof fmt === 'object') {
+        return capitalize(dt.toLocaleDateString(loc, Object.assign({}, tzOpt, fmt)));
+      }
+
+      if (fmt === 'time') {
+        if (d.hour === null) return '';
+        return dt.toLocaleTimeString(loc, Object.assign({ hour: '2-digit', minute: '2-digit', hour12: false }, tzOpt));
+      }
+      if (fmt === 'numeric') {
+        return dt.toLocaleDateString(loc, Object.assign({ day: '2-digit', month: '2-digit', year: 'numeric' }, tzOpt));
+      }
+      if (fmt === 'short') {
+        return capitalize(dt.toLocaleDateString(loc, Object.assign({ weekday: 'short', day: 'numeric', month: 'short' }, tzOpt)));
+      }
+      if (fmt === 'day') {
+        return capitalize(dt.toLocaleDateString(loc, Object.assign({ weekday: 'long', day: 'numeric', month: 'long' }, tzOpt)));
+      }
+      if (fmt === 'date') {
+        return capitalize(dt.toLocaleDateString(loc, Object.assign({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, tzOpt)));
+      }
+      // 'datetime' (défaut) : inclure l'heure si présente
+      const dayStr = capitalize(dt.toLocaleDateString(loc, Object.assign({ weekday: 'long', day: 'numeric', month: 'long' }, tzOpt)));
+      if (d.hour !== null) {
+        const timeStr = dt.toLocaleTimeString(loc, Object.assign({ hour: '2-digit', minute: '2-digit', hour12: false }, tzOpt));
+        return `${dayStr}, ${timeStr}`;
+      }
+      return dayStr;
+    } catch (_) { return s; }
+  }
+
+  /**
+   * Retourne le timestamp de tri à partir d'une valeur de tag ISO.
+   * Utilisé pour le tri { type: 'tagPrefix', prefix: 'Date' }.
+   */
+  function getISOTimestamp(str) {
+    const s = String(str || '').trim();
+    // Intervalle : on trie par la date de début
+    const raw = s.indexOf('/') !== -1 ? s.split('/')[0] : s;
+    const d = parseISO(raw);
+    return d ? d.ts : Infinity;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // UTILITAIRES TEXTE
+  // ════════════════════════════════════════════════════════════════
+
+  function normalize(str) {
+    return String(str || '')
+      .replace(/\u00A0/g, ' ')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\u2019']/g, "'")
+      .replace(/&/g, 'and')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function uniq(arr) { return Array.from(new Set(arr)); }
+
+  function decodeHtmlEntities(str) {
+    const txt = document.createElement('textarea');
+    txt.innerHTML = String(str || '');
+    return txt.value;
+  }
+
+  function cleanText(str) {
+    return decodeHtmlEntities(str)
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&#160;/gi, ' ')
+      .replace(/\u00A0/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function truncateText(str, maxLength) {
+    const text = cleanText(str);
+    if (!text || text.length <= maxLength) return text;
+    const sliced = text.slice(0, maxLength);
+    const lastSpace = sliced.lastIndexOf(' ');
+    return (lastSpace > 0 ? sliced.slice(0, lastSpace) : sliced).trim() + '…';
+  }
+
+  function uniqBy(arr, keyFn) {
+    const seen = new Set();
+    return arr.filter(item => {
+      const key = keyFn(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // TAGS — PARSING
+  // ════════════════════════════════════════════════════════════════
+
+  function getPrefix(tag) {
+    const raw = String(tag || '');
+    const idx = raw.indexOf(':');
+    return idx === -1 ? null : raw.slice(0, idx).trim();
+  }
+
+  function getTagValue(tag) {
+    const raw = String(tag || '');
+    const idx = raw.indexOf(':');
+    return idx === -1 ? raw.trim() : raw.slice(idx + 1).trim();
+  }
+
+  function slugifyToken(str) {
+    return String(str || '')
+      .trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  function buildTagObjects(tags) {
+    return (Array.isArray(tags) ? tags : [])
+      .map(tag => {
+        const prefix = getPrefix(tag);
+        const value  = getTagValue(tag);
+        return {
+          raw: cleanText(tag),
+          prefix: cleanText(prefix),
+          prefixNorm: normalize(prefix),
+          value: cleanText(value),
+          valueNorm: normalize(value),
+          rawNorm: normalize(tag)
+        };
+      })
+      .filter(t => t.rawNorm);
+  }
+
+  function getTagValuesByPrefix(item, prefix) {
+    if (!prefix) return [];
+    const normalizedPrefix = normalize(String(prefix).replace(/:$/, ''));
+    return (Array.isArray(item?.tags) ? item.tags : [])
+      .map(tag => {
+        const raw = String(tag || '');
+        const idx = raw.indexOf(':');
+        if (idx === -1) return null;
+        const tagPrefix = normalize(raw.slice(0, idx));
+        const value = cleanText(raw.slice(idx + 1));
+        return tagPrefix === normalizedPrefix ? value : null;
+      })
+      .filter(Boolean);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // BODY CLASSES
+  // ════════════════════════════════════════════════════════════════
+
+  function getBodyRelatedBlockClassName(key) {
+    return BODY_CLASS_PREFIX + slugifyToken(key || 'related-block');
+  }
+
+  function syncBodyRelatedBlockClasses() {
+    if (!document.body) return;
+    Array.from(document.body.classList).forEach(cls => {
+      if (cls.indexOf(BODY_CLASS_PREFIX) === 0) document.body.classList.remove(cls);
+    });
+    const blocks = Array.from(document.querySelectorAll('.related-block[data-related-key]'));
+    if (!blocks.length) {
+      document.body.classList.remove('has-related-blocks');
+      return;
+    }
+    document.body.classList.add('has-related-blocks');
+    blocks.forEach(block => {
+      const key = String(block.dataset.relatedKey || '').trim();
+      if (key) document.body.classList.add(getBodyRelatedBlockClassName(key));
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // HELPERS ITEM
+  // ════════════════════════════════════════════════════════════════
+
+  function getComparableDisplayIndex(item) {
+    const v = Number(item?.displayIndex);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  function getCurrentPathname() {
+    return (location.pathname || '').replace(/\/+$/, '') || '/';
+  }
+
+  function getAssetUrl(item) {
+    return item?.assetUrl || item?.asset?.url || null;
+  }
+
+  function getItemTimestamp(item) {
+    return Number(item?.startDate || item?.publishOn || item?.addedOn || item?.updatedOn || 0);
+  }
+
+  function getItemExcerpt(item) {
+    const maxLength = 180;
+    const excerptText = cleanText(item?.excerpt || '');
+    if (excerptText) return truncateText(excerptText, maxLength);
+    const bodyText = cleanText(item?.body || '');
+    if (bodyText) return truncateText(bodyText, maxLength);
+    return '';
+  }
+
+  function getItemLocationText(item) {
+    if (item?.location?.addressTitle) return cleanText(item.location.addressTitle);
+    if (item?.location?.addressLine1) return cleanText(item.location.addressLine1);
+    return '';
+  }
+
+  function mapItemForRender(item, CFG) {
+    const tagPrefixFields = Array.isArray(CFG?.display?.tagPrefixFields)
+      ? CFG.display.tagPrefixFields : [];
+
+    const tagPrefixValues = tagPrefixFields
+      .map(fieldConfig => {
+        const prefix = fieldConfig?.prefix || '';
+        const values = getTagValuesByPrefix(item, prefix);
+        if (!values.length) return null;
+        const limitedValues = fieldConfig?.maxItems
+          ? values.slice(0, Number(fieldConfig.maxItems)) : values;
+        return {
+          prefix: cleanText(prefix),
+          prefixSlug: slugifyToken(String(prefix).replace(/:$/, '')),
+          values: limitedValues,
+          value: limitedValues.join(fieldConfig?.joinWith || ', '),
+          label: cleanText(fieldConfig?.label || '')
+        };
+      })
+      .filter(Boolean);
+
+    return {
+      title: cleanText(item.title || ''),
+      urlId: item.urlId || '',
+      fullUrl: item.fullUrl || '',
+      assetUrl: getAssetUrl(item),
+      mediaFocalPoint: item.mediaFocalPoint || null,
+      categories: Array.isArray(item.categories)
+        ? item.categories.map(c => cleanText(c)).filter(Boolean) : [],
+      tags: Array.isArray(item.tags)
+        ? item.tags.map(t => cleanText(t)).filter(Boolean) : [],
+      excerpt: getItemExcerpt(item),
+      locationText: getItemLocationText(item),
+      displayIndex: Number(item.displayIndex || 999999),
+      timestamp: getItemTimestamp(item),
+      tagPrefixValues,
+      rawItem: item
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // RÈGLES DE MATCHING
+  // ════════════════════════════════════════════════════════════════
+
+  function itemHasCategory(item, cat) {
+    return (Array.isArray(item.categories) ? item.categories : [])
+      .map(normalize).includes(normalize(cat));
+  }
+
+  function itemHasAnyCategory(item, values) {
+    return Array.isArray(values) && values.length
+      ? values.some(c => itemHasCategory(item, c)) : false;
+  }
+
+  function itemHasTag(item, tagName) {
+    return (Array.isArray(item.tags) ? item.tags : [])
+      .map(normalize).includes(normalize(tagName));
+  }
+
+  function itemHasAnyExactTag(item, values) {
+    return Array.isArray(values) && values.length
+      ? values.some(t => itemHasTag(item, t)) : false;
+  }
+
+  function getTagObjects(item) {
+    return buildTagObjects(item.tags || []);
+  }
+
+  function getCurrentTagObjectsByPrefixes(currentItem, prefixes) {
+    const prefixSet = new Set((Array.isArray(prefixes) ? prefixes : []).map(normalize));
+    return getTagObjects(currentItem).filter(t => prefixSet.has(t.prefixNorm));
+  }
+
+  function itemSharesTagPrefix(candidateItem, currentItem, prefixes) {
+    const prefixSet = new Set((Array.isArray(prefixes) ? prefixes : []).map(normalize));
+    if (!prefixSet.size) return false;
+    const currentTags = getTagObjects(currentItem).filter(t => prefixSet.has(t.prefixNorm));
+    if (!currentTags.length) return false;
+    const currentSet = new Set(currentTags.map(t => t.rawNorm));
+    return getTagObjects(candidateItem).some(t => currentSet.has(t.rawNorm));
+  }
+
+  function itemSharesCategory(candidateItem, currentItem) {
+    const currentCategories = new Set(
+      (currentItem.categories || []).map(normalize).filter(Boolean)
+    );
+    if (!currentCategories.size) return false;
+    return (candidateItem.categories || []).some(c => currentCategories.has(normalize(c)));
+  }
+
+  function itemTitleMatchesCurrentTagValue(candidateItem, currentItem, prefixes) {
+    const candidateTitleNorm = normalize(candidateItem.title || '');
+    if (!candidateTitleNorm) return false;
+    return getCurrentTagObjectsByPrefixes(currentItem, prefixes)
+      .map(t => t.valueNorm)
+      .includes(candidateTitleNorm);
+  }
+
+  function findNextCollectionItemOfCategory(items, currentItem, rule) {
+    const currentIndex = getComparableDisplayIndex(currentItem);
+    if (currentIndex === null) return null;
+    const wantedCategories = Array.isArray(rule?.values) ? rule.values
+      : rule?.category ? [rule.category] : [];
+    const currentUrl = String(currentItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+    return (Array.isArray(items) ? items : [])
+      .filter(item => {
+        if (!item) return false;
+        const idx = getComparableDisplayIndex(item);
+        if (idx === null || idx <= currentIndex) return false;
+        if (String(item?.fullUrl || '').replace(/\/+$/, '') === currentUrl) return false;
+        if (wantedCategories.length && !itemHasAnyCategory(item, wantedCategories)) return false;
+        return true;
+      })
+      .sort((a, b) => getComparableDisplayIndex(a) - getComparableDisplayIndex(b))[0] || null;
+  }
+
+  function findNextCollectionItemWithTag(items, currentItem, rule) {
+    const currentIndex = getComparableDisplayIndex(currentItem);
+    if (currentIndex === null) return null;
+    const wantedTags = Array.isArray(rule?.values) ? rule.values.map(normalize) : [];
+    const currentUrl = String(currentItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+    return (Array.isArray(items) ? items : [])
+      .filter(item => {
+        if (!item) return false;
+        const idx = getComparableDisplayIndex(item);
+        if (idx === null || idx <= currentIndex) return false;
+        if (String(item?.fullUrl || '').replace(/\/+$/, '') === currentUrl) return false;
+        if (wantedTags.length) {
+          const itemTags = (Array.isArray(item.tags) ? item.tags : []).map(normalize);
+          if (!wantedTags.some(t => itemTags.includes(t))) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => getComparableDisplayIndex(a) - getComparableDisplayIndex(b))[0] || null;
+  }
+
+  function ruleMatchesCandidate(rule, candidateItem, currentItem, context) {
+    const type = rule?.type;
+    if (type === 'sharedCategory') return itemSharesCategory(candidateItem, currentItem);
+    if (type === 'sharedTagPrefix') return itemSharesTagPrefix(candidateItem, currentItem, rule.prefixes || []);
+    if (type === 'sharedExactTag') return itemHasAnyExactTag(candidateItem, rule.values || []);
+    if (type === 'includeCategories') return itemHasAnyCategory(candidateItem, rule.values || []);
+    if (type === 'excludeCategories') return !itemHasAnyCategory(candidateItem, rule.values || []);
+    if (type === 'includeExactTags') return itemHasAnyExactTag(candidateItem, rule.values || []);
+    if (type === 'excludeExactTags') return !itemHasAnyExactTag(candidateItem, rule.values || []);
+    if (type === 'titleMatchesCurrentTagValue') return itemTitleMatchesCurrentTagValue(candidateItem, currentItem, rule.prefixes || []);
+    if (type === 'nextCollectionItemOfCategory') {
+      const next = findNextCollectionItemOfCategory(context?.allItems || [], currentItem, rule);
+      if (!next) return false;
+      const cUrl = String(candidateItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+      const nUrl = String(next?.fullUrl || '').replace(/\/+$/, '') || '/';
+      return (cUrl && nUrl && cUrl === nUrl) || String(candidateItem?.urlId || '') === String(next?.urlId || '');
+    }
+    if (type === 'nextCollectionItemWithTag') {
+      const next = findNextCollectionItemWithTag(context?.allItems || [], currentItem, rule);
+      if (!next) return false;
+      const cUrl = String(candidateItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+      const nUrl = String(next?.fullUrl || '').replace(/\/+$/, '') || '/';
+      return (cUrl && nUrl && cUrl === nUrl) || String(candidateItem?.urlId || '') === String(next?.urlId || '');
+    }
+    return false;
+  }
+
+  function evaluateMatchGroups(candidateItem, currentItem, selection, context) {
+    const groups = Array.isArray(selection?.match?.groups) ? selection.match.groups : [];
+    if (!groups.length) return true;
+    return groups.some(group => {
+      const rules = Array.isArray(group.rules) ? group.rules : [];
+      if (!rules.length) return false;
+      const logic = String(group.logic || 'or').toLowerCase();
+      return logic === 'and'
+        ? rules.every(r => ruleMatchesCandidate(r, candidateItem, currentItem, context))
+        : rules.some(r => ruleMatchesCandidate(r, candidateItem, currentItem, context));
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // SCORE
+  // ════════════════════════════════════════════════════════════════
+
+  function computeCandidateScore(candidateItem, currentItem, selection) {
+    if (!selection?.score?.enabled) return 0;
+    const rules = Array.isArray(selection.score.rules) ? selection.score.rules : [];
+    let total = 0;
+    rules.forEach(rule => {
+      const weight = Number(rule.weight || 0);
+      if (!weight) return;
+      if (rule.type === 'sharedCategory' && itemSharesCategory(candidateItem, currentItem)) {
+        const cur = new Set((currentItem.categories || []).map(normalize).filter(Boolean));
+        (candidateItem.categories || []).forEach(c => { if (cur.has(normalize(c))) total += weight; });
+      }
+      if (rule.type === 'sharedTagPrefix') {
+        const prefixSet = new Set((Array.isArray(rule.prefixes) ? rule.prefixes : []).map(normalize));
+        const curTags = getTagObjects(currentItem).filter(t => prefixSet.has(t.prefixNorm));
+        const curSet = new Set(curTags.map(t => t.rawNorm));
+        getTagObjects(candidateItem).forEach(t => { if (curSet.has(t.rawNorm)) total += weight; });
+      }
+      if (rule.type === 'sharedExactTag') {
+        (Array.isArray(rule.values) ? rule.values : []).forEach(v => {
+          if (itemHasTag(candidateItem, v) && itemHasTag(currentItem, v)) total += weight;
+        });
+      }
+      if (rule.type === 'titleMatchesCurrentTagValue') {
+        if (itemTitleMatchesCurrentTagValue(candidateItem, currentItem, rule.prefixes || [])) total += weight;
+      }
+    });
+    return total;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // CONTRAINTES
+  // ════════════════════════════════════════════════════════════════
+
+  function passesConstraints(candidateItem, currentItem, selection) {
+    const c = selection?.constraints || {};
+    if (c.requirePublished) {
+      const state = candidateItem.workflowState;
+      if (state !== 1 && state !== 'PUBLISHED') return false;
+      if (candidateItem.publishOn && Number(candidateItem.publishOn) > Date.now()) return false;
+    }
+    if (c.requireImage && !getAssetUrl(candidateItem)) return false;
+    if (c.excludeCurrentItem) {
+      const curUrl = String(currentItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+      const itemUrl = String(candidateItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+      if (itemUrl === curUrl) return false;
+      const curTitle = normalize(currentItem?.title || '');
+      const itemTitle = normalize(candidateItem?.title || '');
+      if (curTitle && itemTitle === curTitle) return false;
+    }
+    return true;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // TRI
+  // ════════════════════════════════════════════════════════════════
+
+  function shuffleArray(arr) {
+    const clone = arr.slice();
+    for (let i = clone.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [clone[i], clone[j]] = [clone[j], clone[i]];
+    }
+    return clone;
+  }
+
+  function sortItemsByRules(items, sortRules) {
+    const list = items.slice();
+    const rules = Array.isArray(sortRules) ? sortRules : [];
+    if (!rules.length) return list;
+    if (rules.some(r => r?.type === 'random')) return shuffleArray(list);
+
+    list.sort((a, b) => {
+      for (const rule of rules) {
+        const type = rule?.type;
+        const dir = String(rule?.direction || 'asc').toLowerCase() === 'desc' ? -1 : 1;
+
+        if (type === 'score') {
+          const diff = Number(a._score || 0) - Number(b._score || 0);
+          if (diff !== 0) return diff * dir;
+        }
+        if (type === 'date') {
+          const diff = Number(a.timestamp || 0) - Number(b.timestamp || 0);
+          if (diff !== 0) return diff * dir;
+        }
+        if (type === 'title') {
+          const av = normalize(a.title || '');
+          const bv = normalize(b.title || '');
+          if (av !== bv) return av.localeCompare(bv) * dir;
+        }
+        if (type === 'collection') {
+          const diff = Number(a.displayIndex ?? 999999) - Number(b.displayIndex ?? 999999);
+          if (diff !== 0) return diff * dir;
+        }
+        // Tri par valeur ISO d'un tag prefixé
+        if (type === 'tagPrefix' && rule.prefix) {
+          const prefixNorm = normalize(String(rule.prefix).replace(/:$/, ''));
+          const getTagTs = item => {
+            const vals = getTagValuesByPrefix(item, prefixNorm);
+            return vals.length ? getISOTimestamp(vals[0]) : Infinity;
+          };
+          const diff = getTagTs(a) - getTagTs(b);
+          if (diff !== 0) return diff * dir;
+        }
+      }
+      return 0;
+    });
+    return list;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // FALLBACK
+  // ════════════════════════════════════════════════════════════════
+
+  function applyFallbackFill(selectedItems, allItems, currentItem, selection, CFG) {
+    const fallback = selection?.fallback || {};
+    const limit = Number(selection?.limit || selectedItems.length || 0);
+    if (!fallback.enabled || !fallback.fillToLimit || !limit) {
+      return selectedItems.slice(0, limit || selectedItems.length);
+    }
+    if (selectedItems.length >= limit) return selectedItems.slice(0, limit);
+
+    const usedUrls = new Set(selectedItems.map(i => String(i.fullUrl || '')));
+    const constraints = selection?.constraints || {};
+    const fallbackSelection = fallback.matchGroups
+      ? { match: { groups: fallback.matchGroups } } : null;
+
+    let pool = allItems
+      .filter(item => {
+        if (!passesConstraints(item, currentItem, { constraints })) return false;
+        if (fallbackSelection && !evaluateMatchGroups(item, currentItem, fallbackSelection, { allItems })) return false;
+        return true;
+      })
+      .map(item => mapItemForRender(item, CFG))
+      .filter(item => {
+        const url = String(item.fullUrl || '');
+        return url && !usedUrls.has(url);
+      });
+
+    pool = uniqBy(pool, i => String(i.fullUrl || i.title || ''));
+    pool = sortItemsByRules(pool, fallback.sort || [{ type: 'random' }]);
+
+    const result = selectedItems.slice();
+    for (const item of pool) {
+      if (result.length >= limit) break;
+      result.push({ ...item, _score: 0, _isFallback: true });
+    }
+    return result.slice(0, limit);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // FETCH
+  // ════════════════════════════════════════════════════════════════
+
+  function getCollectionCacheKey(path, maxPages, suffix) {
+    return ['related-block-collection-v7', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
+  }
+
+  function getCollectionCacheOptions(CFG) {
+    return {
+      useMemoryCache: CFG.performance?.useCollectionMemoryCache !== false,
+      useSessionCache: CFG.performance?.useCollectionSessionCache === true
+    };
+  }
+
+  async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions) {
+    const suffix = jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
+    const cKey = getCollectionCacheKey(path, maxPages, suffix);
+    const opts = cacheOptions || {};
+
+    if (opts.useMemoryCache !== false && COLLECTION_CACHE.has(cKey)) {
+      return COLLECTION_CACHE.get(cKey);
+    }
+    if (opts.useSessionCache) {
+      try {
+        const cached = sessionStorage.getItem(cKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            if (opts.useMemoryCache !== false) COLLECTION_CACHE.set(cKey, parsed);
+            return parsed;
+          }
+        }
+      } catch (_) {}
+    }
+
+    function ensureJsonFormat(url) {
+      const raw = String(url || '');
+      if (!raw || raw.includes('format=json')) return raw;
+      return raw.includes('?') ? raw + '&format=json' : raw + '?format=json';
+    }
+
+    let url = path + suffix;
+    const items = [];
+    for (let page = 0; page < (maxPages || 5); page++) {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (!res.ok) break;
+      const data = await res.json();
+      const batch = Array.isArray(data?.items) ? data.items
+        : Array.isArray(data?.itemList) ? data.itemList : [];
+      items.push(...batch);
+      const next = data?.pagination?.nextPageUrl || null;
+      if (!next) break;
+      url = ensureJsonFormat(next);
+    }
+
+    if (opts.useMemoryCache !== false) COLLECTION_CACHE.set(cKey, items);
+    if (opts.useSessionCache) {
+      try { sessionStorage.setItem(cKey, JSON.stringify(items)); } catch (_) {}
+    }
+    return items;
+  }
+
+  async function fetchCollectionItems(CFG) {
+    return fetchCollectionItemsFromPath(
+      CFG.sourceCollection.path,
+      CFG.performance?.maxPages || 5,
+      CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+      getCollectionCacheOptions(CFG)
+    );
+  }
+
+  async function fetchCurrentItemCollectionItems(CFG) {
+    const path = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
+    const suffix = CFG.currentItem?.sourceCollection?.jsonFormatSuffix
+      || CFG.sourceCollection?.jsonFormatSuffix
+      || DEFAULT_JSON_FORMAT_SUFFIX;
+    return fetchCollectionItemsFromPath(path, CFG.performance?.maxPages || 5, suffix, getCollectionCacheOptions(CFG));
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // ITEM COURANT
+  // ════════════════════════════════════════════════════════════════
+
+  function findCurrentItem(items, CFG) {
+    const pathname = getCurrentPathname();
+    const override = CFG.currentItem?.overrideForDev || null;
+    if (override?.enabled && (!override.bodyId || document.body.id === override.bodyId)) {
+      return {
+        id: override.bodyId || null,
+        title: cleanText(override.title || document.title || 'Draft item'),
+        fullUrl: override.fullUrl || pathname,
+        urlId: (override.fullUrl || pathname).split('/').filter(Boolean).pop() || '',
+        tags: Array.isArray(override.tags) ? override.tags.map(cleanText) : [],
+        categories: Array.isArray(override.categories) ? override.categories.map(cleanText) : [],
+        assetUrl: override.assetUrl || null,
+        mediaFocalPoint: override.mediaFocalPoint || null,
+        displayIndex: Number(override.displayIndex || 999999),
+        workflowState: 1,
+        publishOn: Date.now()
+      };
+    }
+    if (CFG.currentItem?.matchBy === 'pathname') {
+      return items.find(item => {
+        const fullUrl = String(item.fullUrl || '').replace(/\/+$/, '') || '/';
+        return fullUrl === pathname;
+      }) || null;
+    }
+    return null;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // CONSTRUCTION DOM — ÉLÉMENTS
+  // ════════════════════════════════════════════════════════════════
+
+  function getHeadingText(items, CFG) {
+    return (items.length === 1 && CFG.headingSingular)
+      ? CFG.headingSingular : (CFG.heading || '');
+  }
+
+  function buildTagPrefixField(item, fieldConfig, overrideDisplayFormat) {
+    if (!fieldConfig?.prefix) return null;
+    let values = getTagValuesByPrefix(item, fieldConfig.prefix);
+    if (!values.length) return null;
+    if (fieldConfig.maxItems) values = values.slice(0, Number(fieldConfig.maxItems));
+
+    const el = document.createElement('div');
+    el.className = fieldConfig.className || 'related-block__tag-prefix';
+
+    const label = cleanText(fieldConfig.label || '');
+    const joinWith = fieldConfig.joinWith || ', ';
+    const displayFormat = overrideDisplayFormat ?? fieldConfig.displayFormat ?? null;
+    const locale = fieldConfig.locale || null;
+
+    const formattedValues = values.map(v =>
+      displayFormat !== null ? formatISOTag(v, displayFormat, locale) : v
+    ).filter(Boolean);
+
+    const text = formattedValues.join(joinWith);
+    el.textContent = label ? (label + ' ' + text) : text;
+    return el;
+  }
+
+  function buildMetaElement(item) {
+    const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
+    if (!cats.length) return null;
+    const meta = document.createElement('div');
+    meta.className = 'related-block__meta';
+    cats.forEach(cat => {
+      const span = document.createElement('span');
+      span.className = 'related-block__category';
+      span.textContent = cleanText(cat);
+      meta.appendChild(span);
+    });
+    return meta;
+  }
+
+  function buildTitleElement(item) {
+    const el = document.createElement('div');
+    el.className = 'related-block__title';
+    el.textContent = cleanText(item.title || '');
+    return el;
+  }
+
+  function buildExcerptElement(item) {
+    if (!item.excerpt) return null;
+    const el = document.createElement('div');
+    el.className = 'related-block__excerpt';
+    el.textContent = cleanText(item.excerpt);
+    return el;
+  }
+
+  function buildLocationElement(item) {
+    if (!item.locationText) return null;
+    const el = document.createElement('div');
+    el.className = 'related-block__location';
+    el.textContent = cleanText(item.locationText);
+    return el;
+  }
+
+  function buildTagPrefixElements(item, CFG, filterPrefixes, overrideDisplayFormat) {
+    let fields = Array.isArray(CFG.display?.tagPrefixFields) ? CFG.display.tagPrefixFields : [];
+    if (Array.isArray(filterPrefixes) && filterPrefixes.length) {
+      const prefixSet = new Set(
+        filterPrefixes.map(p => normalize(String(p).replace(/:$/, '')))
+      );
+      fields = fields.filter(fc => prefixSet.has(normalize(String(fc?.prefix || '').replace(/:$/, ''))));
+    }
+    return fields
+      .map(fc => buildTagPrefixField(item, fc, overrideDisplayFormat))
+      .filter(Boolean);
+  }
+
+  function buildImageElement(item, CFG) {
+    if (!CFG.display?.showImage || !item.assetUrl) return null;
+    const media = document.createElement('div');
+    media.className = 'related-block__image';
+    const img = document.createElement('img');
+    img.src = item.assetUrl;
+    img.alt = cleanText(item.title || '');
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.style.objectPosition =
+      item.mediaFocalPoint &&
+      typeof item.mediaFocalPoint.x === 'number' &&
+      typeof item.mediaFocalPoint.y === 'number'
+        ? `${Math.round(item.mediaFocalPoint.x * 100)}% ${Math.round(item.mediaFocalPoint.y * 100)}%`
+        : '50% 50%';
+    const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths)
+      ? CFG.display.srcsetWidths : DEFAULT_SRCSET_WIDTHS;
+    img.srcset = srcsetWidths.map(w => `${item.assetUrl}?format=${w}w ${w}w`).join(', ');
+    img.sizes = CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES;
+    media.appendChild(img);
+    return media;
+  }
+
+  /**
+   * Construit les nœuds DOM pour un type de contenu.
+   * Accepte une string ('image', 'title'…) ou un objet descriptor
+   * ({ type: 'tagPrefix', prefix: 'Date:', displayFormat: 'day' }).
+   */
+  function buildContentNodesByType(definition, item, CFG) {
+    const descriptor = typeof definition === 'string' ? { type: definition } : (definition || {});
+    const type = descriptor.type;
+
+    if (type === 'image') {
+      const el = buildImageElement(item, CFG);
+      return el ? [el] : [];
+    }
+    if (type === 'meta' && CFG.display?.showCategories) {
+      const el = buildMetaElement(item);
+      return el ? [el] : [];
+    }
+    if (type === 'title' && CFG.display?.showTitle) {
+      return [buildTitleElement(item)];
+    }
+    if (type === 'excerpt' && CFG.display?.showExcerpt) {
+      const el = buildExcerptElement(item);
+      return el ? [el] : [];
+    }
+    if (type === 'location' && CFG.display?.showLocation) {
+      const el = buildLocationElement(item);
+      return el ? [el] : [];
+    }
+    if (type === 'tagPrefix') {
+      const filterPrefixes = Array.isArray(descriptor.prefixes)
+        ? descriptor.prefixes
+        : descriptor.prefix ? [descriptor.prefix] : null;
+      // Le descriptor peut surcharger le displayFormat du tagPrefixField
+      const overrideFormat = descriptor.displayFormat !== undefined ? descriptor.displayFormat : undefined;
+      return buildTagPrefixElements(item, CFG, filterPrefixes, overrideFormat);
+    }
+    return [];
+  }
+
+  function buildGroupedContent(item, CFG) {
+    const groups = Array.isArray(CFG.display?.groups) ? CFG.display.groups : [];
+    if (!groups.length) return null;
+    const fragment = document.createDocumentFragment();
+    let hasContent = false;
+    groups.forEach(group => {
+      const children = Array.isArray(group?.children) ? group.children : [];
+      if (!children.length) return;
+      const wrapper = document.createElement(group?.tag || 'div');
+      String(group?.className || '')
+        .split(/\s+/).map(s => s.trim()).filter(Boolean)
+        .forEach(cls => wrapper.classList.add(cls));
+      children.forEach(child => {
+        buildContentNodesByType(child, item, CFG).forEach(node => wrapper.appendChild(node));
+      });
+      if (wrapper.childNodes.length) { fragment.appendChild(wrapper); hasContent = true; }
+    });
+    return hasContent ? fragment : null;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // CONSTRUCTION DOM — BLOC
+  // ════════════════════════════════════════════════════════════════
+
+  function createLoader() {
+    const loader = document.createElement('div');
+    loader.className = 'related-block__loader';
+    loader.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'related-block__loader-dot';
+      loader.appendChild(dot);
+    }
+    return loader;
+  }
+
+  function buildHeadingCta(CFG) {
+    const cta = CFG.headingCta || {};
+    const text = cleanText(cta.text || '');
+    const href = String(cta.href || '').trim();
+    if (!text || !href) return null;
+    const link = document.createElement('a');
+    link.className = 'related-block__heading-cta';
+    link.href = href;
+    if (cta.newTab) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+    const textEl = document.createElement('span');
+    textEl.className = 'related-block__heading-cta-text';
+    textEl.textContent = text;
+    link.appendChild(textEl);
+    const icon = String(cta.icon || '');
+    if (icon) {
+      const iconEl = document.createElement('span');
+      iconEl.className = 'related-block__heading-cta-icon';
+      if (String(cta.iconType || 'text').toLowerCase() === 'html') {
+        iconEl.innerHTML = icon;
+      } else {
+        iconEl.textContent = icon;
+      }
+      link.appendChild(iconEl);
+    }
+    return link;
+  }
+
+  function buildHeadingElement(items, CFG, forceHeading) {
+    const headingText = forceHeading
+      ? (CFG.heading || CFG.headingSingular || '') : getHeadingText(items, CFG);
+    const headingCta = buildHeadingCta(CFG);
+    if (!headingText && !headingCta) return null;
+    const heading = document.createElement('div');
+    heading.className = 'related-block__heading';
+    if (headingText) {
+      const tag = document.createElement(CFG.headingTag || 'h3');
+      tag.className = 'related-block__heading-text';
+      tag.textContent = headingText;
+      heading.appendChild(tag);
+    }
+    if (headingCta) heading.appendChild(headingCta);
+    return heading;
+  }
+
+  function applyStateClasses(section) {
+    const toRemove = [
+      'related-block--has-heading', 'related-block--has-image', 'related-block--has-title',
+      'related-block--has-meta', 'related-block--has-excerpt', 'related-block--has-location',
+      'related-block--has-tag-prefix', 'related-block--has-heading-cta',
+      'related-block--single-item', 'related-block--multiple-items', 'related-block--is-empty'
+    ];
+    toRemove.forEach(cls => section.classList.remove(cls));
+
+    const checks = [
+      ['.related-block__heading',     'related-block--has-heading'],
+      ['.related-block__heading-cta', 'related-block--has-heading-cta'],
+      ['.related-block__image',       'related-block--has-image'],
+      ['.related-block__title',       'related-block--has-title'],
+      ['.related-block__meta',        'related-block--has-meta'],
+      ['.related-block__excerpt',     'related-block--has-excerpt'],
+      ['.related-block__location',    'related-block--has-location'],
+      ['.related-block__tag-prefix',  'related-block--has-tag-prefix'],
+    ];
+    checks.forEach(([sel, cls]) => {
+      if (section.querySelector(sel)) section.classList.add(cls);
+    });
+
+    const items = section.querySelectorAll('.related-block__item');
+    if (items.length === 1) section.classList.add('related-block--single-item');
+    if (items.length > 1) section.classList.add('related-block--multiple-items');
+  }
+
+  function buildCard(item, CFG, extraClasses) {
+    const card = document.createElement('a');
+    card.className = 'related-block__item';
+    card.href = item.fullUrl || (CFG.sourceCollection.path + '/' + item.urlId);
+    extraClasses.forEach(cls => card.classList.add(cls + '__item'));
+
+    if (Array.isArray(CFG.display?.groups) && CFG.display.groups.length) {
+      const groupedContent = buildGroupedContent(item, CFG);
+      if (groupedContent) card.appendChild(groupedContent);
+      return card;
+    }
+
+    if (CFG.display?.showImage && item.assetUrl) {
+      const media = buildImageElement(item, CFG);
+      if (media) card.appendChild(media);
+    }
+    const content = document.createElement('div');
+    content.className = 'related-block__content';
+    const order = Array.isArray(CFG.display?.order)
+      ? CFG.display.order : ['meta', 'title', 'excerpt', 'location'];
+    order.forEach(type => {
+      buildContentNodesByType(type, item, CFG).forEach(node => {
+        if (node.classList?.contains('related-block__image')) return;
+        content.appendChild(node);
+      });
+    });
+    card.appendChild(content);
+    return card;
+  }
+
+  function buildBlockShell(CFG) {
+    const section = document.createElement('section');
+    section.className = 'related-block related-block--is-loading';
+    section.dataset.relatedKey = CFG.key;
+    String(CFG.classes?.block || '').split(/\s+/).map(s => s.trim()).filter(Boolean)
+      .forEach(cls => section.classList.add(cls));
+    const inner = document.createElement('div');
+    inner.className = 'related-block__inner';
+    if (!CFG.loading?.hideLoader) inner.appendChild(createLoader());
+    section.appendChild(inner);
+    applyStateClasses(section);
+    return section;
+  }
+
+  function replaceBlockContent(section, items, CFG) {
+    const inner = section.querySelector('.related-block__inner');
+    if (!inner) return;
+    inner.innerHTML = '';
+    const heading = buildHeadingElement(items, CFG, false);
+    if (heading) inner.appendChild(heading);
+    const list = document.createElement('div');
+    list.className = 'related-block__list';
+    const extraClasses = String(CFG.classes?.block || '')
+      .split(/\s+/).map(s => s.trim()).filter(Boolean);
+    items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses)));
+    inner.appendChild(list);
+    section.classList.remove('related-block--is-loading');
+    applyStateClasses(section);
+  }
+
+  function replaceBlockWithEmptyState(section, CFG) {
+    const inner = section.querySelector('.related-block__inner');
+    if (!inner) return;
+    inner.innerHTML = '';
+    const heading = buildHeadingElement([], CFG, true);
+    if (heading) inner.appendChild(heading);
+    const message = cleanText(CFG.emptyState?.message || '');
+    if (message) {
+      const empty = document.createElement('div');
+      empty.className = 'related-block__empty';
+      empty.textContent = message;
+      inner.appendChild(empty);
+    }
+    section.classList.remove('related-block--is-loading');
+    section.classList.add('related-block--is-empty');
+    applyStateClasses(section);
+  }
+
+  function buildBlock(items, CFG) {
+    const section = document.createElement('section');
+    section.className = 'related-block';
+    section.dataset.relatedKey = CFG.key;
+    String(CFG.classes?.block || '').split(/\s+/).map(s => s.trim()).filter(Boolean)
+      .forEach(cls => section.classList.add(cls));
+    const inner = document.createElement('div');
+    inner.className = 'related-block__inner';
+    const heading = buildHeadingElement(items, CFG, false);
+    if (heading) inner.appendChild(heading);
+    const list = document.createElement('div');
+    list.className = 'related-block__list';
+    const extraClasses = String(CFG.classes?.block || '')
+      .split(/\s+/).map(s => s.trim()).filter(Boolean);
+    items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses)));
+    inner.appendChild(list);
+    section.appendChild(inner);
+    applyStateClasses(section);
+    return section;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // RUNNER
+  // ════════════════════════════════════════════════════════════════
+
+  function matchesDevGuard(CFG) {
+    const guard = CFG.devGuard || {};
+    if (!guard.enabled) return true;
+    if (guard.bodyId && document.body.id !== guard.bodyId) return false;
+    return true;
+  }
+
+  function getInsertTarget(selector) {
+    return document.querySelector(selector || '');
+  }
+
+  function alreadyInjected(target, cfgKey) {
+    return !!target.querySelector(`:scope > .related-block[data-related-key="${cfgKey}"]`);
+  }
+
+  function insertInto(target, el, mode) {
+    if ((mode || 'append').toLowerCase() === 'prepend') {
+      target.insertAdjacentElement('afterbegin', el);
+    } else {
+      target.insertAdjacentElement('beforeend', el);
+    }
+  }
+
+  function cacheKey(CFG) {
+    return ['related-block-v7', CFG.key, location.pathname].join('::');
+  }
+
+  function createRunner(CFG) {
+    CFG = Object.assign({
+      enabled: true, key: 'related-block', debug: false,
+      devGuard: { enabled: false },
+      requiredBodyClasses: [],
+      sourceCollection: { path: '' },
+      currentItem: { matchBy: 'pathname', sourceCollection: null },
+      insertion: { targetSelector: '', mode: 'append' },
+      heading: '', headingSingular: '', headingTag: 'h3',
+      headingCta: { text: '', href: '', icon: '', iconType: 'text', newTab: false },
+      classes: { block: '' },
+      display: {
+        maxItems: 4, showImage: true, showTitle: true, showCategories: true,
+        showExcerpt: false, showLocation: false,
+        order: ['meta', 'title', 'excerpt', 'location'],
+        tagPrefixFields: [], groups: [],
+        srcsetWidths: DEFAULT_SRCSET_WIDTHS, imageSizes: DEFAULT_IMAGE_SIZES
+      },
+      loading: { hideLoader: false },
+      emptyState: { message: '' },
+      preload: { enabled: false, includeSourceCollection: true, includeCurrentItemSource: false, collections: [], maxPages: null },
+      selection: {
+        constraints: { requirePublished: true, requireImage: true, excludeCurrentItem: false },
+        match: { groups: [] },
+        score: { enabled: false, rules: [], minScore: 0 },
+        sort: [{ type: 'date', direction: 'desc' }],
+        limit: 4,
+        fallback: { enabled: false, fillToLimit: false, sort: [{ type: 'random' }], matchGroups: null }
+      },
+      performance: {
+        useSessionStorage: true, maxPages: 5,
+        useCollectionMemoryCache: true, useCollectionSessionCache: false
+      }
+    }, CFG || {});
+
+    if (CFG.enabled === false) return null;
+    if (!matchesDevGuard(CFG)) return null;
+    if (!CFG.requiredBodyClasses.every(cls => document.body.classList.contains(cls))) return null;
+
+    let observer = null;
+
+    async function apply() {
+      const target = getInsertTarget(CFG.insertion?.targetSelector);
+      if (!target) return false;
+      if (alreadyInjected(target, CFG.key)) { syncBodyRelatedBlockClasses(); return true; }
+
+      const key = cacheKey(CFG);
+      if (CFG.performance?.useSessionStorage) {
+        try {
+          const cached = sessionStorage.getItem(key);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length) {
+              insertInto(target, buildBlock(parsed, CFG), CFG.insertion?.mode);
+              syncBodyRelatedBlockClasses();
+              return true;
+            }
+          }
+        } catch (_) {}
+      }
+
+      const shell = buildBlockShell(CFG);
+      insertInto(target, shell, CFG.insertion?.mode);
+
+      let items;
+      try {
+        items = await fetchCollectionItems(CFG);
+      } catch (e) {
+        if (CFG.debug) console.warn('[RB]', CFG.key, 'fetchCollectionItems failed', e);
+        shell.remove(); syncBodyRelatedBlockClasses(); return false;
+      }
+      if (!Array.isArray(items) || !items.length) {
+        shell.remove(); syncBodyRelatedBlockClasses(); return false;
+      }
+
+      let currentItemSourceItems = items;
+      const currentSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
+      if (currentSourcePath !== (CFG.sourceCollection?.path || '')) {
+        try {
+          currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG);
+        } catch (e) {
+          if (CFG.debug) console.warn('[RB]', CFG.key, 'fetchCurrentItemCollectionItems failed', e);
+          shell.remove(); syncBodyRelatedBlockClasses(); return false;
+        }
+      }
+      if (!Array.isArray(currentItemSourceItems) || !currentItemSourceItems.length) {
+        shell.remove(); syncBodyRelatedBlockClasses(); return false;
+      }
+
+      const currentItem = findCurrentItem(currentItemSourceItems, CFG);
+      if (!currentItem) {
+        shell.remove(); syncBodyRelatedBlockClasses(); return false;
+      }
+
+      const candidates = [];
+      items.forEach(item => {
+        if (!item) return;
+        if (!passesConstraints(item, currentItem, CFG.selection)) return;
+        if (!evaluateMatchGroups(item, currentItem, CFG.selection, { allItems: items })) return;
+        const score = computeCandidateScore(item, currentItem, CFG.selection);
+        if (CFG.selection?.score?.enabled && score < Number(CFG.selection.score.minScore || 0)) return;
+        candidates.push({ ...mapItemForRender(item, CFG), _score: score });
+      });
+
+      let finalItems = sortItemsByRules(candidates, CFG.selection?.sort || []);
+      finalItems = uniqBy(finalItems, i => String(i.fullUrl || i.title || ''));
+      const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
+      if (limit > 0) finalItems = finalItems.slice(0, limit);
+
+      finalItems = applyFallbackFill(finalItems, items, currentItem,
+        { ...CFG.selection, limit }, CFG);
+
+      if (!finalItems.length) {
+        if (CFG.emptyState?.message) {
+          replaceBlockWithEmptyState(shell, CFG);
+          syncBodyRelatedBlockClasses();
+          if (CFG.performance?.useSessionStorage) {
+            try { sessionStorage.setItem(key, JSON.stringify([])); } catch (_) {}
+          }
+          return true;
+        }
+        shell.remove(); syncBodyRelatedBlockClasses();
+        if (CFG.performance?.useSessionStorage) {
+          try { sessionStorage.setItem(key, JSON.stringify([])); } catch (_) {}
+        }
+        return false;
+      }
+
+      replaceBlockContent(shell, finalItems, CFG);
+      syncBodyRelatedBlockClasses();
+      if (CFG.performance?.useSessionStorage) {
+        try { sessionStorage.setItem(key, JSON.stringify(finalItems)); } catch (_) {}
+      }
+      return true;
+    }
+
+    async function start() {
+      const ok = await apply();
+      if (ok) return;
+      observer = new MutationObserver(async () => {
+        const target = getInsertTarget(CFG.insertion?.targetSelector);
+        if (!target) return;
+        if (alreadyInjected(target, CFG.key)) {
+          syncBodyRelatedBlockClasses();
+          if (observer) observer.disconnect();
+          return;
+        }
+        const injected = await apply();
+        if (injected && observer) observer.disconnect();
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
+
+    return { start };
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // PRÉCHARGEMENT
+  // ════════════════════════════════════════════════════════════════
+
+  function buildPreloadQueue() {
+    const queue = [];
+    CONFIGS.forEach(CFG => {
+      if (!CFG || CFG.enabled === false) return;
+      if (!matchesDevGuard(CFG)) return;
+      if (!CFG.requiredBodyClasses.every(cls => document.body.classList.contains(cls))) return;
+      if (CFG.preload?.enabled !== true) return;
+      const maxPages = CFG.preload?.maxPages || CFG.performance?.maxPages || 5;
+      (Array.isArray(CFG.preload?.collections) ? CFG.preload.collections : []).forEach(col => {
+        if (col?.path) queue.push({
+          path: col.path,
+          maxPages: col.maxPages || maxPages,
+          jsonFormatSuffix: col.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+          cacheOptions: getCollectionCacheOptions(CFG)
+        });
+      });
+      if (CFG.preload?.includeSourceCollection !== false && CFG.sourceCollection?.path) {
+        queue.push({
+          path: CFG.sourceCollection.path, maxPages,
+          jsonFormatSuffix: CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+          cacheOptions: getCollectionCacheOptions(CFG)
+        });
+      }
+      if (CFG.preload?.includeCurrentItemSource === true && CFG.currentItem?.sourceCollection?.path) {
+        queue.push({
+          path: CFG.currentItem.sourceCollection.path, maxPages,
+          jsonFormatSuffix: CFG.currentItem.sourceCollection.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+          cacheOptions: getCollectionCacheOptions(CFG)
+        });
+      }
+    });
+    return uniqBy(
+      queue.filter(i => i.path),
+      i => [i.path, i.maxPages, i.jsonFormatSuffix].join('::')
+    );
+  }
+
+  function runPreloadQueue() {
+    const queue = buildPreloadQueue();
+    if (!queue.length) return;
+    const runner = async () => {
+      for (const item of queue) {
+        try {
+          await fetchCollectionItemsFromPath(item.path, item.maxPages, item.jsonFormatSuffix, item.cacheOptions);
+        } catch (_) {}
+      }
+    };
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(runner, { timeout: 1500 });
+    } else {
+      setTimeout(runner, 300);
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // DÉMARRAGE
+  // ════════════════════════════════════════════════════════════════
+
+  const runners = CONFIGS.map(createRunner).filter(Boolean);
+  if (!runners.length) return;
+
+  async function startSequentially() {
+    for (const runner of runners) await runner.start();
+    syncBodyRelatedBlockClasses();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      startSequentially();
+      runPreloadQueue();
+    }, { once: true });
+  } else {
+    startSequentially();
+    runPreloadQueue();
+  }
+  document.addEventListener('turbolinks:load', () => {
+    startSequentially();
+    runPreloadQueue();
+  });
+
+})();
