@@ -5,7 +5,6 @@
  *
  * SITES
  *   — Parcours Céramique Carouge   pcc.jonasnicollin.ch
- *   — Geneva Art Week              genevaartweek.com
  *   — Carneiro Architectes         carneiro.jonasnicollin.ch
  *
  * ════════════════════════════════════════════════════════════════════
@@ -17,7 +16,7 @@
  *   1. Fetch le JSON Squarespace de la page courante
  *   2. Résout l'item courant (par fullUrl ou urlId)
  *   3. Monte un container .metadata-blocks-wrapper dans le DOM
- *   4. Construit les blocs de métadonnées à partir des tags/catégories
+ *   4. Construit les blocs de métadonnées à partir des tags / catégories
  *
  * ════════════════════════════════════════════════════════════════════
  * RÉFÉRENCE CONFIGURATION — OPTIONS EXHAUSTIVES
@@ -68,6 +67,11 @@
  *
  *       titlePlural: 'Dates',
  *         // Label pluriel (si plusieurs valeurs). Fallback sur title.
+ *
+ *       titleSuffix: '\u00A0',
+ *         // Suffixe ajouté après le titre (singulier et pluriel).
+ *         // Utile pour ajouter un espace insécable entre le titre et la valeur.
+ *         // Ex : titleSuffix: '\u00A0' → 'Étape 3' au lieu de 'Étape3'.
  *
  *       iconTitle: 'event',
  *         // Icône Material Symbols (remplace title/titlePlural).
@@ -128,7 +132,7 @@
  *         // Valeurs sur une ligne (span) avec séparateur.
  *
  *       inlineSeparator: ',\u00A0',
- *         // Séparateur inline (défaut : ',\u00A0').
+ *         // Séparateur inline entre les valeurs d'un même bloc (défaut : ',\u00A0').
  *
  *       maxValues: 3,
  *         // Limite le nombre de valeurs affichées.
@@ -142,10 +146,15 @@
  *
  *       // ── Groupement ───────────────────────────────────────────────
  *       group: 'location',
- *         // Greffe les valeurs de ce bloc dans le bloc 'location'.
+ *         // Greffe les valeurs de ce bloc dans le bloc parent 'location'.
  *
  *       groupPosition: 'append',
  *         // 'append' (défaut) | 'prepend'.
+ *
+ *       groupSeparator: ',\u00A0',
+ *         // Séparateur inséré entre la dernière valeur existante du bloc
+ *         // parent et la première valeur greffée (défaut : ',\u00A0').
+ *         // Ex : 'Gy' + groupSeparator + 'Suisse' → 'Gy, Suisse'
  *     },
  *   ],
  *
@@ -191,7 +200,8 @@
  * .metadata-elements                   Container des valeurs
  *   .metadata-excerpt                  (sur .metadata-elements si excerpt)
  * .metadata-value                      Valeur individuelle (div ou span)
- * .metadata-separator                  Séparateur inline
+ * .metadata-separator                  Séparateur inline entre valeurs
+ * .metadata-group-separator            Séparateur entre groupe greffé et bloc parent
  * .metadata-block-separator            Séparateur entre blocs
  *
  * ════════════════════════════════════════════════════════════════════
@@ -216,13 +226,18 @@
  * }
  *
  * // Intervalle de dates
- * // Tag : 'Date:2026-09-14/2026-09-22'
- * // Résultat : '14–22 septembre 2026'
+ * // Tag : 'Date:2026-09-14/2026-09-22'  →  '14–22 septembre 2026'
  *
- * // Bloc groupé (pays greffé sur lieu)
+ * // Titre avec suffixe (espace insécable entre titre et valeur)
+ * {
+ *   name: 'stage', title: 'Étape', titlePlural: 'Étapes',
+ *   titleSuffix: '\u00A0',    // → 'Étape 3'
+ * }
+ *
+ * // Bloc groupé avec séparateur (ex : lieu + pays → 'Gy, Suisse')
  * { name: 'location', title: 'Lieu', allowedPrefixSuffix: 'Lieu:', source: 'tags' },
- * { name: 'country', allowedPrefixSuffix: 'Pays:', source: 'tags',
- *   group: 'location', groupPosition: 'append' }
+ * { name: 'land', allowedPrefixSuffix: 'Pays:', source: 'tags',
+ *   group: 'location', groupPosition: 'append', groupSeparator: ',\u00A0' }
  *
  */
 (function () {
@@ -352,9 +367,8 @@
    */
   function isISODate(str) {
     const ISO = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z?)?$/;
-    const s = String(str || '');
+    const s   = String(str || '');
     if (ISO.test(s)) return true;
-    // Intervalle : 2026-09-14/2026-09-22
     const parts = s.split('/');
     return parts.length === 2 && ISO.test(parts[0]) && ISO.test(parts[1]);
   }
@@ -578,9 +592,8 @@
 
   function sortBlockValues(values, block) {
     const list = [...values];
-    const dir = block.sortOrder === 'desc' ? -1 : 1;
+    const dir  = block.sortOrder === 'desc' ? -1 : 1;
     if (block.sortOrder === 'asc' || block.sortOrder === 'desc') {
-      // Tri chronologique pour les dates ISO, alpha sinon
       if (block.formatDates) {
         list.sort((a, b) => {
           const pa = parseISO(a.split('/')[0]);
@@ -642,8 +655,9 @@
   function getBlockTitle(block, valueCount) {
     if (block.showTitle === false) return null;
     if (block.title === 'hidden') return null;
-    const singular = block.iconTitle || block.title || '';
-    const plural   = block.iconTitle || block.titlePlural || block.title || '';
+    const suffix   = block.titleSuffix || '';
+    const singular = block.iconTitle ? block.iconTitle : ((block.title || '') + suffix);
+    const plural   = block.iconTitle ? block.iconTitle : ((block.titlePlural || block.title || '') + suffix);
     return valueCount > 1 ? plural : singular;
   }
 
@@ -689,6 +703,15 @@
     separator.setAttribute('aria-hidden', 'true');
     separator.textContent = separatorText;
     return separator;
+  }
+
+  function createGroupSeparatorElement(separatorText, inline) {
+    const tag = inline ? 'span' : 'div';
+    const sep = document.createElement(tag);
+    sep.className = 'metadata-group-separator';
+    sep.setAttribute('aria-hidden', 'true');
+    sep.textContent = separatorText;
+    return sep;
   }
 
   function createMetadataBlockWrapper(block, orderMap, valueCount) {
@@ -738,7 +761,7 @@
    * ════════════════════════════════════ */
 
   function buildMetadataBlocks(settings, itemData, container) {
-    const orderMap    = getBlockOrderMap(settings);
+    const orderMap      = getBlockOrderMap(settings);
     const blockWrappers = {};
 
     const allBlocks = [
@@ -785,7 +808,7 @@
       blockWrappers[block.name] = wrapper;
     });
 
-    // Blocs groupés — greffés sur un bloc parent existant
+    // ── Blocs groupés — greffés sur un bloc parent existant ───────────────
     pendingGroups.forEach(block => {
       const parentWrapper = blockWrappers[block.group];
       const targetContent = parentWrapper?.querySelector('.metadata-elements');
@@ -795,25 +818,52 @@
       const values    = normalizeBlockValues(rawValues, block);
       if (!values.length) return;
 
-      const mapsUrl = block.useGoogleMapsLink ? getGoogleMapsUrl(itemData) : '';
-      values.forEach(value => {
-        const element = createMetadataValueElement(
-          value,
-          block.displayInline,
-          { href: mapsUrl || '', target: block.googleMapsTarget || '' }
-        );
-        if (block.groupPosition === 'prepend') {
-          targetContent.insertBefore(element, targetContent.firstChild);
-        } else {
-          targetContent.appendChild(element);
+      const mapsUrl       = block.useGoogleMapsLink ? getGoogleMapsUrl(itemData) : '';
+      const groupSep      = block.groupSeparator ?? ',\u00A0';
+      const isInline      = block.displayInline;
+
+      if (block.groupPosition === 'prepend') {
+        // Séparateur entre les valeurs greffées et les valeurs existantes
+        const existingFirst = targetContent.querySelector('.metadata-value');
+        if (existingFirst && groupSep) {
+          targetContent.insertBefore(
+            createGroupSeparatorElement(groupSep, isInline),
+            existingFirst
+          );
         }
-      });
+        // Valeurs en ordre inverse pour que l'insertBefore préserve l'ordre
+        [...values].reverse().forEach(value => {
+          const element = createMetadataValueElement(value, isInline, {
+            href: mapsUrl || '', target: block.googleMapsTarget || ''
+          });
+          targetContent.insertBefore(element, targetContent.firstChild);
+        });
+      } else {
+        // append (défaut) — séparateur entre les valeurs existantes et les nouvelles
+        const hasExisting = targetContent.querySelector('.metadata-value') !== null;
+        if (hasExisting && groupSep) {
+          targetContent.appendChild(createGroupSeparatorElement(groupSep, isInline));
+        }
+        values.forEach((value, index) => {
+          const element = createMetadataValueElement(value, isInline, {
+            href: mapsUrl || '', target: block.googleMapsTarget || ''
+          });
+          // Séparateur inline entre les valeurs du groupe greffé elles-mêmes
+          if (isInline && index < values.length - 1) {
+            const sep = document.createElement('span');
+            sep.className = 'metadata-separator';
+            sep.textContent = block.inlineSeparator || ',\u00A0';
+            element.appendChild(sep);
+          }
+          targetContent.appendChild(element);
+        });
+      }
 
       // Mettre à jour le titre du bloc parent (singulier / pluriel)
       const parentBlockConfig = allBlocks.find(item => item.name === block.group);
       if (parentBlockConfig) {
-        const allValues    = Array.from(targetContent.querySelectorAll('.metadata-value'));
-        const parentTitle  = parentWrapper.querySelector('.metadata-title');
+        const allValues     = Array.from(targetContent.querySelectorAll('.metadata-value'));
+        const parentTitle   = parentWrapper.querySelector('.metadata-title');
         const computedTitle = getBlockTitle(parentBlockConfig, allValues.length);
         if (parentTitle && computedTitle) parentTitle.textContent = computedTitle;
       }
