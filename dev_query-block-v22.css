@@ -578,6 +578,31 @@ body.sqb-panel-open { overflow: hidden; }
 .sqb-sentinel  { height: 1px; pointer-events: none; }
 
 
+
+/* ─────────────────────────────────────────────
+   GROUPE INLINE (role: 'body', inline: true)
+   ───────────────────────────────────────────── */
+
+.sqb-card__group--inline {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+}
+
+/* Les enfants directs ne forcent plus le flex-direction column */
+.sqb-card__group--inline > * {
+  flex-shrink: 0;
+}
+
+/* Séparateur : même opacité que les éléments texte adjacents */
+.sqb-inline-sep {
+  opacity: 0.5;
+  padding: 0 0.1em;
+  flex-shrink: 0;
+}
+
 /* ─────────────────────────────────────────────
    ANIMATION FADE-IN DES CARTES
    Activée par défaut (display.fadeIn: false pour désactiver)
