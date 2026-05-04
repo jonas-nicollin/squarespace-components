@@ -3,6 +3,11 @@
  * Fetch JSON paginé · filtres · tabs · groupBy · sticky · hooks · masonry · cache
  * https://github.com/jonas-nicollin/squarespace-components
  *
+ * SITES
+ *   — Parcours Céramique Carouge  pcc.jonasnicollin.ch
+ *   — Geneva Art Week             genevaartweek.com
+ *   — Carneiro Architectes        carneiro.jonasnicollin.ch
+ *
  * ════════════════════════════════════════════════════════════════════
  * RÉFÉRENCE CONFIGURATION — OPTIONS EXHAUSTIVES
  * ════════════════════════════════════════════════════════════════════
@@ -635,10 +640,24 @@
     if (groups) {
       groups.forEach(function(grp) {
         var wrapper = el('div', { class: ROLE_CLASS[grp.role] || 'sqb-card__group' });
-        (grp.children || []).forEach(function(def) {
-          var node = buildChild(def, item);
-          if (node) wrapper.appendChild(node);
-        });
+        var sep     = grp.separator || ' ';
+        var useInline = grp.inline === true;
+        var children = grp.children || [];
+        if (useInline) {
+          // Rendu inline : tous les enfants sur une ligne avec séparateur
+          var built = children.map(function(def) { return buildChild(def, item); }).filter(Boolean);
+          built.forEach(function(node, ni) {
+            wrapper.appendChild(node);
+            if (ni < built.length - 1 && sep) {
+              wrapper.appendChild(document.createTextNode(sep));
+            }
+          });
+        } else {
+          children.forEach(function(def) {
+            var node = buildChild(def, item);
+            if (node) wrapper.appendChild(node);
+          });
+        }
         if (wrapper.hasChildNodes()) card.appendChild(wrapper);
       });
       return card;
@@ -1096,8 +1115,9 @@
 
     var state       = { tab: null, category: null, tags: {}, search: '' };
     var secondaryEl = null;
-    var mobileObj   = null;
-    var toggleBtn   = null;
+    var mobileObj      = null;
+    var toggleBtn      = null;
+    var panelClearBtn  = null;  // assigné après buildMobilePanel
 
     function emit() {
       var t = {}; Object.keys(state.tags).forEach(function(k) { t[k] = state.tags[k]; });
@@ -1317,8 +1337,17 @@
       }
 
       mobileObj = buildMobilePanel(appendSecondary, tabPool, i18n);
-
       toggleBtn.addEventListener('click', function() { mobileObj.open(); });
+
+      // Récupérer la référence du bouton clearAll dans le panneau
+      panelClearBtn = mobileObj.panelClearBtn || null;
+      if (panelClearBtn) {
+        panelClearBtn.addEventListener('click', function() {
+          state.category = null; state.tags = {}; state.search = '';
+          if (secondaryEl) { secondaryEl.innerHTML = ''; appendSecondary(tabPool(), secondaryEl); }
+          emit();
+        });
+      }
 
       // ResizeObserver pour activer/désactiver selon breakpoint
       var isMobileMode = false;
@@ -1419,18 +1448,13 @@
     function scrollToGrid() {
       if (!scrollOnFilter) return;
       if (!filterWrapper) return;
-      var isConfiguredSticky = fc.sticky;
-      if (!isConfiguredSticky) return;
-      // Attendre le prochain frame pour que le DOM soit stable après render()
+      if (!fc.sticky) return;
       requestAnimationFrame(function() {
-        // getBoundingClientRect().bottom du wrapper = position du bas du filtre dans le viewport
         var wrapperBottom = filterWrapper.getBoundingClientRect().bottom;
-        // Position absolue du bas du filtre dans la page
-        var wrapperAbsBottom = window.scrollY + wrapperBottom;
-        // Position absolue du haut de la grille
-        var gridAbsTop = window.scrollY + grid.getBoundingClientRect().top;
-        // Scroll pour aligner le haut de la grille au bas du filtre
-        var targetY = gridAbsTop - wrapperBottom;
+        var gridTop       = grid.getBoundingClientRect().top;
+        // Ne scroller que si la grille n'est pas déjà visible juste sous le filtre
+        if (gridTop >= wrapperBottom - 8 && gridTop <= wrapperBottom + window.innerHeight * 0.5) return;
+        var targetY = window.scrollY + gridTop - wrapperBottom;
         window.scrollTo({ top: targetY, behavior: 'smooth' });
       });
     }
