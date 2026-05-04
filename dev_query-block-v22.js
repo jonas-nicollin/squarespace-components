@@ -640,16 +640,19 @@
     if (groups) {
       groups.forEach(function(grp) {
         var wrapper = el('div', { class: ROLE_CLASS[grp.role] || 'sqb-card__group' });
-        var sep     = grp.separator || ' ';
+        var sep       = grp.separator || ' ';
         var useInline = grp.inline === true;
-        var children = grp.children || [];
+        var children  = grp.children || [];
         if (useInline) {
-          // Rendu inline : tous les enfants sur une ligne avec séparateur
+          // Rendu inline : classe CSS pour flexbox horizontal
+          wrapper.classList.add('sqb-card__group--inline');
           var built = children.map(function(def) { return buildChild(def, item); }).filter(Boolean);
           built.forEach(function(node, ni) {
             wrapper.appendChild(node);
             if (ni < built.length - 1 && sep) {
-              wrapper.appendChild(document.createTextNode(sep));
+              var sepNode = el('span', { class: 'sqb-inline-sep' });
+              sepNode.textContent = sep;
+              wrapper.appendChild(sepNode);
             }
           });
         } else {
@@ -1491,7 +1494,7 @@
 
     if (filterWrapper) root.appendChild(filterWrapper);
     root.appendChild(grid);
-    if (disp.counter !== false) root.appendChild(counter);
+    if (disp.counter === true) root.appendChild(counter);
     root.appendChild(footer);
     target.appendChild(root);
 
@@ -1580,7 +1583,7 @@
           c.classList.add('sqb-card--fade-in');
         });
       }
-      if (disp.counter !== false) counter.textContent = shown.length + '\u00a0/\u00a0' + total;
+      if (disp.counter === true) counter.textContent = shown.length + '\u00a0/\u00a0' + total;
       // Passer fromPagination au hook pour que masonry sache s'il doit recalculer tout
       if (hook) hook(grid, shown, cfg, { fromPagination: fromPagination, prevCount: prevCardCount });
 
