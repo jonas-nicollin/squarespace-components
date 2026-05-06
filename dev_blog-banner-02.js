@@ -1,81 +1,60 @@
 /**
- * Blog Banner – v4.0.0
- * Squarespace component: injects a cover image or video banner into blog items.
+ * Blog Banner – v4.1.0
  *
- * Fixes & improvements over v3:
- *  - Body classes (has-banner-image / has-banner-video / has-banner) are only
- *    added when at least one banner was actually inserted.
- *  - Source block (.sqs-block ancestor) is marked with `blog-banner-source`
- *    and hidden outside edit mode via CSS class on body, not inline style.
- *  - Dispatches `blogBannerReady` CustomEvent for coordination with other
- *    scripts (e.g. Metadata block).
- *  - Exposes `window.BlogBanner` API for external scripts.
- *  - FOUC mitigation: body gets `blog-banner-loading` during init; removed
- *    once done. CSS can use this to prevent flash.
- *  - `fetchpriority="high"` on the banner image.
- *  - Idempotent: safe to call initializeBanners() multiple times.
+ * Changements vs v4.0 :
+ *  - Suppression du mécanisme blog-banner-loading (anti-FOUC côté JS) :
+ *    inutile et responsable du ralentissement perçu via reflow synchrone.
+ *  - Suppression de fetchpriority="high" : conflictuel avec le lazy-loading
+ *    natif de Squarespace, pouvait déclencher un double fetch.
+ *  - Correction fiable du bug has-banner-image :
+ *    on vérifie que l'image source possède bien data-image ou data-src
+ *    (attribut propre aux blocs image Squarespace), ce qui exclut les <img>
+ *    génériques dans le contenu de l'article.
+ *  - L'API window.BlogBanner et l'événement blogBannerReady sont conservés.
  */
 
 (function () {
   "use strict";
 
   /* ─────────────────────────────────────────────
-     Internal state
+     État interne
   ───────────────────────────────────────────── */
 
-  /** Map of viewItem element → inserted banner element */
+  /** Map viewItem element → banner element inséré */
   const insertedBanners = new Map();
 
   /* ─────────────────────────────────────────────
-     Public API (window.BlogBanner)
+     API publique
   ───────────────────────────────────────────── */
 
   window.BlogBanner = {
-    /**
-     * Returns the banner element inserted for a given .view-item element,
-     * or null if none was inserted.
-     * @param {Element} viewItem
-     * @returns {Element|null}
-     */
     getBannerFor(viewItem) {
       return insertedBanners.get(viewItem) || null;
     },
-
-    /**
-     * Returns all view-item elements that received a banner.
-     * @returns {Element[]}
-     */
     getBanneredItems() {
       return Array.from(insertedBanners.keys());
     },
-
-    /** Re-run banner injection (useful after dynamic content loads). */
     refresh() {
       initializeBanners();
     },
   };
 
   /* ─────────────────────────────────────────────
-     Entry point
+     Point d'entrée
   ───────────────────────────────────────────── */
 
-  document.addEventListener("DOMContentLoaded", function () {
-    // Signal to CSS that we're about to run – suppress potential FOUC
-    document.body.classList.add("blog-banner-loading");
-    initializeBanners();
-    document.body.classList.remove("blog-banner-loading");
-  });
+  document.addEventListener("DOMContentLoaded", initializeBanners);
 
   /* ─────────────────────────────────────────────
-     Core logic
+     Logique principale
   ───────────────────────────────────────────── */
 
   function initializeBanners() {
     const configList = window.blogBannerConfig || [];
-    const bodyClasses = Array.from(document.body.classList);
+    const bodyClasses = document.body.classList;
 
     const activeConfig = configList.find((config) =>
-      config.bodyClassConditions.every((cls) => bodyClasses.includes(cls))
+      config.bodyClassConditions.every((cls) => bodyClasses.contains(cls))
     );
 
     if (!activeConfig) return;
@@ -91,15 +70,15 @@
       const viewItem = contentWrapper.closest(".view-item");
       if (!viewItem) return;
 
-      // Skip if already processed for this config run
       if (insertedBanners.has(viewItem)) return;
 
       const destination = viewItem.querySelector(config.destinationSelector);
       if (!destination) return;
 
       const bannerBlock = contentWrapper.querySelector(config.bannerSelectors);
-      const videoBlock =
-        config.allowVideoFallback ? contentWrapper.querySelector(".video-block") : null;
+      const videoBlock = config.allowVideoFallback
+        ? contentWrapper.querySelector(".video-block")
+        : null;
 
       if (bannerBlock) {
         const banner = insertImageBanner(destination, bannerBlock, config);
@@ -117,7 +96,6 @@
       }
     });
 
-    // Only touch body classes when something was actually inserted
     if (insertedImageCount > 0) {
       document.body.classList.add("has-banner-image", "has-banner");
     }
@@ -125,30 +103,30 @@
       document.body.classList.add("has-banner-video", "has-banner");
     }
 
-    // Notify other scripts (e.g. Metadata block)
     document.dispatchEvent(
       new CustomEvent("blogBannerReady", {
-        detail: {
-          insertedImageCount,
-          insertedVideoCount,
-          insertedBanners, // Map<viewItem, bannerEl>
-        },
+        detail: { insertedImageCount, insertedVideoCount, insertedBanners },
         bubbles: false,
       })
     );
   }
 
   /* ─────────────────────────────────────────────
-     Banner builders
+     Constructeurs de bannière
   ───────────────────────────────────────────── */
 
-  /**
-   * Creates and inserts an image banner.
-   * @returns {Element|null} The inserted banner div, or null on failure.
-   */
   function insertImageBanner(destination, bannerBlock, config) {
     const sourceImg = bannerBlock.querySelector("img");
     if (!sourceImg) return null;
+
+    // ── Garde critique ──────────────────────────────────────────────────────
+    // On n'accepte que les <img> qui portent data-image ou data-src,
+    // attributs exclusifs aux blocs image Squarespace.
+    // Cela empêche de matcher de simples <img> dans le corps de l'article.
+    const isSquarespaceImageBlock =
+      sourceImg.hasAttribute("data-image") || sourceImg.hasAttribute("data-src");
+    if (!isSquarespaceImageBlock) return null;
+    // ────────────────────────────────────────────────────────────────────────
 
     const source = getBestImageSource(sourceImg);
     if (!source) return null;
@@ -174,7 +152,6 @@
 
     img.setAttribute("alt", sourceImg.getAttribute("alt") || "");
     img.setAttribute("loading", "eager");
-    img.setAttribute("fetchpriority", "high");
     img.setAttribute("decoding", "async");
     img.style.objectPosition = `${focalX} ${focalY}`;
 
@@ -205,10 +182,6 @@
     return banner;
   }
 
-  /**
-   * Creates and inserts a video banner.
-   * @returns {Element|null}
-   */
   function insertVideoBanner(destination, videoBlock, config) {
     if (!videoBlock) return null;
 
@@ -222,20 +195,14 @@
   }
 
   /* ─────────────────────────────────────────────
-     Source block cleanup
+     Bloc source
   ───────────────────────────────────────────── */
 
-  /**
-   * Walks up from the bannerBlock to its .sqs-block ancestor and marks it
-   * with `blog-banner-source`. CSS will hide it outside edit mode.
-   * In edit mode (body.sqs-edit-mode-active), Squarespace keeps it visible.
-   */
   function markSourceBlock(bannerBlock) {
     let el = bannerBlock;
     while (el && el !== document.body) {
       if (el.classList.contains("sqs-block")) {
         el.classList.add("blog-banner-source");
-        // aria-hidden only outside edit mode – handled via CSS :not() selector
         if (!isEditMode()) {
           el.setAttribute("aria-hidden", "true");
         }
@@ -246,7 +213,7 @@
   }
 
   /* ─────────────────────────────────────────────
-     DOM helpers
+     Helpers DOM
   ───────────────────────────────────────────── */
 
   function getBestImageSource(img) {
@@ -275,7 +242,7 @@
   }
 
   /* ─────────────────────────────────────────────
-     Caption
+     Légende
   ───────────────────────────────────────────── */
 
   function extractCaptionData(bannerBlock, config) {
@@ -286,7 +253,13 @@
     const figcaption = figure.querySelector("figcaption");
 
     if (!figcaption) {
-      return { hasContent: false, title: "", subtitle: "", href: "", linkLabel: config.captionLinkLabel || "Learn more" };
+      return {
+        hasContent: false,
+        title: "",
+        subtitle: "",
+        href: "",
+        linkLabel: config.captionLinkLabel || "Learn more",
+      };
     }
 
     const titleEl = figcaption.querySelector(".image-title p, .image-title");
@@ -366,7 +339,7 @@
   }
 
   /* ─────────────────────────────────────────────
-     Utilities
+     Utilitaires
   ───────────────────────────────────────────── */
 
   function normalizeFocalPoint(value) {
@@ -380,7 +353,7 @@
   }
 
   /* ─────────────────────────────────────────────
-     Icons
+     Icônes
   ───────────────────────────────────────────── */
 
   function getInfoIcon() {
