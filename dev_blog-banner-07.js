@@ -1,23 +1,39 @@
 /**
- * Blog Banner – v4.2.0
+ * Blog Banner – v4.3.0
  *
- * Changements vs v4.1 :
- *  1. Correction définitive de has-banner-image :
- *     bannerBannerConfig peut maintenant cibler précisément le bloc via
- *     bannerPosition ("first" | "last" | number, défaut "first").
- *     Seul le premier .design-layout-stack du wrapper est traité, pas tous.
- *  2. Multi-configuration : toutes les configs dont bodyClassConditions
- *     correspond sont appliquées (plus seulement la première).
- *  3. Option bodyClass : chaîne de caractères (ou tableau) ajoutée au body
- *     uniquement si des bannières ont été insérées pour cette config.
- *  4. CSS mode édition : le bloc source reçoit blog-banner-source,
- *     un CSS minimal permet de lui appliquer l'aspect-ratio en édition.
- *  5. Caption toggle : quand aria-expanded="true", le toggle est masqué.
- *     (géré par attribut CSS, aucun JS supplémentaire.)
+ * Changements vs v4.2 :
+ *  1. Guard contre le double-chargement : si le script est inclus deux fois,
+ *     le second run est ignoré et un avertissement console est émis.
+ *  2. Mode debug : window.blogBannerDebug = true active des console.warn
+ *     détaillés à chaque étape pour diagnostiquer les body classes.
+ *  3. Correction du sizes de l'image bannière : on remplace le sizes copié
+ *     du bloc source (calibré pour la max-width du content wrapper) par un
+ *     sizes adapté à la bannière plein-largeur, tirant parti du format=2500w
+ *     disponible dans le srcset Squarespace.
  */
 
 (function () {
   "use strict";
+
+  /* ─────────────────────────────────────────────
+     Guard double-chargement
+  ───────────────────────────────────────────── */
+
+  if (window.__blogBannerLoaded) {
+    console.warn("[BlogBanner] Script chargé deux fois — second run ignoré.");
+    return;
+  }
+  window.__blogBannerLoaded = true;
+
+  /* ─────────────────────────────────────────────
+     Debug
+  ───────────────────────────────────────────── */
+
+  function dbg() {
+    if (window.blogBannerDebug) {
+      console.warn.apply(console, ["[BlogBanner]"].concat(Array.prototype.slice.call(arguments)));
+    }
+  }
 
   /* ─────────────────────────────────────────────
      État interne
@@ -60,12 +76,13 @@
     const configList = window.blogBannerConfig || [];
     const bodyClasses = document.body.classList;
 
-    // Multi-config : on applique toutes les configs dont les conditions
-    // sont vérifiées, pas seulement la première.
-    configList.forEach((config) => {
-      const matches = config.bodyClassConditions.every((cls) =>
-        bodyClasses.contains(cls)
-      );
+    dbg("initializeBanners — body classes:", Array.from(bodyClasses).join(" "));
+
+    configList.forEach(function (config, i) {
+      const matches = config.bodyClassConditions.every(function (cls) {
+        return bodyClasses.contains(cls);
+      });
+      dbg("config[" + i + "] match:", matches, config.bodyClassConditions);
       if (matches) applyBannerConfig(config);
     });
   }
@@ -74,26 +91,37 @@
     let insertedImageCount = 0;
     let insertedVideoCount = 0;
 
-    document.querySelectorAll(".blog-item-content-wrapper").forEach((contentWrapper) => {
-      const viewItem = contentWrapper.closest(".view-item");
-      if (!viewItem) return;
+    const wrappers = document.querySelectorAll(".blog-item-content-wrapper");
+    dbg("applyBannerConfig — wrappers:", wrappers.length);
 
-      if (insertedBanners.has(viewItem)) return;
+    wrappers.forEach(function (contentWrapper, i) {
+      const viewItem = contentWrapper.closest(".view-item");
+      if (!viewItem) {
+        dbg("wrapper[" + i + "] — pas de .view-item, ignoré");
+        return;
+      }
+
+      if (insertedBanners.has(viewItem)) {
+        dbg("wrapper[" + i + "] — déjà traité, ignoré");
+        return;
+      }
 
       const destination = viewItem.querySelector(config.destinationSelector);
-      if (!destination) return;
+      if (!destination) {
+        dbg("wrapper[" + i + "] — destination \"" + config.destinationSelector + "\" introuvable, ignoré");
+        return;
+      }
 
-      // ── Sélection du bloc bannière ──────────────────────────────────────
-      // bannerPosition permet de choisir quel bloc matcher si plusieurs
-      // correspondent à bannerSelectors dans le même wrapper.
-      // Valeurs : "first" (défaut) | "last" | index numérique (0-based)
       const bannerBlock = selectBannerBlock(contentWrapper, config);
       const videoBlock = config.allowVideoFallback
         ? contentWrapper.querySelector(".video-block")
         : null;
 
+      dbg("wrapper[" + i + "] — bannerBlock:", bannerBlock, "| videoBlock:", videoBlock);
+
       if (bannerBlock) {
         const banner = insertImageBanner(destination, bannerBlock, config);
+        dbg("wrapper[" + i + "] — insertImageBanner →", banner ? "OK" : "null (aucune image valide)");
         if (banner) {
           insertedBanners.set(viewItem, banner);
           markSourceBlock(bannerBlock);
@@ -108,7 +136,8 @@
       }
     });
 
-    // Classes body — uniquement si des bannières ont été insérées
+    dbg("insertedImageCount:", insertedImageCount, "| insertedVideoCount:", insertedVideoCount);
+
     if (insertedImageCount > 0) {
       document.body.classList.add("has-banner-image", "has-banner");
       addBodyClasses(config.bodyClass);
@@ -130,22 +159,14 @@
      Sélection du bloc bannière
   ───────────────────────────────────────────── */
 
-  /**
-   * Sélectionne le bloc bannière dans contentWrapper selon config.bannerPosition.
-   * @param {Element} contentWrapper
-   * @param {object} config
-   * @returns {Element|null}
-   */
   function selectBannerBlock(contentWrapper, config) {
     const all = Array.from(contentWrapper.querySelectorAll(config.bannerSelectors));
     if (all.length === 0) return null;
 
-    const pos = config.bannerPosition; // "first" | "last" | number
-
+    const pos = config.bannerPosition;
     if (pos === "last") return all[all.length - 1];
     if (typeof pos === "number") return all[pos] || null;
-    // Défaut : "first"
-    return all[0];
+    return all[0]; // défaut : "first"
   }
 
   /* ─────────────────────────────────────────────
@@ -160,30 +181,36 @@
     if (!source) return null;
 
     const focal = sourceImg.getAttribute("data-image-focal-point") || "0.5,0.5";
-    const [rawX = "0.5", rawY = "0.5"] = focal.split(",");
-    const focalX = normalizeFocalPoint(rawX);
-    const focalY = normalizeFocalPoint(rawY);
+    const parts = focal.split(",");
+    const focalX = normalizeFocalPoint(parts[0] !== undefined ? parts[0] : "0.5");
+    const focalY = normalizeFocalPoint(parts[1] !== undefined ? parts[1] : "0.5");
 
     const banner = document.createElement("div");
-    banner.className = `${config.imageBannerClass || "blog-item-cover-image"} is-loading`;
-    banner.style.setProperty("--image-focal-point", `${focalX} ${focalY}`);
+    banner.className = (config.imageBannerClass || "blog-item-cover-image") + " is-loading";
+    banner.style.setProperty("--image-focal-point", focalX + " " + focalY);
     banner.style.setProperty("--banner-aspect-ratio", config.bannerAspectRatio || "16 / 9");
 
     const img = document.createElement("img");
     img.src = source;
 
+    // Conserver le srcset original (contient toutes les tailles Squarespace)
     const srcset = sourceImg.getAttribute("srcset");
     if (srcset) img.setAttribute("srcset", srcset);
 
-    const sizes = sourceImg.getAttribute("sizes");
-    if (sizes) img.setAttribute("sizes", sizes);
+    // ── Correction sizes ───────────────────────────────────────────────────
+    // Le sizes du bloc source est calibré pour la max-width du content wrapper.
+    // La bannière est plein-largeur : on réécrit un sizes approprié pour que
+    // le navigateur choisisse une résolution suffisante quelle que soit la
+    // largeur de l'écran, jusqu'à 2560px (format=2500w dans le CDN Squarespace).
+    img.setAttribute("sizes", buildBannerSizes(config));
+    // ────────────────────────────────────────────────────────────────────────
 
     img.setAttribute("alt", sourceImg.getAttribute("alt") || "");
     img.setAttribute("loading", "eager");
     img.setAttribute("decoding", "async");
-    img.style.objectPosition = `${focalX} ${focalY}`;
+    img.style.objectPosition = focalX + " " + focalY;
 
-    const markLoaded = () => {
+    const markLoaded = function () {
       banner.classList.remove("is-loading");
       banner.classList.add("is-loaded");
     };
@@ -208,6 +235,18 @@
 
     insertBanner(destination, banner, config.insertionMethod);
     return banner;
+  }
+
+  /**
+   * Construit l'attribut sizes pour une bannière plein-largeur.
+   * On peut surcharger via config.bannerSizes pour un contrôle total.
+   */
+  function buildBannerSizes(config) {
+    if (config.bannerSizes) return config.bannerSizes;
+    // Par défaut : la bannière occupe 100vw à toutes les tailles.
+    // Le navigateur choisira dans le srcset la résolution adaptée
+    // en tenant compte du DPR (Retina = ×2).
+    return "100vw";
   }
 
   function insertVideoBanner(destination, videoBlock, config) {
@@ -264,15 +303,15 @@
   }
 
   function removeExistingBanners(container) {
-    [".blog-item-cover-image", ".blog-item-cover-video"].forEach((selector) => {
-      container.querySelectorAll(selector).forEach((el) => el.remove());
+    [".blog-item-cover-image", ".blog-item-cover-video"].forEach(function (selector) {
+      container.querySelectorAll(selector).forEach(function (el) { el.remove(); });
     });
   }
 
   function addBodyClasses(bodyClass) {
     if (!bodyClass) return;
     const classes = Array.isArray(bodyClass) ? bodyClass : [bodyClass];
-    classes.forEach((cls) => {
+    classes.forEach(function (cls) {
       if (cls && typeof cls === "string") document.body.classList.add(cls);
     });
   }
@@ -381,7 +420,7 @@
   function normalizeFocalPoint(value) {
     const n = parseFloat(value);
     if (Number.isNaN(n)) return "50%";
-    return `${Math.max(0, Math.min(1, n)) * 100}%`;
+    return (Math.max(0, Math.min(1, n)) * 100) + "%";
   }
 
   function isEditMode() {
@@ -393,17 +432,10 @@
   ───────────────────────────────────────────── */
 
   function getInfoIcon() {
-    return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
-      <line x1="12" y1="10" x2="12" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="12" cy="7" r="1.2" fill="currentColor"/>
-    </svg>`;
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="10" x2="12" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7" r="1.2" fill="currentColor"/></svg>';
   }
 
   function getCloseIcon() {
-    return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>`;
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   }
 })();
