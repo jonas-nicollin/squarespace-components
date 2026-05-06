@@ -1,22 +1,34 @@
-<script>
 /**
- * Blog Banner – v4.3.0
+ * Blog Banner – v4.2.0
  *
- * Ajout vs v4.2 :
- *  1. Ajoute une classe body si :
- *     - bodyClassConditions correspond
- *     - bannerSelectors trouve au moins un élément dans la page
- *  2. Classe par défaut : has-banner-image
- *     Peut être personnalisée avec config.bannerSourceBodyClass
- *  3. imageLoading configurable :
- *     - défaut : "auto"
- *     - option : "eager"
+ * Changements vs v4.1 :
+ *  1. Correction définitive de has-banner-image :
+ *     bannerBannerConfig peut maintenant cibler précisément le bloc via
+ *     bannerPosition ("first" | "last" | number, défaut "first").
+ *     Seul le premier .design-layout-stack du wrapper est traité, pas tous.
+ *  2. Multi-configuration : toutes les configs dont bodyClassConditions
+ *     correspond sont appliquées (plus seulement la première).
+ *  3. Option bodyClass : chaîne de caractères (ou tableau) ajoutée au body
+ *     uniquement si des bannières ont été insérées pour cette config.
+ *  4. CSS mode édition : le bloc source reçoit blog-banner-source,
+ *     un CSS minimal permet de lui appliquer l'aspect-ratio en édition.
+ *  5. Caption toggle : quand aria-expanded="true", le toggle est masqué.
+ *     (géré par attribut CSS, aucun JS supplémentaire.)
  */
 
 (function () {
   "use strict";
 
+  /* ─────────────────────────────────────────────
+     État interne
+  ───────────────────────────────────────────── */
+
+  /** Map viewItem element → banner element inséré */
   const insertedBanners = new Map();
+
+  /* ─────────────────────────────────────────────
+     API publique
+  ───────────────────────────────────────────── */
 
   window.BlogBanner = {
     getBannerFor(viewItem) {
@@ -30,37 +42,32 @@
     },
   };
 
+  /* ─────────────────────────────────────────────
+     Point d'entrée
+  ───────────────────────────────────────────── */
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initializeBanners);
   } else {
     initializeBanners();
   }
 
+  /* ─────────────────────────────────────────────
+     Logique principale
+  ───────────────────────────────────────────── */
+
   function initializeBanners() {
     const configList = window.blogBannerConfig || [];
     const bodyClasses = document.body.classList;
 
+    // Multi-config : on applique toutes les configs dont les conditions
+    // sont vérifiées, pas seulement la première.
     configList.forEach((config) => {
-      const matches = Array.isArray(config.bodyClassConditions)
-        ? config.bodyClassConditions.every((cls) => bodyClasses.contains(cls))
-        : true;
-
-      if (!matches) return;
-
-      markBannerSourcePresence(config);
-      applyBannerConfig(config);
+      const matches = config.bodyClassConditions.every((cls) =>
+        bodyClasses.contains(cls)
+      );
+      if (matches) applyBannerConfig(config);
     });
-  }
-
-  function markBannerSourcePresence(config) {
-    if (!config.bannerSelectors) return;
-
-    const hasBannerSource = Boolean(document.querySelector(config.bannerSelectors));
-    if (!hasBannerSource) return;
-
-    document.body.classList.add(
-      config.bannerSourceBodyClass || "has-banner-image"
-    );
   }
 
   function applyBannerConfig(config) {
@@ -76,6 +83,10 @@
       const destination = viewItem.querySelector(config.destinationSelector);
       if (!destination) return;
 
+      // ── Sélection du bloc bannière ──────────────────────────────────────
+      // bannerPosition permet de choisir quel bloc matcher si plusieurs
+      // correspondent à bannerSelectors dans le même wrapper.
+      // Valeurs : "first" (défaut) | "last" | index numérique (0-based)
       const bannerBlock = selectBannerBlock(contentWrapper, config);
       const videoBlock = config.allowVideoFallback
         ? contentWrapper.querySelector(".video-block")
@@ -97,11 +108,11 @@
       }
     });
 
+    // Classes body — uniquement si des bannières ont été insérées
     if (insertedImageCount > 0) {
       document.body.classList.add("has-banner-image", "has-banner");
       addBodyClasses(config.bodyClass);
     }
-
     if (insertedVideoCount > 0) {
       document.body.classList.add("has-banner-video", "has-banner");
       addBodyClasses(config.bodyClass);
@@ -115,17 +126,31 @@
     );
   }
 
+  /* ─────────────────────────────────────────────
+     Sélection du bloc bannière
+  ───────────────────────────────────────────── */
+
+  /**
+   * Sélectionne le bloc bannière dans contentWrapper selon config.bannerPosition.
+   * @param {Element} contentWrapper
+   * @param {object} config
+   * @returns {Element|null}
+   */
   function selectBannerBlock(contentWrapper, config) {
     const all = Array.from(contentWrapper.querySelectorAll(config.bannerSelectors));
     if (all.length === 0) return null;
 
-    const pos = config.bannerPosition;
+    const pos = config.bannerPosition; // "first" | "last" | number
 
     if (pos === "last") return all[all.length - 1];
     if (typeof pos === "number") return all[pos] || null;
-
+    // Défaut : "first"
     return all[0];
   }
+
+  /* ─────────────────────────────────────────────
+     Constructeurs de bannière
+  ───────────────────────────────────────────── */
 
   function insertImageBanner(destination, bannerBlock, config) {
     const sourceImg = bannerBlock.querySelector("img");
@@ -154,13 +179,7 @@
     if (sizes) img.setAttribute("sizes", sizes);
 
     img.setAttribute("alt", sourceImg.getAttribute("alt") || "");
-
-    if (config.imageLoading === "eager") {
-      img.setAttribute("loading", "eager");
-    } else {
-      img.setAttribute("loading", "auto");
-    }
-
+    img.setAttribute("loading", "eager");
     img.setAttribute("decoding", "async");
     img.style.objectPosition = `${focalX} ${focalY}`;
 
@@ -172,8 +191,8 @@
     if (img.complete) {
       markLoaded();
     } else {
-      img.addEventListener("load", markLoaded, { once: true });
-      img.addEventListener("error", markLoaded, { once: true });
+      img.addEventListener("load", markLoaded);
+      img.addEventListener("error", markLoaded);
     }
 
     banner.appendChild(img);
@@ -203,9 +222,12 @@
     return banner;
   }
 
+  /* ─────────────────────────────────────────────
+     Bloc source
+  ───────────────────────────────────────────── */
+
   function markSourceBlock(bannerBlock) {
     let el = bannerBlock;
-
     while (el && el !== document.body) {
       if (el.classList.contains("sqs-block")) {
         el.classList.add("blog-banner-source");
@@ -217,6 +239,10 @@
       el = el.parentElement;
     }
   }
+
+  /* ─────────────────────────────────────────────
+     Helpers DOM
+  ───────────────────────────────────────────── */
 
   function getBestImageSource(img) {
     return (
@@ -230,7 +256,6 @@
 
   function insertBanner(destination, bannerElement, method) {
     removeExistingBanners(destination);
-
     if (method === "prepend") {
       destination.insertBefore(bannerElement, destination.firstChild);
     } else {
@@ -246,22 +271,21 @@
 
   function addBodyClasses(bodyClass) {
     if (!bodyClass) return;
-
     const classes = Array.isArray(bodyClass) ? bodyClass : [bodyClass];
-
     classes.forEach((cls) => {
-      if (cls && typeof cls === "string") {
-        document.body.classList.add(cls);
-      }
+      if (cls && typeof cls === "string") document.body.classList.add(cls);
     });
   }
+
+  /* ─────────────────────────────────────────────
+     Légende
+  ───────────────────────────────────────────── */
 
   function extractCaptionData(bannerBlock, config) {
     const figure =
       bannerBlock.closest("figure") ||
       bannerBlock.querySelector("figure") ||
       bannerBlock;
-
     const figcaption = figure.querySelector("figcaption");
 
     if (!figcaption) {
@@ -287,10 +311,7 @@
       title,
       subtitle,
       href,
-      linkLabel:
-        (linkEl && linkEl.textContent.trim()) ||
-        config.captionLinkLabel ||
-        "Learn more",
+      linkLabel: (linkEl && linkEl.textContent.trim()) || config.captionLinkLabel || "Learn more",
     };
   }
 
@@ -353,6 +374,10 @@
     return { panel, toggle };
   }
 
+  /* ─────────────────────────────────────────────
+     Utilitaires
+  ───────────────────────────────────────────── */
+
   function normalizeFocalPoint(value) {
     const n = parseFloat(value);
     if (Number.isNaN(n)) return "50%";
@@ -362,6 +387,10 @@
   function isEditMode() {
     return document.body.classList.contains("sqs-edit-mode-active");
   }
+
+  /* ─────────────────────────────────────────────
+     Icônes
+  ───────────────────────────────────────────── */
 
   function getInfoIcon() {
     return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -378,4 +407,3 @@
     </svg>`;
   }
 })();
-</script>
