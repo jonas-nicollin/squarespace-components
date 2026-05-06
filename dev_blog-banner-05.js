@@ -6,7 +6,7 @@
  *  1. Ajoute une classe body si :
  *     - bodyClassConditions correspond
  *     - bannerSelectors trouve au moins un élément dans la page
- *  2. Classe par défaut : has-banner-image-test
+ *  2. Classe par défaut : has-banner-image
  *     Peut être personnalisée avec config.bannerSourceBodyClass
  *  3. imageLoading configurable :
  *     - défaut : "auto"
@@ -59,7 +59,7 @@
     if (!hasBannerSource) return;
 
     document.body.classList.add(
-      config.bannerSourceBodyClass || "has-banner-image-test"
+      config.bannerSourceBodyClass || "has-banner-image"
     );
   }
 
