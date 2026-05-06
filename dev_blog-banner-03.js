@@ -1,16 +1,19 @@
 /**
- * Blog Banner – v4.1.0
+ * Blog Banner – v4.2.0
  *
- * Changements vs v4.0 :
- *  - Suppression du mécanisme blog-banner-loading (anti-FOUC côté JS) :
- *    inutile et responsable du ralentissement perçu via reflow synchrone.
- *  - Suppression de fetchpriority="high" : conflictuel avec le lazy-loading
- *    natif de Squarespace, pouvait déclencher un double fetch.
- *  - Correction fiable du bug has-banner-image :
- *    on vérifie que l'image source possède bien data-image ou data-src
- *    (attribut propre aux blocs image Squarespace), ce qui exclut les <img>
- *    génériques dans le contenu de l'article.
- *  - L'API window.BlogBanner et l'événement blogBannerReady sont conservés.
+ * Changements vs v4.1 :
+ *  1. Correction définitive de has-banner-image :
+ *     bannerBannerConfig peut maintenant cibler précisément le bloc via
+ *     bannerPosition ("first" | "last" | number, défaut "first").
+ *     Seul le premier .design-layout-stack du wrapper est traité, pas tous.
+ *  2. Multi-configuration : toutes les configs dont bodyClassConditions
+ *     correspond sont appliquées (plus seulement la première).
+ *  3. Option bodyClass : chaîne de caractères (ou tableau) ajoutée au body
+ *     uniquement si des bannières ont été insérées pour cette config.
+ *  4. CSS mode édition : le bloc source reçoit blog-banner-source,
+ *     un CSS minimal permet de lui appliquer l'aspect-ratio en édition.
+ *  5. Caption toggle : quand aria-expanded="true", le toggle est masqué.
+ *     (géré par attribut CSS, aucun JS supplémentaire.)
  */
 
 (function () {
@@ -43,7 +46,11 @@
      Point d'entrée
   ───────────────────────────────────────────── */
 
-  document.addEventListener("DOMContentLoaded", initializeBanners);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeBanners);
+  } else {
+    initializeBanners();
+  }
 
   /* ─────────────────────────────────────────────
      Logique principale
@@ -53,13 +60,14 @@
     const configList = window.blogBannerConfig || [];
     const bodyClasses = document.body.classList;
 
-    const activeConfig = configList.find((config) =>
-      config.bodyClassConditions.every((cls) => bodyClasses.contains(cls))
-    );
-
-    if (!activeConfig) return;
-
-    applyBannerConfig(activeConfig);
+    // Multi-config : on applique toutes les configs dont les conditions
+    // sont vérifiées, pas seulement la première.
+    configList.forEach((config) => {
+      const matches = config.bodyClassConditions.every((cls) =>
+        bodyClasses.contains(cls)
+      );
+      if (matches) applyBannerConfig(config);
+    });
   }
 
   function applyBannerConfig(config) {
@@ -75,7 +83,11 @@
       const destination = viewItem.querySelector(config.destinationSelector);
       if (!destination) return;
 
-      const bannerBlock = contentWrapper.querySelector(config.bannerSelectors);
+      // ── Sélection du bloc bannière ──────────────────────────────────────
+      // bannerPosition permet de choisir quel bloc matcher si plusieurs
+      // correspondent à bannerSelectors dans le même wrapper.
+      // Valeurs : "first" (défaut) | "last" | index numérique (0-based)
+      const bannerBlock = selectBannerBlock(contentWrapper, config);
       const videoBlock = config.allowVideoFallback
         ? contentWrapper.querySelector(".video-block")
         : null;
@@ -96,11 +108,14 @@
       }
     });
 
+    // Classes body — uniquement si des bannières ont été insérées
     if (insertedImageCount > 0) {
       document.body.classList.add("has-banner-image", "has-banner");
+      addBodyClasses(config.bodyClass);
     }
     if (insertedVideoCount > 0) {
       document.body.classList.add("has-banner-video", "has-banner");
+      addBodyClasses(config.bodyClass);
     }
 
     document.dispatchEvent(
@@ -112,21 +127,34 @@
   }
 
   /* ─────────────────────────────────────────────
+     Sélection du bloc bannière
+  ───────────────────────────────────────────── */
+
+  /**
+   * Sélectionne le bloc bannière dans contentWrapper selon config.bannerPosition.
+   * @param {Element} contentWrapper
+   * @param {object} config
+   * @returns {Element|null}
+   */
+  function selectBannerBlock(contentWrapper, config) {
+    const all = Array.from(contentWrapper.querySelectorAll(config.bannerSelectors));
+    if (all.length === 0) return null;
+
+    const pos = config.bannerPosition; // "first" | "last" | number
+
+    if (pos === "last") return all[all.length - 1];
+    if (typeof pos === "number") return all[pos] || null;
+    // Défaut : "first"
+    return all[0];
+  }
+
+  /* ─────────────────────────────────────────────
      Constructeurs de bannière
   ───────────────────────────────────────────── */
 
   function insertImageBanner(destination, bannerBlock, config) {
     const sourceImg = bannerBlock.querySelector("img");
     if (!sourceImg) return null;
-
-    // ── Garde critique ──────────────────────────────────────────────────────
-    // On n'accepte que les <img> qui portent data-image ou data-src,
-    // attributs exclusifs aux blocs image Squarespace.
-    // Cela empêche de matcher de simples <img> dans le corps de l'article.
-    const isSquarespaceImageBlock =
-      sourceImg.hasAttribute("data-image") || sourceImg.hasAttribute("data-src");
-    if (!isSquarespaceImageBlock) return null;
-    // ────────────────────────────────────────────────────────────────────────
 
     const source = getBestImageSource(sourceImg);
     if (!source) return null;
@@ -238,6 +266,14 @@
   function removeExistingBanners(container) {
     [".blog-item-cover-image", ".blog-item-cover-video"].forEach((selector) => {
       container.querySelectorAll(selector).forEach((el) => el.remove());
+    });
+  }
+
+  function addBodyClasses(bodyClass) {
+    if (!bodyClass) return;
+    const classes = Array.isArray(bodyClass) ? bodyClass : [bodyClass];
+    classes.forEach((cls) => {
+      if (cls && typeof cls === "string") document.body.classList.add(cls);
     });
   }
 
