@@ -1,5 +1,5 @@
 /*!
- * Related Block v7.0
+ * Related Block v7.1
  * Blocs de contenu relatif pour collections Squarespace
  * https://github.com/jonas-nicollin/squarespace-components
  *
@@ -119,6 +119,11 @@
  *         // objet Intl → { weekday: 'long', day: 'numeric', month: 'long' }
  *         displayFormat: 'datetime',
  *         locale: 'fr-CH',  // surcharge de locale (défaut: lang de la page)
+ *
+ *         // Icône optionnelle insérée avant le texte
+ *         icon: 'location_on',  // ligature Material Symbols, texte ou HTML
+ *         iconType: 'text',     // 'text' (défaut) | 'html'
+ *         // → <span class="related-block__tag-prefix-icon">location_on</span>
  *       },
  *     ],
  *
@@ -841,11 +846,17 @@
         // Tri par valeur ISO d'un tag prefixé
         if (type === 'tagPrefix' && rule.prefix) {
           const prefixNorm = normalize(String(rule.prefix).replace(/:$/, ''));
-          const getTagTs = item => {
+          const getTagSortVal = item => {
             const vals = getTagValuesByPrefix(item, prefixNorm);
-            return vals.length ? getISOTimestamp(vals[0]) : Infinity;
+            if (!vals.length) return Infinity;
+            const raw = String(vals[0]).trim();
+            // Valeur purement numérique (ex: Numéro: 4) → tri numérique
+            const num = Number(raw);
+            if (!isNaN(num) && raw !== '') return num;
+            // Sinon tenter ISO timestamp
+            return getISOTimestamp(raw);
           };
-          const diff = getTagTs(a) - getTagTs(b);
+          const diff = getTagSortVal(a) - getTagSortVal(b);
           if (diff !== 0) return diff * dir;
         }
       }
@@ -899,7 +910,7 @@
   // ════════════════════════════════════════════════════════════════
 
   function getCollectionCacheKey(path, maxPages, suffix) {
-    return ['related-block-collection-v7', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
+    return ['related-block-collection-v7.1', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
   }
 
   function getCollectionCacheOptions(CFG) {
@@ -1033,7 +1044,28 @@
     ).filter(Boolean);
 
     const text = formattedValues.join(joinWith);
-    el.textContent = label ? (label + ' ' + text) : text;
+    const fullText = label ? (label + ' ' + text) : text;
+
+    // Icône optionnelle
+    const icon = String(fieldConfig.icon || '').trim();
+    if (icon) {
+      const iconEl = document.createElement('span');
+      iconEl.className = 'related-block__tag-prefix-icon';
+      iconEl.setAttribute('aria-hidden', 'true');
+      if (String(fieldConfig.iconType || 'text').toLowerCase() === 'html') {
+        iconEl.innerHTML = icon;
+      } else {
+        iconEl.textContent = icon;
+      }
+      el.appendChild(iconEl);
+      const textEl = document.createElement('span');
+      textEl.className = 'related-block__tag-prefix-text';
+      textEl.textContent = fullText;
+      el.appendChild(textEl);
+    } else {
+      el.textContent = fullText;
+    }
+
     return el;
   }
 
@@ -1257,11 +1289,21 @@
     if (items.length > 1) section.classList.add('related-block--multiple-items');
   }
 
-  function buildCard(item, CFG, extraClasses) {
+  function buildCard(item, CFG, extraClasses, currentItem) {
     const card = document.createElement('a');
     card.className = 'related-block__item';
     card.href = item.fullUrl || (CFG.sourceCollection.path + '/' + item.urlId);
     extraClasses.forEach(cls => card.classList.add(cls + '__item'));
+
+    // Marquer l'item courant (ex: pour la bande parcours avec excludeCurrentItem: false)
+    if (currentItem) {
+      const curUrl = String(currentItem.fullUrl || '').replace(/\/+$/, '') || '/';
+      const itemUrl = String(item.fullUrl || '').replace(/\/+$/, '') || '/';
+      if (itemUrl && curUrl && itemUrl === curUrl) {
+        card.dataset.current = 'true';
+        card.setAttribute('aria-current', 'page');
+      }
+    }
 
     if (Array.isArray(CFG.display?.groups) && CFG.display.groups.length) {
       const groupedContent = buildGroupedContent(item, CFG);
@@ -1301,7 +1343,7 @@
     return section;
   }
 
-  function replaceBlockContent(section, items, CFG) {
+  function replaceBlockContent(section, items, CFG, currentItem) {
     const inner = section.querySelector('.related-block__inner');
     if (!inner) return;
     inner.innerHTML = '';
@@ -1311,7 +1353,7 @@
     list.className = 'related-block__list';
     const extraClasses = String(CFG.classes?.block || '')
       .split(/\s+/).map(s => s.trim()).filter(Boolean);
-    items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses)));
+    items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses, currentItem)));
     inner.appendChild(list);
     section.classList.remove('related-block--is-loading');
     applyStateClasses(section);
@@ -1335,7 +1377,7 @@
     applyStateClasses(section);
   }
 
-  function buildBlock(items, CFG) {
+  function buildBlock(items, CFG, currentItem) {
     const section = document.createElement('section');
     section.className = 'related-block';
     section.dataset.relatedKey = CFG.key;
@@ -1349,7 +1391,7 @@
     list.className = 'related-block__list';
     const extraClasses = String(CFG.classes?.block || '')
       .split(/\s+/).map(s => s.trim()).filter(Boolean);
-    items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses)));
+    items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses, currentItem)));
     inner.appendChild(list);
     section.appendChild(inner);
     applyStateClasses(section);
@@ -1384,7 +1426,7 @@
   }
 
   function cacheKey(CFG) {
-    return ['related-block-v7', CFG.key, location.pathname].join('::');
+    return ['related-block-v7.1', CFG.key, location.pathname].join('::');
   }
 
   function createRunner(CFG) {
@@ -1515,7 +1557,7 @@
         return false;
       }
 
-      replaceBlockContent(shell, finalItems, CFG);
+      replaceBlockContent(shell, finalItems, CFG, currentItem);
       syncBodyRelatedBlockClasses();
       if (CFG.performance?.useSessionStorage) {
         try { sessionStorage.setItem(key, JSON.stringify(finalItems)); } catch (_) {}
