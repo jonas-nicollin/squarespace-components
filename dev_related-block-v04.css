@@ -62,11 +62,6 @@
   gap: 1rem;
 }
 
-.related-block__heading-text {
-  margin: 0;
-  text-wrap: balance;
-}
-
 .related-block__heading-cta {
   position: relative;
   display: inline-flex;
