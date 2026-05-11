@@ -33,7 +33,7 @@
 
 
 .related-block {
-  padding: clamp(1rem, 2vw, 3rem) 0;
+  padding: clamp(1.5rem, 3vw, 3rem) 0;
 }
 
 .related-block--is-loading {
@@ -143,6 +143,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* object-position posé en inline style par le script via mediaFocalPoint */
 }
 
 
