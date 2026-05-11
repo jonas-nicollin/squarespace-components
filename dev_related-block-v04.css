@@ -33,7 +33,7 @@
 
 
 .related-block {
-  padding: clamp(2.4rem, 4vw, 4.8rem) 0;
+  padding: clamp(1rem, 2vw, 3rem) 0;
 }
 
 .related-block--is-loading {
