@@ -1,5 +1,5 @@
 /*!
- * Related Block v7.1
+ * Related Block v7.2
  * Blocs de contenu relatif pour collections Squarespace
  * https://github.com/jonas-nicollin/squarespace-components
  *
@@ -910,7 +910,7 @@
   // ════════════════════════════════════════════════════════════════
 
   function getCollectionCacheKey(path, maxPages, suffix) {
-    return ['related-block-collection-v7.1', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
+    return ['related-block-collection-v7.2', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
   }
 
   function getCollectionCacheOptions(CFG) {
@@ -1329,10 +1329,25 @@
     return card;
   }
 
+  /**
+   * Attribue un id unique à la section du bloc.
+   * Par défaut : le key de la config (ex. "related-events").
+   * Si un élément avec cet id existe déjà dans le DOM,
+   * on suffixe : "related-events-2", "-3", etc.
+   */
+  function assignBlockId(key) {
+    const base = slugifyToken(key || 'related-block');
+    if (!document.getElementById(base)) return base;
+    let n = 2;
+    while (document.getElementById(base + '-' + n)) n++;
+    return base + '-' + n;
+  }
+
   function buildBlockShell(CFG) {
     const section = document.createElement('section');
     section.className = 'related-block related-block--is-loading';
     section.dataset.relatedKey = CFG.key;
+    section.id = assignBlockId(CFG.key);
     String(CFG.classes?.block || '').split(/\s+/).map(s => s.trim()).filter(Boolean)
       .forEach(cls => section.classList.add(cls));
     const inner = document.createElement('div');
@@ -1381,6 +1396,7 @@
     const section = document.createElement('section');
     section.className = 'related-block';
     section.dataset.relatedKey = CFG.key;
+    section.id = assignBlockId(CFG.key);
     String(CFG.classes?.block || '').split(/\s+/).map(s => s.trim()).filter(Boolean)
       .forEach(cls => section.classList.add(cls));
     const inner = document.createElement('div');
@@ -1426,7 +1442,7 @@
   }
 
   function cacheKey(CFG) {
-    return ['related-block-v7.1', CFG.key, location.pathname].join('::');
+    return ['related-block-v7.2', CFG.key, location.pathname].join('::');
   }
 
   function createRunner(CFG) {
