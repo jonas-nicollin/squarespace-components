@@ -1,5 +1,5 @@
 /*!
- * Related Block v7.2
+ * Related Block v7.3
  * Blocs de contenu relatif pour collections Squarespace
  * https://github.com/jonas-nicollin/squarespace-components
  *
@@ -169,7 +169,12 @@
  * ── SÉLECTION ────────────────────────────────────────────────────────
  *   selection: {
  *     constraints: {
- *       requirePublished: true,    // exclure les items non publiés
+ *       // requirePublished accepte trois valeurs :
+ *       //   true         → workflowState publié ET publishOn ≤ maintenant
+ *       //   'state-only' → workflowState publié uniquement (ignore publishOn)
+ *       //                  utile quand publishOn est une date éditoriale future
+ *       //   false        → aucun filtre de publication
+ *       requirePublished: true,
  *       requireImage: true,        // exclure les items sans image
  *       excludeCurrentItem: true,  // exclure l'item courant
  *     },
@@ -788,7 +793,10 @@
     if (c.requirePublished) {
       const state = candidateItem.workflowState;
       if (state !== 1 && state !== 'PUBLISHED') return false;
-      if (candidateItem.publishOn && Number(candidateItem.publishOn) > Date.now()) return false;
+      // 'state-only' : on ignore publishOn (date éditoriale future tolérée)
+      if (c.requirePublished !== 'state-only') {
+        if (candidateItem.publishOn && Number(candidateItem.publishOn) > Date.now()) return false;
+      }
     }
     if (c.requireImage && !getAssetUrl(candidateItem)) return false;
     if (c.excludeCurrentItem) {
@@ -910,7 +918,7 @@
   // ════════════════════════════════════════════════════════════════
 
   function getCollectionCacheKey(path, maxPages, suffix) {
-    return ['related-block-collection-v7.2', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
+    return ['related-block-collection-v7.3', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
   }
 
   function getCollectionCacheOptions(CFG) {
@@ -1442,7 +1450,7 @@
   }
 
   function cacheKey(CFG) {
-    return ['related-block-v7.2', CFG.key, location.pathname].join('::');
+    return ['related-block-v7.3', CFG.key, location.pathname].join('::');
   }
 
   function createRunner(CFG) {
