@@ -1,7 +1,221 @@
 /*!
- * Squarespace Query Block (SQB) v01
+ * Squarespace Collection Block (SQB) v12
+ * Fetch JSON paginé · filtres · tabs · groupBy · sticky · hooks · masonry · cache
+ * https://github.com/jonas-nicollin/squarespace-components
+ *
  * SITES
+ *   — Parcours Céramique Carouge  pcc.jonasnicollin.ch
  *   — Geneva Art Week             genevaartweek.com
+ *   — Carneiro Architectes        carneiro.jonasnicollin.ch
+ *
+ * ════════════════════════════════════════════════════════════════════
+ * RÉFÉRENCE CONFIGURATION — OPTIONS EXHAUSTIVES
+ * ════════════════════════════════════════════════════════════════════
+ *
+ * window.SQB_CONFIGS = [ { ...cfg }, ... ]
+ * window.SQB_HOOKS   = { 'key': function(grid, items, cfg) {} }
+ *
+ * ── STRUCTURE PRINCIPALE ─────────────────────────────────────────────
+ * {
+ *   key:     'mon-bloc',        // identifiant unique → classe sqb--mon-bloc + SQB_HOOKS
+ *   target:  '#sqb-mon-bloc',   // sélecteur CSS du conteneur
+ *   label:   'SQB — Mon bloc',  // texte du badge éditeur (data-sqb-label sur le conteneur)
+ *   classes: 'ma-classe',       // classes CSS supplémentaires sur le conteneur
+ *
+ * ── HEADING (titre + CTA au-dessus du bloc) ──────────────────────────
+ *   heading: {
+ *     text: 'Titre du bloc',      // optionnel — si absent, seul le CTA est rendu
+ *     tag:  'h2',                 // balise HTML : h1–h6, p (défaut: h3)
+ *     cta: {
+ *       text:     'Voir tout',    // texte du lien
+ *       href:     '/collection',  // URL
+ *       position: 'inline',       // 'inline' (à droite du titre) | 'below' (bouton centré sous la grille)
+ *       newTab:   false,          // ouvrir dans un nouvel onglet
+ *     },
+ *   },
+ *
+ * ── SOURCES ──────────────────────────────────────────────────────────
+ *   sources: [
+ *     { path: '/ma-collection' }, // chemin JSON Squarespace (plusieurs sources possibles)
+ *   ],
+ *
+ * ── PRÉ-FILTRE (appliqué avant tout filtrage UI) ─────────────────────
+ *   preFilter: {
+ *     categories:        ['Cat A'],                    // inclure seulement ces catégories
+ *     excludeCategories: ['Cat B'],                    // exclure ces catégories
+ *     tagValues: [                                     // inclure seulement si ces tags présents
+ *       { prefix: 'Statut', value: 'Case Study' },    // AND entre plusieurs tagValues
+ *     ],
+ *   },
+ *
+ * ── FILTRES UI ───────────────────────────────────────────────────────
+ *   filters: false,   // pas de filtres
+ *   // — ou —
+ *   filters: {
+ *     sticky:   true,             // filtre collant au scroll
+ *     stickyTop: 'var(--header-height, 0px)',  // top du filtre sticky (CSS ou valeur px)
+ *     scrollOnFilter: true,       // scroll vers la grille après filtrage
+ *     clearAll: true,             // bouton "Réinitialiser" (true | 'Mon texte')
+ *     resetOthers: true,          // réinitialiser les autres filtres au clic
+ *
+ *     // ── Panel mobile ───────────────────────────────────────────────
+ *     mobilePanel:           true,      // bouton Filtrer + panneau overlay
+ *     mobilePanelBreakpoint: 768,       // sous cette largeur (px) | 'always' | false
+ *
+ *     // ── Tabs ───────────────────────────────────────────────────────
+ *     tabs: [
+ *       {
+ *         label:      'Tab A',           // texte du bouton (optionnel si labelIcon)
+ *         labelIcon:  'grid_view',       // icône Material Symbols (remplace le texte)
+ *         layout:     'grid',            // surcharge display.layout pour ce tab
+ *         filter:     {                  // filtre appliqué à ce tab (null = tous)
+ *           categories:        ['Cat A'],
+ *           excludeCategories: ['Cat B'],
+ *           tagValues: [{ prefix: 'P', value: 'V' }],
+ *         },
+ *         sort:       { type: 'date', direction: 'asc' },  // surcharge sort pour ce tab
+ *         groups:     [...],             // surcharge display.groups pour ce tab
+ *         groupBy:    { tagPrefix: 'Date', groupByDay: true, groupLabelFormat: 'date' },
+ *         groupOrder: 'collection',      // surcharge display.groupOrder pour ce tab
+ *         tagPrefixes: [...],            // filtres secondaires propres à ce tab
+ *       },
+ *     ],
+ *     defaultTab: 0,   // index du tab actif au chargement
+ *
+ *     // ── Catégories ─────────────────────────────────────────────────
+ *     categories: false,    // masquer
+ *     categories: true,     // afficher (label: 'Catégorie')
+ *     categories: {
+ *       label:     'Programme',   // label personnalisé
+ *       showLabel: true,          // afficher le label
+ *       order:     ['Cat A', 'Cat B'],  // ordre custom (reste en alpha après)
+ *     },
+ *
+ *     // ── Tag préfixes (filtres secondaires) ─────────────────────────
+ *     tagPrefixes: [
+ *       {
+ *         prefix:       'Zone',          // préfixe du tag Squarespace
+ *         layout:       'pills',         // 'pills' | 'dropdown'
+ *         showLabel:    true,            // afficher le label du groupe
+ *         order:        ['Val A'],       // ordre custom des valeurs
+ *         filterFormat: 'day',           // format d'affichage dans le filtre (voir Formats dates)
+ *       },
+ *     ],
+ *     datePrefix: 'Date',    // préfixe traité comme date (tri chronologique auto)
+ *
+ *     // ── Recherche ──────────────────────────────────────────────────
+ *     search: true,   // activer le champ de recherche
+ *
+ *     // ── i18n (textes UI) ───────────────────────────────────────────
+ *     // (voir section i18n ci-dessous)
+ *   },
+ *
+ * ── AFFICHAGE ────────────────────────────────────────────────────────
+ *   display: {
+ *     layout:   'grid',   // 'grid' | 'list'
+ *     counter:  true,     // afficher le compteur de résultats
+ *     cardLink:       true,    // la card entière est cliquable (true par défaut)
+ *     cardLinkNewTab: false,   // ouvrir le lien dans un nouvel onglet
+ *     fadeIn:   true,     // animation d'apparition des cartes (true par défaut)
+ *
+ *     // ── Classes sur les cartes ─────────────────────────────────────
+ *     cardClasses: {
+ *       categories: true,             // sqb-cat--[slug] sur chaque card
+ *       tagPrefixes: ['Statut'],      // sqb-tag--statut--[slug] sur chaque card
+ *     },
+ *
+ *     // ── Groupement visuel ──────────────────────────────────────────
+ *     groupBy: null,              // pas de groupement
+ *     groupBy: 'category',        // grouper par catégorie
+ *     groupBy: {
+ *       tagPrefix:       'Date',  // grouper par valeur de ce préfixe
+ *       groupByDay:      true,    // extraire la date (YYYY-MM-DD) pour grouper par jour
+ *       groupLabelFormat: 'date', // format du titre de groupe (voir Formats dates)
+ *     },
+ *     groupOrder: 'collection',   // 'collection' | 'alpha' | ['Val A', 'Val B']
+ *
+ *     // ── Groupes de contenu dans la carte ──────────────────────────
+ *     groups: [
+ *       {
+ *         role: 'media',   // 'media' | 'header' | 'body' | 'meta' | 'footer'
+ *         children: [
+ *           'image',        // image principale
+ *           'title',        // titre
+ *           'categories',   // catégories
+ *           { type: 'excerpt' },                          // extrait HTML (défaut)
+ *           { type: 'excerpt', excerptPlain: true },      // extrait texte brut
+ *           { type: 'tagPrefix',
+ *             prefix:        'Zone',       // préfixe du tag
+ *             label:         'Lieu',       // label affiché ('' pour masquer)
+ *             labelIcon:     'pin_drop',   // icône Material Symbols (remplace le label)
+ *             joinWith:      ', ',         // séparateur si plusieurs valeurs ('
+' pour retour ligne)
+ *             displayFormat: 'datetime',   // format d'affichage (voir Formats dates)
+ *             locale:        'fr-CH',      // surcharge de la locale
+ *           },
+ *         ],
+ *       },
+ *     ],
+ *   },
+ *
+ * ── TRI ──────────────────────────────────────────────────────────────
+ *   sort: {
+ *     type:      'collection',            // ordre manuel Squarespace (glisser-déposer → displayIndex)
+ *     type:      'date',                  // par date de publication
+ *     type:      'title',                 // alphabétique par titre
+ *     type:      'category',              // par première catégorie
+ *     type:      'random',                // aléatoire
+ *     type:      { tagPrefix: 'Numéro' }, // par valeur numérique de ce tag
+ *     direction: 'asc',                   // 'asc' | 'desc'
+ *   },
+ *
+ * ── PAGINATION ───────────────────────────────────────────────────────
+ *   pagination: {
+ *     mode:          'load-more',    // 'load-more' | 'infinite' | 'none'
+ *     perPage:       12,             // items par page
+ *     loadMoreLabel: 'Voir plus',    // texte du bouton (défaut: 'Voir plus')
+ *     endLabel:      false,          // texte quand plus d'items (false = rien)
+ *   },
+ *
+ * ── PERFORMANCE ──────────────────────────────────────────────────────
+ *   performance: {
+ *     maxPages:        10,    // nombre max de pages JSON fetchées
+ *     sessionCache:    false, // mettre en cache dans sessionStorage (false par défaut — true en prod)
+ *     sessionCacheTTL: 300,   // durée du cache en secondes
+ *   },
+ *
+ * ── INTERNATIONALISATION ─────────────────────────────────────────────
+ *   i18n: {
+ *     loading:           false,         // texte pendant le chargement (false = aucun)
+ *     all:               'Tout',        // valeur "tous" dans les filtres
+ *     noResults:         'Aucun résultat',
+ *     searchPlaceholder: 'Rechercher…',
+ *     filterToggle:      'Filtrer',     // texte du bouton panneau mobile
+ *     filterClose:       'close',       // icône Material ou texte du bouton fermer
+ *     loadMoreLabel:     'Voir plus',   // surcharge pagination.loadMoreLabel
+ *   },
+ *
+ * ── FORMATS DE DATE ──────────────────────────────────────────────────
+ * Format recommandé des tags : Date: 2026-09-19T15:00  (ISO 8601)
+ * Plage de dates              : Date: 2026-09-14/2026-09-22
+ *
+ * displayFormat / filterFormat / groupLabelFormat :
+ *   'datetime' → Lundi 21 septembre, 15h00   (défaut pour displayFormat)
+ *   'date'     → Lundi 21 septembre 2026
+ *   'day'      → Lundi 21 septembre          (défaut pour groupLabelFormat)
+ *   'short'    → Lun. 21 sept.               (défaut pour filterFormat)
+ *   'numeric'  → 21.09.2026
+ *   'time'     → 15h00
+ *   { weekday:'long', day:'numeric', month:'long', year:'numeric' }  // objet Intl custom
+ *
+ * Fuseau horaire : lu automatiquement depuis Static.SQUARESPACE_CONTEXT.websiteTimeZone
+ *
+ * ── DEBUG ────────────────────────────────────────────────────────────
+ *   debug: {
+ *     mockDate: '2026-09-21',  // simuler une date (pour tester groupBy jour courant)
+ *   },
+ *
+ * ════════════════════════════════════════════════════════════════════
  */
 
 (function () {
