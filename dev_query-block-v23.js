@@ -114,7 +114,8 @@
  *   display: {
  *     layout:   'grid',   // 'grid' | 'list'
  *     counter:  true,     // afficher le compteur de résultats
- *     cardLink: true,     // la card entière est cliquable (true par défaut)
+ *     cardLink:       true,    // la card entière est cliquable (true par défaut)
+ *     cardLinkNewTab: false,   // ouvrir le lien dans un nouvel onglet
  *     fadeIn:   true,     // animation d'apparition des cartes (true par défaut)
  *
  *     // ── Classes sur les cartes ─────────────────────────────────────
@@ -159,7 +160,7 @@
  *
  * ── TRI ──────────────────────────────────────────────────────────────
  *   sort: {
- *     type:      'collection',            // ordre de la collection Squarespace
+ *     type:      'collection',            // ordre manuel Squarespace (glisser-déposer → displayIndex)
  *     type:      'date',                  // par date de publication
  *     type:      'title',                 // alphabétique par titre
  *     type:      'category',              // par première catégorie
@@ -179,7 +180,7 @@
  * ── PERFORMANCE ──────────────────────────────────────────────────────
  *   performance: {
  *     maxPages:        10,    // nombre max de pages JSON fetchées
- *     sessionCache:    true,  // mettre en cache dans sessionStorage
+ *     sessionCache:    false, // mettre en cache dans sessionStorage (false par défaut — true en prod)
  *     sessionCacheTTL: 300,   // durée du cache en secondes
  *   },
  *
@@ -355,7 +356,9 @@
 
   var MEM = new Map();
 
-  function cacheGet(key) {
+  function cacheGet(key, useSession) {
+    // Si sessionCache explicitement false : ignorer le cache mémoire aussi
+    if (useSession === false) return null;
     if (MEM.has(key)) return MEM.get(key);
     try {
       var raw = sessionStorage.getItem(key); if (!raw) return null;
@@ -378,7 +381,7 @@
 
   async function fetchAllItems(path, maxPages, useSession, ttl) {
     var key = 'sqb::v12::' + path + '::' + (maxPages || 10);
-    var cached = cacheGet(key); if (cached) return cached;
+    var cached = cacheGet(key, useSession); if (cached) return cached;
     var items = [], url = ensureJson(path);
     for (var p = 0; p < (maxPages || 10); p++) {
       var data;
@@ -618,7 +621,10 @@
     var disp = cfg.display || {};
     var link = disp.cardLink !== false;
     var card = el(link ? 'a' : 'div', { class: 'sqb-card', 'data-sqb-index': String(index) });
-    if (link) card.href = item.fullUrl;
+    if (link) {
+      card.href = item.fullUrl;
+      if (disp.cardLinkNewTab) { card.target = '_blank'; card.rel = 'noopener noreferrer'; }
+    }
 
     // cardClasses : ajouter des classes selon catégories et tag-prefixes
     var cardClassesCfg = disp.cardClasses || null;
@@ -1397,7 +1403,8 @@
 
     target.classList.add('sqb-block');
     target.setAttribute('data-sqb-key', cfg.key || 'sqb');
-    // data-sqb-label : défini dans la config ou dans le HTML du conteneur
+    // id : sqb-[key] pour ciblage CSS/JS facile (sauf si déjà défini dans le HTML)
+    if (cfg.key && !target.id) target.id = 'sqb-' + cfg.key;
     if (cfg.label) target.setAttribute('data-sqb-label', cfg.label);
     if (cfg.key)     target.classList.add('sqb--' + cfg.key);
     if (cfg.classes) cfg.classes.trim().split(/\s+/).forEach(function(c) { if (c) target.classList.add(c); });
@@ -1410,7 +1417,7 @@
     var rawItems = [];
     try {
       var results = await Promise.all((Array.isArray(cfg.sources) ? cfg.sources : []).map(function(src) {
-        return fetchAllItems(src.path, perf.maxPages || 10, perf.sessionCache !== false, perf.sessionCacheTTL || 300)
+        return fetchAllItems(src.path, perf.maxPages || 10, perf.sessionCache === true, perf.sessionCacheTTL || 300)
           .then(function(items) { return items.map(function(raw) { return mapItem(raw, src.path); }); });
       }));
       results.forEach(function(r) { rawItems.push.apply(rawItems, r); });
