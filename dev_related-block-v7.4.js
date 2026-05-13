@@ -1,5 +1,5 @@
 /*!
- * Related Block v7.3
+ * Related Block v7.4
  * Blocs de contenu relatif pour collections Squarespace
  * https://github.com/jonas-nicollin/squarespace-components
  *
@@ -96,6 +96,13 @@
  *     showCategories: true,
  *     showExcerpt: false,
  *     showLocation: false,
+ *
+ *     // Troncature de l'extrait
+ *     // 180    → tronquer à 180 caractères (défaut, rétrocompat)
+ *     // 0      → afficher l'extrait complet sans limite
+ *     // false  → idem 0
+ *     // N > 0  → tronquer à N caractères
+ *     excerptMaxLength: 180,
  *
  *     // Ordre des éléments en mode simple (sans groups)
  *     order: ['meta', 'title', 'excerpt', 'location'],
@@ -560,12 +567,16 @@
     return Number(item?.startDate || item?.publishOn || item?.addedOn || item?.updatedOn || 0);
   }
 
-  function getItemExcerpt(item) {
-    const maxLength = 180;
+  function getItemExcerpt(item, maxLength) {
+    // maxLength: nombre > 0 pour tronquer, 0 ou false pour tout afficher
     const excerptText = cleanText(item?.excerpt || '');
-    if (excerptText) return truncateText(excerptText, maxLength);
+    if (excerptText) {
+      return maxLength ? truncateText(excerptText, maxLength) : excerptText;
+    }
     const bodyText = cleanText(item?.body || '');
-    if (bodyText) return truncateText(bodyText, maxLength);
+    if (bodyText) {
+      return maxLength ? truncateText(bodyText, maxLength) : bodyText;
+    }
     return '';
   }
 
@@ -573,6 +584,20 @@
     if (item?.location?.addressTitle) return cleanText(item.location.addressTitle);
     if (item?.location?.addressLine1) return cleanText(item.location.addressLine1);
     return '';
+  }
+
+  /**
+   * Résout la longueur max de l'extrait depuis la config.
+   * display.excerptMaxLength :
+   *   undefined / absent → 180 (défaut, rétrocompat)
+   *   0 / false          → pas de troncature
+   *   nombre > 0         → tronquer à ce nombre de caractères
+   */
+  function getExcerptMaxLength(CFG) {
+    const val = CFG?.display?.excerptMaxLength;
+    if (val === false || val === 0) return 0;
+    if (typeof val === 'number' && val > 0) return val;
+    return 180; // défaut
   }
 
   function mapItemForRender(item, CFG) {
@@ -606,7 +631,7 @@
         ? item.categories.map(c => cleanText(c)).filter(Boolean) : [],
       tags: Array.isArray(item.tags)
         ? item.tags.map(t => cleanText(t)).filter(Boolean) : [],
-      excerpt: getItemExcerpt(item),
+      excerpt: getItemExcerpt(item, getExcerptMaxLength(CFG)),
       locationText: getItemLocationText(item),
       displayIndex: Number(item.displayIndex || 999999),
       timestamp: getItemTimestamp(item),
@@ -918,7 +943,7 @@
   // ════════════════════════════════════════════════════════════════
 
   function getCollectionCacheKey(path, maxPages, suffix) {
-    return ['related-block-collection-v7.3', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
+    return ['related-block-collection-v7.4', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
   }
 
   function getCollectionCacheOptions(CFG) {
@@ -1366,18 +1391,32 @@
     return section;
   }
 
+  /**
+   * Construit le <div class="related-block__list"> avec :
+   *   - data-count="N"
+   *   - related-block__list--single  (N === 1)
+   *   - related-block__list--multiple (N > 1)
+   */
+  function buildList(items, CFG, currentItem) {
+    const list = document.createElement('div');
+    const count = items.length;
+    list.className = 'related-block__list';
+    list.dataset.count = count;
+    if (count === 1) list.classList.add('related-block__list--single');
+    if (count > 1)  list.classList.add('related-block__list--multiple');
+    const extraClasses = String(CFG.classes?.block || '')
+      .split(/\s+/).map(s => s.trim()).filter(Boolean);
+    items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses, currentItem)));
+    return list;
+  }
+
   function replaceBlockContent(section, items, CFG, currentItem) {
     const inner = section.querySelector('.related-block__inner');
     if (!inner) return;
     inner.innerHTML = '';
     const heading = buildHeadingElement(items, CFG, false);
     if (heading) inner.appendChild(heading);
-    const list = document.createElement('div');
-    list.className = 'related-block__list';
-    const extraClasses = String(CFG.classes?.block || '')
-      .split(/\s+/).map(s => s.trim()).filter(Boolean);
-    items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses, currentItem)));
-    inner.appendChild(list);
+    inner.appendChild(buildList(items, CFG, currentItem));
     section.classList.remove('related-block--is-loading');
     applyStateClasses(section);
   }
@@ -1411,12 +1450,7 @@
     inner.className = 'related-block__inner';
     const heading = buildHeadingElement(items, CFG, false);
     if (heading) inner.appendChild(heading);
-    const list = document.createElement('div');
-    list.className = 'related-block__list';
-    const extraClasses = String(CFG.classes?.block || '')
-      .split(/\s+/).map(s => s.trim()).filter(Boolean);
-    items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses, currentItem)));
-    inner.appendChild(list);
+    inner.appendChild(buildList(items, CFG, currentItem));
     section.appendChild(inner);
     applyStateClasses(section);
     return section;
@@ -1450,7 +1484,7 @@
   }
 
   function cacheKey(CFG) {
-    return ['related-block-v7.3', CFG.key, location.pathname].join('::');
+    return ['related-block-v7.4', CFG.key, location.pathname].join('::');
   }
 
   function createRunner(CFG) {
