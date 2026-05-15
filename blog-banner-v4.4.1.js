@@ -1,23 +1,14 @@
 /**
- * Blog Banner – v4.3.0
+ * Blog Banner – v4.4.1
  *
- * Changements vs v4.2 :
- *  1. Guard contre le double-chargement : si le script est inclus deux fois,
- *     le second run est ignoré et un avertissement console est émis.
- *  2. Mode debug : window.blogBannerDebug = true active des console.warn
- *     détaillés à chaque étape pour diagnostiquer les body classes.
- *  3. Correction du sizes de l'image bannière : on remplace le sizes copié
- *     du bloc source (calibré pour la max-width du content wrapper) par un
- *     sizes adapté à la bannière plein-largeur, tirant parti du format=2500w
- *     disponible dans le srcset Squarespace.
+ * Patch :
+ *  1. Retire les classes body gérées avant chaque run.
+ *     Elles ne sont ré-ajoutées que si une bannière est réellement insérée.
+ *  2. Les icônes utilisent maintenant la classe "icon".
  */
 
 (function () {
   "use strict";
-
-  /* ─────────────────────────────────────────────
-     Guard double-chargement
-  ───────────────────────────────────────────── */
 
   if (window.__blogBannerLoaded) {
     console.warn("[BlogBanner] Script chargé deux fois — second run ignoré.");
@@ -25,26 +16,13 @@
   }
   window.__blogBannerLoaded = true;
 
-  /* ─────────────────────────────────────────────
-     Debug
-  ───────────────────────────────────────────── */
-
   function dbg() {
     if (window.blogBannerDebug) {
       console.warn.apply(console, ["[BlogBanner]"].concat(Array.prototype.slice.call(arguments)));
     }
   }
 
-  /* ─────────────────────────────────────────────
-     État interne
-  ───────────────────────────────────────────── */
-
-  /** Map viewItem element → banner element inséré */
   const insertedBanners = new Map();
-
-  /* ─────────────────────────────────────────────
-     API publique
-  ───────────────────────────────────────────── */
 
   window.BlogBanner = {
     getBannerFor(viewItem) {
@@ -58,19 +36,11 @@
     },
   };
 
-  /* ─────────────────────────────────────────────
-     Point d'entrée
-  ───────────────────────────────────────────── */
-
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initializeBanners);
   } else {
     initializeBanners();
   }
-
-  /* ─────────────────────────────────────────────
-     Logique principale
-  ───────────────────────────────────────────── */
 
   function initializeBanners() {
     const configList = window.blogBannerConfig || [];
@@ -82,12 +52,16 @@
       const matches = config.bodyClassConditions.every(function (cls) {
         return bodyClasses.contains(cls);
       });
+
       dbg("config[" + i + "] match:", matches, config.bodyClassConditions);
+
       if (matches) applyBannerConfig(config);
     });
   }
 
   function applyBannerConfig(config) {
+    resetManagedBodyClasses(config);
+
     let insertedImageCount = 0;
     let insertedVideoCount = 0;
 
@@ -96,6 +70,7 @@
 
     wrappers.forEach(function (contentWrapper, i) {
       const viewItem = contentWrapper.closest(".view-item");
+
       if (!viewItem) {
         dbg("wrapper[" + i + "] — pas de .view-item, ignoré");
         return;
@@ -107,8 +82,9 @@
       }
 
       const destination = viewItem.querySelector(config.destinationSelector);
+
       if (!destination) {
-        dbg("wrapper[" + i + "] — destination \"" + config.destinationSelector + "\" introuvable, ignoré");
+        dbg("wrapper[" + i + "] — destination introuvable, ignoré");
         return;
       }
 
@@ -121,7 +97,8 @@
 
       if (bannerBlock) {
         const banner = insertImageBanner(destination, bannerBlock, config);
-        dbg("wrapper[" + i + "] — insertImageBanner →", banner ? "OK" : "null (aucune image valide)");
+        dbg("wrapper[" + i + "] — insertImageBanner →", banner ? "OK" : "null");
+
         if (banner) {
           insertedBanners.set(viewItem, banner);
           markSourceBlock(bannerBlock);
@@ -129,6 +106,7 @@
         }
       } else if (videoBlock) {
         const banner = insertVideoBanner(destination, videoBlock, config);
+
         if (banner) {
           insertedBanners.set(viewItem, banner);
           insertedVideoCount++;
@@ -139,11 +117,12 @@
     dbg("insertedImageCount:", insertedImageCount, "| insertedVideoCount:", insertedVideoCount);
 
     if (insertedImageCount > 0) {
-      document.body.classList.add("has-banner-image", "has-banner");
+      document.body.classList.add("has-blog-banner-image", "has-banner");
       addBodyClasses(config.bodyClass);
     }
+
     if (insertedVideoCount > 0) {
-      document.body.classList.add("has-banner-video", "has-banner");
+      document.body.classList.add("has-blog-banner-video", "has-banner");
       addBodyClasses(config.bodyClass);
     }
 
@@ -155,23 +134,18 @@
     );
   }
 
-  /* ─────────────────────────────────────────────
-     Sélection du bloc bannière
-  ───────────────────────────────────────────── */
-
   function selectBannerBlock(contentWrapper, config) {
     const all = Array.from(contentWrapper.querySelectorAll(config.bannerSelectors));
+
     if (all.length === 0) return null;
 
     const pos = config.bannerPosition;
+
     if (pos === "last") return all[all.length - 1];
     if (typeof pos === "number") return all[pos] || null;
-    return all[0]; // défaut : "first"
-  }
 
-  /* ─────────────────────────────────────────────
-     Constructeurs de bannière
-  ───────────────────────────────────────────── */
+    return all[0];
+  }
 
   function insertImageBanner(destination, bannerBlock, config) {
     const sourceImg = bannerBlock.querySelector("img");
@@ -193,18 +167,10 @@
     const img = document.createElement("img");
     img.src = source;
 
-    // Conserver le srcset original (contient toutes les tailles Squarespace)
     const srcset = sourceImg.getAttribute("srcset");
     if (srcset) img.setAttribute("srcset", srcset);
 
-    // ── Correction sizes ───────────────────────────────────────────────────
-    // Le sizes du bloc source est calibré pour la max-width du content wrapper.
-    // La bannière est plein-largeur : on réécrit un sizes approprié pour que
-    // le navigateur choisisse une résolution suffisante quelle que soit la
-    // largeur de l'écran, jusqu'à 2560px (format=2500w dans le CDN Squarespace).
-    img.setAttribute("sizes", buildBannerSizes(config));
-    // ────────────────────────────────────────────────────────────────────────
-
+    img.setAttribute("sizes", config.bannerSizes || "100vw");
     img.setAttribute("alt", sourceImg.getAttribute("alt") || "");
     img.setAttribute("loading", "eager");
     img.setAttribute("decoding", "async");
@@ -218,14 +184,15 @@
     if (img.complete) {
       markLoaded();
     } else {
-      img.addEventListener("load", markLoaded);
-      img.addEventListener("error", markLoaded);
+      img.addEventListener("load", markLoaded, { once: true });
+      img.addEventListener("error", markLoaded, { once: true });
     }
 
     banner.appendChild(img);
 
     if (config.displayCaption) {
       const captionData = extractCaptionData(bannerBlock, config);
+
       if (captionData.hasContent) {
         const captionUI = createCaptionUI(captionData, config);
         banner.appendChild(captionUI.panel);
@@ -235,18 +202,6 @@
 
     insertBanner(destination, banner, config.insertionMethod);
     return banner;
-  }
-
-  /**
-   * Construit l'attribut sizes pour une bannière plein-largeur.
-   * On peut surcharger via config.bannerSizes pour un contrôle total.
-   */
-  function buildBannerSizes(config) {
-    if (config.bannerSizes) return config.bannerSizes;
-    // Par défaut : la bannière occupe 100vw à toutes les tailles.
-    // Le navigateur choisira dans le srcset la résolution adaptée
-    // en tenant compte du DPR (Retina = ×2).
-    return "100vw";
   }
 
   function insertVideoBanner(destination, videoBlock, config) {
@@ -261,27 +216,23 @@
     return banner;
   }
 
-  /* ─────────────────────────────────────────────
-     Bloc source
-  ───────────────────────────────────────────── */
-
   function markSourceBlock(bannerBlock) {
     let el = bannerBlock;
+
     while (el && el !== document.body) {
       if (el.classList.contains("sqs-block")) {
         el.classList.add("blog-banner-source");
+
         if (!isEditMode()) {
           el.setAttribute("aria-hidden", "true");
         }
+
         break;
       }
+
       el = el.parentElement;
     }
   }
-
-  /* ─────────────────────────────────────────────
-     Helpers DOM
-  ───────────────────────────────────────────── */
 
   function getBestImageSource(img) {
     return (
@@ -295,6 +246,7 @@
 
   function insertBanner(destination, bannerElement, method) {
     removeExistingBanners(destination);
+
     if (method === "prepend") {
       destination.insertBefore(bannerElement, destination.firstChild);
     } else {
@@ -304,27 +256,50 @@
 
   function removeExistingBanners(container) {
     [".blog-item-cover-image", ".blog-item-cover-video"].forEach(function (selector) {
-      container.querySelectorAll(selector).forEach(function (el) { el.remove(); });
+      container.querySelectorAll(selector).forEach(function (el) {
+        el.remove();
+      });
+    });
+  }
+
+  function resetManagedBodyClasses(config) {
+    document.body.classList.remove(
+      "has-blog-banner-image",
+      "has-blog-banner-video",
+      "has-banner"
+    );
+
+    if (!config || !config.bodyClass) return;
+
+    const classes = Array.isArray(config.bodyClass)
+      ? config.bodyClass
+      : [config.bodyClass];
+
+    classes.forEach(function (cls) {
+      if (cls && typeof cls === "string") {
+        document.body.classList.remove(cls);
+      }
     });
   }
 
   function addBodyClasses(bodyClass) {
     if (!bodyClass) return;
+
     const classes = Array.isArray(bodyClass) ? bodyClass : [bodyClass];
+
     classes.forEach(function (cls) {
-      if (cls && typeof cls === "string") document.body.classList.add(cls);
+      if (cls && typeof cls === "string") {
+        document.body.classList.add(cls);
+      }
     });
   }
-
-  /* ─────────────────────────────────────────────
-     Légende
-  ───────────────────────────────────────────── */
 
   function extractCaptionData(bannerBlock, config) {
     const figure =
       bannerBlock.closest("figure") ||
       bannerBlock.querySelector("figure") ||
       bannerBlock;
+
     const figcaption = figure.querySelector("figcaption");
 
     if (!figcaption) {
@@ -366,7 +341,7 @@
     closeButton.type = "button";
     closeButton.className = "blog-banner-caption-close";
     closeButton.setAttribute("aria-label", "Fermer la légende");
-    closeButton.innerHTML = getCloseIcon();
+    closeButton.appendChild(makeMaterialIcon(config.captionCloseIcon || "close"));
     panel.appendChild(closeButton);
 
     if (captionData.title) {
@@ -397,7 +372,7 @@
     toggle.setAttribute("aria-label", "Afficher la légende");
     toggle.setAttribute("aria-expanded", "false");
     toggle.setAttribute("aria-controls", uid);
-    toggle.innerHTML = getInfoIcon();
+    toggle.appendChild(makeMaterialIcon(config.captionToggleIcon || "info"));
 
     toggle.addEventListener("click", function () {
       const isOpen = !panel.hidden;
@@ -413,13 +388,19 @@
     return { panel, toggle };
   }
 
-  /* ─────────────────────────────────────────────
-     Utilitaires
-  ───────────────────────────────────────────── */
+  function makeMaterialIcon(name) {
+    const span = document.createElement("span");
+    span.className = "icon";
+    span.setAttribute("aria-hidden", "true");
+    span.textContent = name;
+    return span;
+  }
 
   function normalizeFocalPoint(value) {
     const n = parseFloat(value);
+
     if (Number.isNaN(n)) return "50%";
+
     return (Math.max(0, Math.min(1, n)) * 100) + "%";
   }
 
@@ -427,15 +408,4 @@
     return document.body.classList.contains("sqs-edit-mode-active");
   }
 
-  /* ─────────────────────────────────────────────
-     Icônes
-  ───────────────────────────────────────────── */
-
-  function getInfoIcon() {
-    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="10" x2="12" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7" r="1.2" fill="currentColor"/></svg>';
-  }
-
-  function getCloseIcon() {
-    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-  }
 })();
