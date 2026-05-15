@@ -1,0 +1,388 @@
+/*!
+ * Locator Block v1.4 — CSS global
+ * github.com/jonas-nicollin/squarespace-blocks
+ *
+ * Ce fichier ne contient aucune variable spécifique à un site.
+ * Les valeurs de couleur, taille, typographie sont soit neutres,
+ * soit à définir via les variables listées ci-dessous dans le CSS custom du site.
+ *
+ * VARIABLES À DÉFINIR PAR SITE (Custom CSS)
+ * ─────────────────────────────────────────
+ *   --locator-height           hauteur du composant
+ *   --locator-height-mobile    hauteur carte mobile
+ *   --locator-list-width       largeur sidebar liste
+ *   --locator-marker-color     couleur des marqueurs
+ *   --locator-marker-active    couleur marqueur actif/sélectionné
+ *
+ * CLASSE GÉNÉRIQUE ICÔNES
+ * ─────────────────────────────────────────
+ *   .ui-icon — icônes Material Symbols (et toute autre icon font)
+ *   Réutilisable dans Location Block, Related Block, Locator Block, etc.
+ */
+
+/* ── Icône générique ─────────────────────────────── */
+
+.ui-icon {
+  font-family: var(--ui-font-font-family, inherit);
+  font-size: inherit;
+  line-height: 1;
+  vertical-align: middle;
+  flex-shrink: 0;
+  user-select: none;
+  speak: never;
+}
+
+/* ── Mode édition Squarespace ─────────────────────── */
+
+body.sqs-edit-mode-active .locator-block {
+  padding: 2rem;
+  background-color: ~"hsl(var(--darkAccent-hsl))";
+  border-radius: .5rem;
+}
+
+/* ── Conteneur ────────────────────────────────────── */
+
+.locator-block__inner {
+  overflow: hidden;
+  border-radius: .375rem;
+}
+
+.locator-block__inner--list {
+  display: grid;
+  grid-template-columns: var(--locator-list-width, 400px) 1fr;
+  height: var(--locator-height, 66.666vh);
+  min-height: 480px;
+}
+
+.locator-block__inner--grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* ── Sidebar ──────────────────────────────────────── */
+
+.locator-block__inner--list .locator-block__sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
+}
+
+/* ── Contrôles ────────────────────────────────────── */
+
+.locator-block__controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .875rem 1.25rem;
+  border-bottom: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.08));
+  flex-wrap: wrap;
+}
+
+.locator-block__count {
+  opacity: .55;
+  flex: 1 0 auto;
+}
+
+.locator-block__filter-zone {
+  font-family: inherit;
+  font-size: inherit;
+  padding: .35em .6em;
+  border: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.18));
+  border-radius: .25rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ── Liste ────────────────────────────────────────── */
+
+.locator-block__inner--list .locator-block__list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,.12) transparent;
+}
+.locator-block__inner--list .locator-block__list::-webkit-scrollbar { width: 3px; }
+.locator-block__inner--list .locator-block__list::-webkit-scrollbar-track { background: transparent; }
+.locator-block__inner--list .locator-block__list::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,.12);
+  border-radius: 2px;
+}
+
+.locator-block__inner--grid .locator-block__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 1.5rem 2rem;
+}
+
+/* ── Card — mode list ─────────────────────────────── */
+
+.locator-block__inner--list .locator-block__card {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.07));
+  transition: background .12s;
+  cursor: pointer;
+}
+.locator-block__inner--list .locator-block__card:hover,
+.locator-block__inner--list .locator-block__card.is-active {
+  background: rgba(0,0,0,.03);
+}
+.locator-block__inner--list .locator-block__card.is-active {
+  box-shadow: inset 3px 0 0 var(--locator-marker-active, #000);
+}
+
+/* ── Card — mode grid ─────────────────────────────── */
+
+.locator-block__inner--grid .locator-block__card {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  border-radius: .25rem;
+  overflow: hidden;
+  transition: transform .2s ease, box-shadow .2s ease;
+  cursor: pointer;
+}
+.locator-block__inner--grid .locator-block__card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,.1);
+}
+
+/* ── Media ────────────────────────────────────────── */
+
+.locator-block__media {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
+  aspect-ratio: 3 / 2;
+}
+.locator-block__inner--grid .locator-block__media { width: 100%; }
+
+.locator-block__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .3s ease;
+}
+.locator-block__card:hover .locator-block__image { transform: scale(1.03); }
+
+.locator-block__media:has(.locator-block__title)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,.55) 0%, rgba(0,0,0,.08) 40%, transparent 65%);
+  pointer-events: none;
+}
+
+.locator-block__media .locator-block__tag-prefix--numero {
+  position: absolute;
+  top: .6rem;
+  left: .6rem;
+  z-index: 2;
+  color: #fff;
+  line-height: 1;
+}
+
+.locator-block__media .locator-block__title {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  padding: .75rem;
+  color: #fff;
+  line-height: 1.2;
+}
+
+/* ── Body ─────────────────────────────────────────── */
+
+.locator-block__body {
+  padding: .75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  justify-content: center;
+}
+
+.locator-block__body .locator-block__tag-prefix--numero { opacity: .45; line-height: 1; }
+.locator-block__body .locator-block__title { line-height: 1.25; }
+
+.locator-block__tag-prefix--lieu {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  opacity: .6;
+}
+
+.locator-block__zones { display: flex; flex-wrap: wrap; gap: .2rem; }
+.locator-block__zone {
+  font-size: .6875rem;
+  padding: .1em .4em;
+  border-radius: .2rem;
+  background: rgba(0,0,0,.07);
+}
+
+/* ── Load more ────────────────────────────────────── */
+
+.locator-block__load-more-wrap {
+  padding: .875rem 1.25rem;
+  border-top: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.08));
+}
+.locator-block__inner--grid .locator-block__load-more-wrap {
+  padding: 1.5rem 0;
+}
+
+.locator-block__load-more {
+  display: block;
+  width: 100%;
+  padding: .75em 1rem;
+  border: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.2));
+  border-radius: .25rem;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: center;
+  transition: background .15s;
+}
+.locator-block__load-more:hover { background: rgba(0,0,0,.05); }
+
+/* ── Carte ────────────────────────────────────────── */
+
+.locator-block__map-wrap { position: relative; overflow: hidden; }
+
+.locator-block__inner--grid .locator-block__map-wrap {
+  height: 60vh;
+  min-height: 400px;
+  border-radius: .375rem;
+  overflow: hidden;
+}
+
+.locator-block__map { width: 100%; height: 100%; }
+.locator-block__map--loading { background: rgba(0,0,0,.04); }
+
+/* ── Popup OverlayView ────────────────────────────── */
+
+.locator-block__popup-wrap {
+  position: absolute;
+  z-index: 100;
+  pointer-events: auto;
+  animation: locator-popup-in .15s ease;
+}
+
+@keyframes locator-popup-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.locator-block__popup-wrap::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 8px;
+  background: inherit;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.locator-block__popup {
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  border-radius: .375rem;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,.15), 0 0 0 1px rgba(0,0,0,.06);
+  background: var(--siteBackgroundColor, #fff);
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow .15s;
+}
+.locator-block__popup:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,.2), 0 0 0 1px rgba(0,0,0,.08);
+}
+
+.locator-block__popup-media {
+  overflow: hidden;
+  aspect-ratio: 3 / 2;
+  width: 100%;
+}
+.locator-block__popup-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .3s ease;
+}
+.locator-block__popup:hover .locator-block__popup-image { transform: scale(1.03); }
+
+.locator-block__popup-body {
+  padding: .5rem .625rem .625rem;
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+}
+.locator-block__popup-num   { opacity: .45; }
+.locator-block__popup-title { line-height: 1.3; }
+.locator-block__popup-lieu  { opacity: .6; }
+
+/* ── Skeleton ─────────────────────────────────────── */
+
+.locator-block__card--skeleton { pointer-events: none; }
+.locator-block__card--skeleton .locator-block__media { background: rgba(0,0,0,.06); }
+.locator-block__skeleton-line {
+  height: .75rem;
+  border-radius: .2rem;
+  background: rgba(0,0,0,.06);
+  margin-bottom: .35rem;
+  animation: locator-skeleton 1.4s ease-in-out infinite;
+}
+@keyframes locator-skeleton {
+  0%,100% { opacity:.7; }
+  50%     { opacity:.3; }
+}
+
+.locator-block__error {
+  padding: 2rem;
+  opacity: .5;
+}
+
+/* ── Mobile ───────────────────────────────────────── */
+
+@media (max-width: 767px) {
+  .locator-block__inner--list {
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--locator-height-mobile, 45vh) auto;
+    height: auto;
+    min-height: 0;
+  }
+  .locator-block__inner--list .locator-block__sidebar {
+    order: 2;
+    border-right: none;
+    border-top: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.08));
+    max-height: 55vh;
+  }
+  .locator-block__inner--list .locator-block__map-wrap { order: 1; }
+  .locator-block__inner--list .locator-block__card { grid-template-columns: 80px 1fr; }
+  .locator-block__inner--grid .locator-block__list { grid-template-columns: 1fr; }
+}
+
+/* ── Card div — cursor et styles de base ─────────────
+   La card est un <div> (pas un <a>) depuis v1.6.
+   Le clic est géré par JS. Le lien de navigation est
+   dans .locator-block__card-link à l'intérieur.
+   ─────────────────────────────────────────────────── */
+
+.locator-block__card {
+  cursor: pointer;
+}
