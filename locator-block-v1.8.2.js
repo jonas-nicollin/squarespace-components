@@ -14,11 +14,11 @@
 (function(){
 'use strict';
 
-/* MAP_STYLE_CLEAN : désactive les POI (restaurants, commerces) et
+/* clean : désactive les POI (restaurants, commerces) et
    réduit les labels secondaires pour une carte plus lisible.
-   Passer dans mapStyle de la config pour l'activer.
-   Peut aussi être vide (null) pour garder Google par défaut. */
-var MAP_STYLE_CLEAN=[
+   Usage dans la config : mapStyle: clean
+   null = carte Google par défaut. */
+var clean=[
   {featureType:'poi',stylers:[{visibility:'off'}]},
   {featureType:'poi.park',stylers:[{visibility:'simplified'}]},
   {featureType:'transit',elementType:'labels.icon',stylers:[{visibility:'off'}]},
@@ -42,6 +42,8 @@ cfg.display=Object.assign({
 
 cfg.map=Object.assign({
   markerLabel:'numero',markerStyle:'pill',
+  markerFontSize:13,      /* px — taille du label dans le marqueur SVG */
+  markerShadow:true,      /* ombre portée sous les marqueurs */
   popup:true,popupShowImage:true,
   clustering:false,clusterMinCount:2,updateListOnMapMove:false,
 },cfg.map||{});
@@ -158,12 +160,16 @@ function defineCustomPopup(){
 function getMC(a){var p=a?'--locator-marker-active':'--locator-marker-color';return getComputedStyle(document.documentElement).getPropertyValue(p).trim()||(a?'#000':'#333');}
 function pillSvg(bg,tc,label,border){
   label=label?String(label):'';
-  var pH=label.length>2?10:8,tW=label.length*7,w=Math.max(32,tW+pH*2),h=28,rx=h/2;
+  var fs=cfg.map.markerFontSize||13;           /* taille de police configurable */
+  var charW=fs*0.6;                             /* estimation largeur caractère */
+  var pH=label.length>2?10:8,tW=label.length*charW,w=Math.max(32,tW+pH*2),h=Math.max(26,fs+14),rx=h/2;
   var bEl=border?'<rect x="0.5" y="0.5" width="'+(w-1)+'" height="'+(h-1)+'" rx="'+(rx-.5)+'" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="1"/>':'';
-  var sEl=border?'<filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,0.18)"/></filter>':'';
-  var fa=border?' filter="url(#s)"':'';
-  var txt=label?'<text x="'+(w/2)+'" y="'+(h/2+1)+'" text-anchor="middle" dominant-baseline="middle" font-family="system-ui,sans-serif" font-size="11" fill="'+tc+'">'+label+'</text>':'';
-  return'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+(sEl?'<defs>'+sEl+'</defs>':'')+'<rect x="0" y="0" width="'+w+'" height="'+h+'" rx="'+rx+'" fill="'+bg+'"'+fa+'/>'+bEl+txt+'</svg>');
+  /* Ombre plus marquée pour meilleur contraste sur la carte */
+  var shadowOp=cfg.map.markerShadow!==false?'0.28':'0';
+  var sEl='<filter id="s" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,'+shadowOp+')"/></filter>';
+  var fa=' filter="url(#s)"';
+  var txt=label?'<text x="'+(w/2)+'" y="'+(h/2+1)+'" text-anchor="middle" dominant-baseline="middle" font-family="system-ui,sans-serif" font-size="'+fs+'" fill="'+tc+'">'+label+'</text>':'';
+  return'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><defs>'+sEl+'</defs><rect x="0" y="0" width="'+w+'" height="'+h+'" rx="'+rx+'" fill="'+bg+'"'+fa+'/>'+bEl+txt+'</svg>');
 }
 function dotSvg(c){var r=8;return'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="'+(r*2)+'" height="'+(r*2)+'" viewBox="0 0 '+(r*2)+' '+(r*2)+'"><circle cx="'+r+'" cy="'+r+'" r="'+r+'" fill="'+c+'"/></svg>');}
 function markerIcon(label,active){
@@ -171,7 +177,7 @@ function markerIcon(label,active){
   if(style==='google')return null;
   var c=getMC(active),lbl=cfg.map.markerLabel==='none'?'':(label||'');
   if(style==='dot'){var r=active?10:8;return{url:dotSvg(c),scaledSize:new google.maps.Size(r*2,r*2),anchor:new google.maps.Point(r,r)};}
-  var pH=lbl.length>2?10:8,w=Math.max(32,lbl.length*7+pH*2),h=28;
+  var fs=cfg.map.markerFontSize||13;var pH=lbl.length>2?10:8,w=Math.max(32,lbl.length*(fs*0.6)+pH*2),h=Math.max(26,fs+14);
   return{url:pillSvg(active?c:'#fff',active?'#fff':'#111',lbl,!active),scaledSize:new google.maps.Size(w,h),anchor:new google.maps.Point(w/2,h)};
 }
 
@@ -225,6 +231,9 @@ function createInstance(root,allItems){
   function applyFilter(zone){closePopup();currentItems=zone?allItems.filter(function(i){return i.zones.indexOf(zone)!==-1;}):allItems;visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:currentItems.length;renderList(currentItems,visibleCount);allItems.forEach(function(i){if(!markers[i.id])return;markers[i.id].marker.setVisible(currentItems.some(function(ci){return ci.id===i.id;}));});if(currentItems.length&&zone){var b=new google.maps.LatLngBounds();currentItems.forEach(function(i){b.extend({lat:i.lat,lng:i.lng});});map.fitBounds(b,{padding:60});}}
 
   var zones=[];allItems.forEach(function(i){i.zones.forEach(function(z){if(zones.indexOf(z)===-1)zones.push(z);});});zones.sort();
+  /* En mode grid, la structure HTML est identique au mode list.
+     Le CSS gère l'affichage : liste=grille multi-colonnes, carte=côté droit.
+     --locator-grid-list-width contrôle la proportion (défaut: 50%). */
   var lc=cfg.layout==='grid'?' locator-block__inner--grid':' locator-block__inner--list';
   var cc=cfg.customClass?' '+escHtml(cfg.customClass):'';
   root.innerHTML='<div class="locator-block__inner'+lc+cc+'"><div class="locator-block__sidebar">'+buildControls(zones,allItems.length)+'<div class="locator-block__list"></div></div><div class="locator-block__map-wrap"><div class="locator-block__map"></div></div></div>';
