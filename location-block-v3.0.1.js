@@ -32,7 +32,13 @@ var cfg=Object.assign({
   dataSource:'json', jsonUrl:'', csvUrl:'', lieuxData:null,
   timeZone:'',
   noCache:false, cacheTTL:FOUR_HOURS,
-  showMap:true, showMapLink:true, showStatus:true,
+  showMap:true, showMapLink:true,
+  /* mapLinkUrl : cible du bouton "Voir sur la carte"
+     'auto'        → ouvre Google Maps (défaut)
+     '/parcours'   → URL interne vers le Locator Block
+     'https://...' → URL absolue quelconque */
+  mapLinkUrl:'auto',
+  showStatus:true,
   showSocialLinks:false, collapseHours:true, useFetchForSlug:true,
 },window.LOCATION_BLOCK_CONFIG||{});
 
@@ -185,7 +191,21 @@ function buildCard(lieu){
   var igu=lieu.instagram?'https://instagram.com/'+lieu.instagram.replace(/^@/,''):'';
   var igHtml=(cfg.showSocialLinks&&igu)?'<div class="location-card__contact-line"><a href="'+escHtml(igu)+'" target="_blank" rel="noopener noreferrer">@'+escHtml(lieu.instagram.replace(/^@/,''))+'</a></div>':'';
   var hasContact=lieu.phone||lieu.email||lieu.website||(cfg.showSocialLinks&&lieu.instagram);
-  var mapLink=(cfg.showMapLink&&lieu.mapUrl)?'<div class="location-card__maplink-wrap"><a class="location-card__maplink" href="'+escHtml(lieu.mapUrl)+'" target="_blank" rel="noopener noreferrer"><span>Voir sur la carte</span><span class="ui-icon" aria-hidden="true">chevron_right</span></a></div>':'';
+  /* mapLinkUrl : 'auto' → Google Maps, sinon URL custom (interne ou externe) */
+  var mapLinkTarget = '';
+  var mapLinkHref = '';
+  if(cfg.showMapLink){
+    if(cfg.mapLinkUrl && cfg.mapLinkUrl !== 'auto'){
+      mapLinkHref = escHtml(cfg.mapLinkUrl);
+      mapLinkTarget = ''; /* lien interne → même onglet */
+    } else if(lieu.mapUrl){
+      mapLinkHref = escHtml(lieu.mapUrl);
+      mapLinkTarget = ' target="_blank" rel="noopener noreferrer"';
+    }
+  }
+  var mapLink = (cfg.showMapLink && mapLinkHref)
+    ?'<div class="location-card__maplink-wrap"><a class="location-card__maplink" href="'+mapLinkHref+'"'+mapLinkTarget+'><span>Voir sur la carte</span><span class="ui-icon" aria-hidden="true">chevron_right</span></a></div>'
+    :'';
   return'<article class="location-card__inner">'+mediaHtml+'<div class="location-card__body"><div class="location-card__section"><span class="ui-icon" aria-hidden="true">location_on</span><div class="location-card__content">'+addrHtml+'</div></div><div class="location-card__section"><span class="ui-icon" aria-hidden="true">schedule</span><div class="location-card__content">'+buildHours(lieu,now)+'</div></div>'+(hasContact?'<div class="location-card__section"><span class="ui-icon" aria-hidden="true">contact_page</span><div class="location-card__content">'+phoneHtml+emailHtml+websiteHtml+igHtml+'</div></div>':'')+mapLink+'</div>'+(cfg.showMap?buildMap(lieu):'')+' </article>';
 }
 
