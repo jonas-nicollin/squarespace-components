@@ -14,6 +14,18 @@
 (function(){
 'use strict';
 
+/* MAP_STYLE_CLEAN : désactive les POI (restaurants, commerces) et
+   réduit les labels secondaires pour une carte plus lisible.
+   Passer dans mapStyle de la config pour l'activer.
+   Peut aussi être vide (null) pour garder Google par défaut. */
+var MAP_STYLE_CLEAN=[
+  {featureType:'poi',stylers:[{visibility:'off'}]},
+  {featureType:'poi.park',stylers:[{visibility:'simplified'}]},
+  {featureType:'transit',elementType:'labels.icon',stylers:[{visibility:'off'}]},
+  {featureType:'road',elementType:'labels.icon',stylers:[{visibility:'off'}]},
+  {featureType:'administrative.neighborhood',stylers:[{visibility:'off'}]},
+];
+
 var cfg=Object.assign({
   collectionUrl:'',category:'',tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
@@ -194,7 +206,13 @@ function createInstance(root,allItems){
     activeId=id;updateMarker(id,true);
     var card=root.querySelector('.locator-block__card[data-item-id="'+id+'"]');
     if(card){card.classList.add('is-active');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
-    if(pan&&markers[id]){map.panTo({lat:markers[id].item.lat,lng:markers[id].item.lng});if(map.getZoom()<cfg.mapZoomOnSelect)map.setZoom(cfg.mapZoomOnSelect);}
+    if(pan&&markers[id]){
+      map.panTo({lat:markers[id].item.lat,lng:markers[id].item.lng});
+      if(map.getZoom()<cfg.mapZoomOnSelect)map.setZoom(cfg.mapZoomOnSelect);
+      /* Compenser la hauteur du popup (environ popup + marker + marge) */
+      var popupH = cfg.map.popup ? 280 : 0;
+      if(popupH > 0) setTimeout(function(){ map.panBy(0, -(popupH/2)); }, 50);
+    }
   }
   function bindCards(){root.querySelectorAll('.locator-block__card:not(.locator-block__card--skeleton)').forEach(function(card){var id=card.dataset.itemId;card.addEventListener('mouseenter',function(){if(!markers[id])return;updateMarker(id,true);if(activeId&&activeId!==id)updateMarker(activeId,false);});card.addEventListener('mouseleave',function(){if(id!==activeId)updateMarker(id,false);});card.addEventListener('click',function(e){if(e.target.closest('.locator-block__card-link'))return;activate(id,true);showPopup(markers[id]&&markers[id].item);});});}
   function renderList(items,count){
