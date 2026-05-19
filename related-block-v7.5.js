@@ -1,5 +1,5 @@
 /*!
- * Related Block v7.4
+ * Related Block v7.5
  * Blocs de contenu relatif pour collections Squarespace
  * https://github.com/jonas-nicollin/squarespace-components
  *
@@ -117,13 +117,14 @@
  *         maxItems: 1,
  *
  *         // Formatage ISO (si valeurs au format 2026-09-19T15:00)
- *         // 'datetime' → Samedi 19 septembre, 15h00   (défaut)
- *         // 'date'     → Samedi 19 septembre 2026
- *         // 'day'      → Samedi 19 septembre
- *         // 'short'    → Sam. 19 sept.
- *         // 'numeric'  → 19.09.2026
- *         // 'time'     → 15h00
- *         // objet Intl → { weekday: 'long', day: 'numeric', month: 'long' }
+ *         // 'datetime'   → Samedi 19 septembre, 15h00   (défaut)
+ *         // 'date'       → Samedi 19 septembre 2026
+ *         // 'day'        → Samedi 19 septembre
+ *         // 'short'      → Sam. 19 sept.
+ *         // 'short-time' → Sam. 19 sept., 15h00  (heure omise si absente)
+ *         // 'numeric'    → 19.09.2026
+ *         // 'time'       → 15h00
+ *         // objet Intl   → { weekday: 'long', day: 'numeric', month: 'long' }
  *         displayFormat: 'datetime',
  *         locale: 'fr-CH',  // surcharge de locale (défaut: lang de la page)
  *
@@ -244,13 +245,13 @@
  *     includeSourceCollection: true,
  *     includeCurrentItemSource: false,
  *     collections: [{ path: '/autre-collection' }],
- *     maxPages: null,
+ *     maxPages: null,                        // pages JSON max à fetcher (null = 5, 'all' = tout)
  *   },
  *
  * ── PERFORMANCE ──────────────────────────────────────────────────────
  *   performance: {
  *     useSessionStorage: true,            // cache session pour les items rendus
- *     maxPages: 5,                        // pages JSON max à fetcher
+ *     maxPages: 5,                        // pages JSON max à fetcher (nombre ou 'all')
  *     useCollectionMemoryCache: true,     // cache mémoire des collections fetchées
  *     useCollectionSessionCache: false,   // cache session des collections fetchées
  *   },
@@ -383,6 +384,15 @@
       }
       if (fmt === 'short') {
         return capitalize(dt.toLocaleDateString(loc, Object.assign({ weekday: 'short', day: 'numeric', month: 'short' }, tzOpt)));
+      }
+      // 'short-time' → Sam. 19 sept., 15h00 (heure omise si absente du tag)
+      if (fmt === 'short-time') {
+        const shortDay = capitalize(dt.toLocaleDateString(loc, Object.assign({ weekday: 'short', day: 'numeric', month: 'short' }, tzOpt)));
+        if (d.hour !== null) {
+          const timeStr = dt.toLocaleTimeString(loc, Object.assign({ hour: '2-digit', minute: '2-digit', hour12: false }, tzOpt));
+          return `${shortDay}, ${timeStr}`;
+        }
+        return shortDay;
       }
       if (fmt === 'day') {
         return capitalize(dt.toLocaleDateString(loc, Object.assign({ weekday: 'long', day: 'numeric', month: 'long' }, tzOpt)));
@@ -943,7 +953,8 @@
   // ════════════════════════════════════════════════════════════════
 
   function getCollectionCacheKey(path, maxPages, suffix) {
-    return ['related-block-collection-v7.4', path, maxPages || 5, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
+    const pageKey = maxPages === 'all' ? 'all' : (maxPages || 5);
+    return ['related-block-collection-v7.5', path, pageKey, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
   }
 
   function getCollectionCacheOptions(CFG) {
@@ -982,7 +993,9 @@
 
     let url = path + suffix;
     const items = [];
-    for (let page = 0; page < (maxPages || 5); page++) {
+    // maxPages: 'all' → pas de limite de pages (s'arrête sur absence de nextPageUrl)
+    const pageLimit = maxPages === 'all' ? Infinity : (maxPages || 5);
+    for (let page = 0; page < pageLimit; page++) {
       const res = await fetch(url, { credentials: 'same-origin' });
       if (!res.ok) break;
       const data = await res.json();
@@ -1484,7 +1497,7 @@
   }
 
   function cacheKey(CFG) {
-    return ['related-block-v7.4', CFG.key, location.pathname].join('::');
+    return ['related-block-v7.5', CFG.key, location.pathname].join('::');
   }
 
   function createRunner(CFG) {
