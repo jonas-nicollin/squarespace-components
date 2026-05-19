@@ -6,7 +6,10 @@
  * SOURCE : collectionUrl, category, tagNumero, tagLieu, tagZone
  * DISPLAY: layout, display.{showImage,showTitle,showNumero,showLieu,showZones,imageInMedia,lieuIcon,pageSize}
  * CARTE  : apiKey, mapCenter, mapZoom, mapZoomOnSelect, mapStyle, mapOptions
- *          map.{markerLabel,markerStyle,popup,popupShowImage,clustering,updateListOnMapMove}
+ *          map.{markerLabel,markerStyle,markerFontSize,markerShadow,
+ *               popup,popupShowImage,
+ *               clustering,clusterMinCount,
+ *               updateListOnMapMove}  ← IMPORTANT: doit être dans map:{}, pas à la racine
  * UI     : openInNewTab, showCardLink, showZoneFilter, sortBy
  * CSS    : customClass (classe CSS ajoutée sur .locator-block__inner pour CSS spécifique par site)
  * PERF   : rootSelector, noCache, cacheTTL, debug
@@ -35,9 +38,17 @@ var cfg=Object.assign({
   rootSelector:'.locator-block',noCache:false,cacheTTL:600000,debug:false,
 },window.LOCATOR_BLOCK_CONFIG||{});
 
+/* display defaults — tous les éléments visibles par défaut.
+   Surcharger dans window.LOCATOR_BLOCK_CONFIG.display pour personnaliser. */
 cfg.display=Object.assign({
-  showImage:true,showTitle:true,showNumero:true,showLieu:true,
-  showZones:false,imageInMedia:true,lieuIcon:'location_on',pageSize:20,
+  showImage:true,          /* afficher l'image */
+  showTitle:true,          /* afficher le titre (dans media si imageInMedia, sinon dans body) */
+  showNumero:true,         /* afficher le numéro */
+  showLieu:true,           /* afficher le lieu */
+  showZones:false,         /* afficher les zones (désactivé par défaut) */
+  imageInMedia:true,       /* titre + numéro superposés à l'image */
+  lieuIcon:'location_on',  /* icône devant le lieu (vide pour désactiver) */
+  pageSize:20,             /* items par page (0 = tout afficher) */
 },cfg.display||{});
 
 cfg.map=Object.assign({
@@ -199,7 +210,14 @@ function createInstance(root,allItems){
     if(cfg.mapStyle)o.styles=cfg.mapStyle;
     map=new google.maps.Map(c,o);
     map.addListener('click',function(){closePopup();});
-    if(cfg.map.updateListOnMapMove)map.addListener('idle',function(){var b=map.getBounds();if(!b)return;var v=currentItems.filter(function(i){return b.contains(new google.maps.LatLng(i.lat,i.lng));});renderList(v,v.length);});
+    /* updateListOnMapMove doit être dans map:{} dans la config, pas à la racine */
+    if(cfg.map.updateListOnMapMove)map.addListener('idle',function(){
+      var b=map.getBounds();if(!b)return;
+      var v=currentItems.filter(function(i){return b.contains(new google.maps.LatLng(i.lat,i.lng));});
+      var list=root.querySelector('.locator-block__list');if(!list)return;
+      list.innerHTML=v.length?v.map(buildCardHTML).join(''):'<p class="locator-block__error" style="padding:1rem;opacity:.5">Aucune exposition dans cette zone.</p>';
+      bindCards();
+    });
   }
   function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.lat,item.lng),item);activePopup.setMap(map);}
   function closePopup(){if(activePopup){activePopup.setMap(null);activePopup=null;}}
