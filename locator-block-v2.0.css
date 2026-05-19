@@ -142,9 +142,13 @@ body.sqs-edit-mode-active .locator-block {
   display: flex;
   flex-direction: column;
   color: inherit;
-  border-radius: .25rem;
+  /* overflow et border-radius sur la card causeraient une troncature du body.
+     On les applique uniquement sur .locator-block__media */
+}
+/* Media arrondi en haut uniquement (bord de card) */
+.locator-block__inner--grid .locator-block__media {
+  border-radius: .25rem .25rem 0 0;
   overflow: hidden;
-  /* Pas de box-shadow en mode grid — trop lourd */
 }
 /* Pas de border-top sur la liste en mode grid */
 .locator-block__inner--grid .locator-block__load-more-wrap {
@@ -179,7 +183,7 @@ body.sqs-edit-mode-active .locator-block {
   display: flex;
   flex-direction: column;
   gap: .25rem;
-  justify-content: center;
+  justify-content: flex-start;  /* flex-end dans pcc-locator.css pour aligner en bas */
   position: relative;
 }
 
