@@ -1,0 +1,328 @@
+/*!
+ * Locator Block v2.2 — CSS global
+ * github.com/jonas-nicollin/squarespace-blocks
+ *
+ * CSS universel — aucune valeur spécifique à un site.
+ * Toute personnalisation va dans le CSS du site (ex. pcc-locator.css).
+ *
+ * VARIABLES (à définir par site) :
+ *   --locator-height            66.666vh par défaut
+ *   --locator-height-mobile     45vh par défaut
+ *   --locator-list-width        400px (mode list)
+ *   --locator-grid-list-width   50%   (mode grid)
+ *   --locator-marker-color      #333
+ *   --locator-marker-active     #000
+ */
+
+/* ── Icône générique ── */
+.ui-icon {
+  font-family: var(--ui-font-font-family, inherit);
+  font-size: inherit;
+  line-height: 1;
+  vertical-align: middle;
+  flex-shrink: 0;
+  user-select: none;
+  speak: never;
+}
+
+/* ── Edit mode Squarespace ── */
+body.sqs-edit-mode-active .locator-block {
+  padding: 2rem;
+  background-color: ~"hsl(var(--darkAccent-hsl))";
+  border-radius: .5rem;
+}
+
+/* ── Typo — hérite du thème via body-font vars ── */
+.locator-block__count,
+.locator-block__filter-zone,
+.locator-block__load-more,
+.locator-block__body,
+.locator-block__controls {
+  font-family:    var(--body-font-font-family, system-ui, sans-serif);
+  font-style:     var(--body-font-font-style, normal);
+  font-weight:    var(--body-font-font-weight, normal);
+  line-height:    var(--body-font-line-height, 1.5);
+  letter-spacing: var(--body-font-letter-spacing, 0);
+  text-transform: var(--body-font-text-transform, none);
+}
+
+/* ── Conteneur ── */
+.locator-block__inner { overflow: hidden; }
+
+.locator-block__inner--list {
+  display: grid;
+  grid-template-columns: var(--locator-list-width, 400px) 1fr;
+  height: var(--locator-height, 66.666vh);
+  min-height: 480px;
+}
+
+.locator-block__inner--grid {
+  display: grid;
+  grid-template-columns: var(--locator-grid-list-width, 50%) 1fr;
+  height: var(--locator-height, 66.666vh);
+  min-height: 480px;
+}
+
+/* ── Sidebar ── */
+.locator-block__sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
+}
+
+/* ── Contrôles ── */
+.locator-block__controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .875rem 1.25rem;
+  border-bottom: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
+  flex-wrap: wrap;
+}
+
+.locator-block__count {
+  opacity: .55;
+  flex: 1 0 auto;
+}
+
+.locator-block__filter-zone {
+  font-size: inherit;
+  padding: .35em .6em;
+  border: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.2));
+  border-radius: .25rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ── Liste ── */
+.locator-block__list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,.12) transparent;
+}
+.locator-block__list::-webkit-scrollbar { width: 3px; }
+.locator-block__list::-webkit-scrollbar-track { background: transparent; }
+.locator-block__list::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
+
+/* Grille interne pour mode grid */
+.locator-block__inner--grid .locator-block__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 1.25rem;
+  padding: 1rem;
+  align-content: start;
+  overflow-y: auto;
+}
+
+/* ── Card — mode list ── */
+.locator-block__card { cursor: pointer; }
+
+.locator-block__inner--list .locator-block__card {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  color: inherit;
+  border-bottom: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
+  transition: background .12s;
+}
+.locator-block__inner--list .locator-block__card:hover,
+.locator-block__inner--list .locator-block__card.is-active {
+  background: rgba(0,0,0,.03);
+}
+.locator-block__inner--list .locator-block__card.is-active {
+  box-shadow: inset 3px 0 0 var(--locator-marker-active, #000);
+}
+
+/* ── Card — mode grid ── */
+.locator-block__inner--grid .locator-block__card {
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  /* Pas de border-radius, pas de box-shadow — personnaliser en CSS site */
+}
+
+/* ── Media ── */
+.locator-block__media {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
+  aspect-ratio: 3 / 2;
+}
+.locator-block__inner--grid .locator-block__media { width: 100%; }
+
+.locator-block__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .3s ease;
+}
+.locator-block__card:hover .locator-block__image { transform: scale(1.03); }
+
+/* ── Body ── */
+.locator-block__body {
+  padding: .75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  justify-content: flex-start;
+  position: relative;
+}
+
+/* Éléments texte du body — couleur héritée, pas de surcharge couleur ou opacité ici */
+.locator-block__title { line-height: 1.25; }
+.locator-block__tag-prefix--lieu { display: flex; align-items: center; gap: .3rem; }
+.locator-block__zones { display: flex; flex-wrap: wrap; gap: .2rem; }
+.locator-block__zone { font-size: .6875em; padding: .1em .4em; }
+
+/* ── Bouton navigation directe ── */
+.locator-block__card-link {
+  position: absolute;
+  bottom: .75rem;
+  right: .875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  text-decoration: none;
+  color: inherit;
+  opacity: .35;
+  transition: opacity .15s;
+  z-index: 2;
+}
+.locator-block__card-link:hover { opacity: 1; }
+
+/* ── Load more ── */
+.locator-block__load-more-wrap {
+  padding: .875rem 1.25rem;
+  border-top: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
+}
+.locator-block__inner--grid .locator-block__load-more-wrap {
+  border-top: none;
+  padding: 1rem;
+  grid-column: 1 / -1;
+}
+.locator-block__load-more {
+  display: block;
+  width: 100%;
+  padding: .75em 1rem;
+  border: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.2));
+  border-radius: .25rem;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: center;
+  transition: background .15s;
+}
+.locator-block__load-more:hover { background: rgba(0,0,0,.05); }
+
+/* ── Carte ── */
+.locator-block__map-wrap { position: relative; overflow: hidden; }
+.locator-block__map { width: 100%; height: 100%; }
+.locator-block__map--loading { background: rgba(0,0,0,.04); }
+
+/* ── Popup OverlayView ── */
+.locator-block__popup-wrap {
+  position: absolute;
+  z-index: 100;
+  pointer-events: auto;
+  filter: drop-shadow(0 3px 10px rgba(0,0,0,.22)) drop-shadow(0 1px 3px rgba(0,0,0,.12));
+  animation: locator-popup-in .15s ease;
+}
+@keyframes locator-popup-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.locator-block__popup-wrap::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 8px;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  /* La couleur est définie dans le CSS site (ex: background: #fff) */
+}
+
+.locator-block__popup {
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+}
+
+.locator-block__popup-media {
+  overflow: hidden;
+  aspect-ratio: 3 / 2;
+  width: 100%;
+}
+.locator-block__popup-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .3s ease;
+}
+.locator-block__popup:hover .locator-block__popup-image { transform: scale(1.03); }
+
+/* Surcharge .gm-style { font: 400 11px Roboto } */
+.locator-block__popup-body {
+  padding: .5rem .625rem .625rem;
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  font-family:    var(--body-font-font-family, system-ui, sans-serif) !important;
+  font-size:      1rem;
+  line-height:    1.4;
+  letter-spacing: var(--body-font-letter-spacing, 0);
+  text-transform: var(--body-font-text-transform, none);
+}
+
+/* ── Skeleton ── */
+.locator-block__card--skeleton { pointer-events: none; }
+.locator-block__card--skeleton .locator-block__media { background: rgba(0,0,0,.06); }
+.locator-block__skeleton-line {
+  height: .75rem;
+  border-radius: .2rem;
+  background: rgba(0,0,0,.06);
+  margin-bottom: .35rem;
+  animation: locator-skeleton 1.4s ease-in-out infinite;
+}
+@keyframes locator-skeleton {
+  0%, 100% { opacity: .7; }
+  50%       { opacity: .3; }
+}
+
+.locator-block__error { padding: 2rem; opacity: .5; }
+
+/* ── Mobile ── */
+@media (max-width: 767px) {
+  .locator-block__inner--list,
+  .locator-block__inner--grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--locator-height-mobile, 45vh) auto;
+    height: auto;
+    min-height: 0;
+  }
+  .locator-block__sidebar {
+    order: 2;
+    border-right: none;
+    border-top: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
+    max-height: 55vh;
+  }
+  .locator-block__map-wrap { order: 1; }
+  .locator-block__inner--list .locator-block__card { grid-template-columns: 80px 1fr; }
+  .locator-block__inner--grid .locator-block__list {
+    grid-template-columns: 1fr;
+    padding: .5rem;
+  }
+}
