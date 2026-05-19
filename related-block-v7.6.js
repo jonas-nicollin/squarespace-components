@@ -1,5 +1,5 @@
 /*!
- * Related Block v7.5
+ * Related Block v7.6
  * Blocs de contenu relatif pour collections Squarespace
  * https://github.com/jonas-nicollin/squarespace-components
  *
@@ -21,6 +21,41 @@
  *
  * Rétrocompatibilité : window.COLLECTION_RELATED_BLOCK_CONFIGS est
  * également accepté si RELATED_BLOCK_CONFIGS est absent.
+ *
+ * ════════════════════════════════════════════════════════════════════
+ * ENTRÉE SPÉCIALE _shared — COLLECTIONS PARTAGÉES
+ * ════════════════════════════════════════════════════════════════════
+ *
+ * Placée en PREMIER dans RELATED_BLOCK_CONFIGS, cette entrée déclare
+ * les collections partagées entre plusieurs blocs. Elle est préfetchée
+ * au démarrage (requestIdleCallback), mise en cache mémoire et session,
+ * et n'est pas traitée comme un bloc normal.
+ *
+ * {
+ *   _shared: true,
+ *
+ *   // Collections à précharger
+ *   collections: [
+ *     { path: '/programme-2026', maxPages: 'all' },
+ *     { path: '/artistes',       maxPages: 3 }
+ *   ],
+ *
+ *   // Paramètres de cache communs à toutes les collections partagées
+ *   cache: {
+ *     useMemoryCache:  true,   // cache mémoire (durée de la session JS)
+ *     useSessionCache: true    // cache sessionStorage (durée de l'onglet)
+ *   },
+ *
+ *   // Mode développement : désactive TOUS les caches (mémoire + session)
+ *   // pour voir les changements immédiatement sans vider le cache.
+ *   // À passer à false en production.
+ *   devMode: false
+ * }
+ *
+ * Pour désactiver manuellement les caches depuis la console navigateur :
+ *   Object.keys(sessionStorage)
+ *     .filter(k => k.startsWith('related-block'))
+ *     .forEach(k => sessionStorage.removeItem(k));
  *
  * ════════════════════════════════════════════════════════════════════
  * CONFIGURATION — OPTIONS EXHAUSTIVES
@@ -279,12 +314,20 @@
   'use strict';
 
   // ── Rétrocompatibilité ─────────────────────────────────────────────
-  const CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS)
+  const ALL_CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS)
     ? window.RELATED_BLOCK_CONFIGS
     : Array.isArray(window.COLLECTION_RELATED_BLOCK_CONFIGS)
       ? window.COLLECTION_RELATED_BLOCK_CONFIGS
       : [];
-  if (!CONFIGS.length) return;
+  if (!ALL_CONFIGS.length) return;
+
+  // Extraire l'entrée _shared (doit être en première position)
+  const SHARED_CONFIG = (ALL_CONFIGS[0]?._shared === true) ? ALL_CONFIGS[0] : null;
+  const CONFIGS = SHARED_CONFIG ? ALL_CONFIGS.slice(1) : ALL_CONFIGS;
+  if (!CONFIGS.length && !SHARED_CONFIG) return;
+
+  // Mode développement : désactive tous les caches quand _shared.devMode === true
+  const DEV_MODE = SHARED_CONFIG?.devMode === true;
 
   // ── Constantes ────────────────────────────────────────────────────
   const DEFAULT_JSON_FORMAT_SUFFIX = '?format=json';
@@ -292,6 +335,11 @@
   const DEFAULT_IMAGE_SIZES = '(max-width: 768px) 100vw, 50vw';
   const COLLECTION_CACHE = new Map();
   const BODY_CLASS_PREFIX = 'has-related-block--';
+
+  // Déduplication des fetches en vol :
+  // si deux blocs demandent la même collection simultanément,
+  // le second attend la promesse du premier au lieu de relancer un fetch.
+  const FETCH_IN_PROGRESS = new Map();
 
   // ── Fuseau horaire Squarespace ────────────────────────────────────
   const SITE_TZ = (function () {
@@ -954,13 +1002,17 @@
 
   function getCollectionCacheKey(path, maxPages, suffix) {
     const pageKey = maxPages === 'all' ? 'all' : (maxPages || 5);
-    return ['related-block-collection-v7.5', path, pageKey, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
+    return ['related-block-collection-v7.6', path, pageKey, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
   }
 
   function getCollectionCacheOptions(CFG) {
+    // DEV_MODE écrase tout : zéro cache
+    if (DEV_MODE) return { useMemoryCache: false, useSessionCache: false };
+    // Options de cache depuis _shared si définies, sinon depuis le bloc
+    const sharedCache = SHARED_CONFIG?.cache || {};
     return {
-      useMemoryCache: CFG.performance?.useCollectionMemoryCache !== false,
-      useSessionCache: CFG.performance?.useCollectionSessionCache === true
+      useMemoryCache:  sharedCache.useMemoryCache  ?? (CFG?.performance?.useCollectionMemoryCache  !== false),
+      useSessionCache: sharedCache.useSessionCache ?? (CFG?.performance?.useCollectionSessionCache === true)
     };
   }
 
@@ -969,10 +1021,18 @@
     const cKey = getCollectionCacheKey(path, maxPages, suffix);
     const opts = cacheOptions || {};
 
-    if (opts.useMemoryCache !== false && COLLECTION_CACHE.has(cKey)) {
+    // DEV_MODE : vider le cache mémoire au démarrage pour cette clé
+    if (DEV_MODE) {
+      COLLECTION_CACHE.delete(cKey);
+    }
+
+    // Cache mémoire
+    if (!DEV_MODE && opts.useMemoryCache !== false && COLLECTION_CACHE.has(cKey)) {
       return COLLECTION_CACHE.get(cKey);
     }
-    if (opts.useSessionCache) {
+
+    // Cache sessionStorage
+    if (!DEV_MODE && opts.useSessionCache) {
       try {
         const cached = sessionStorage.getItem(cKey);
         if (cached) {
@@ -985,31 +1045,50 @@
       } catch (_) {}
     }
 
+    // Déduplication des fetches en vol :
+    // si un fetch pour cette clé est déjà en cours, on attend sa promesse
+    if (FETCH_IN_PROGRESS.has(cKey)) {
+      return FETCH_IN_PROGRESS.get(cKey);
+    }
+
     function ensureJsonFormat(url) {
       const raw = String(url || '');
       if (!raw || raw.includes('format=json')) return raw;
       return raw.includes('?') ? raw + '&format=json' : raw + '?format=json';
     }
 
-    let url = path + suffix;
-    const items = [];
-    // maxPages: 'all' → pas de limite de pages (s'arrête sur absence de nextPageUrl)
-    const pageLimit = maxPages === 'all' ? Infinity : (maxPages || 5);
-    for (let page = 0; page < pageLimit; page++) {
-      const res = await fetch(url, { credentials: 'same-origin' });
-      if (!res.ok) break;
-      const data = await res.json();
-      const batch = Array.isArray(data?.items) ? data.items
-        : Array.isArray(data?.itemList) ? data.itemList : [];
-      items.push(...batch);
-      const next = data?.pagination?.nextPageUrl || null;
-      if (!next) break;
-      url = ensureJsonFormat(next);
+    const fetchPromise = (async () => {
+      let url = path + suffix;
+      const items = [];
+      const pageLimit = maxPages === 'all' ? Infinity : (maxPages || 5);
+      for (let page = 0; page < pageLimit; page++) {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) break;
+        const data = await res.json();
+        const batch = Array.isArray(data?.items) ? data.items
+          : Array.isArray(data?.itemList) ? data.itemList : [];
+        items.push(...batch);
+        const next = data?.pagination?.nextPageUrl || null;
+        if (!next) break;
+        url = ensureJsonFormat(next);
+      }
+      return items;
+    })();
+
+    FETCH_IN_PROGRESS.set(cKey, fetchPromise);
+
+    let items;
+    try {
+      items = await fetchPromise;
+    } finally {
+      FETCH_IN_PROGRESS.delete(cKey);
     }
 
-    if (opts.useMemoryCache !== false) COLLECTION_CACHE.set(cKey, items);
-    if (opts.useSessionCache) {
-      try { sessionStorage.setItem(cKey, JSON.stringify(items)); } catch (_) {}
+    if (!DEV_MODE) {
+      if (opts.useMemoryCache !== false) COLLECTION_CACHE.set(cKey, items);
+      if (opts.useSessionCache) {
+        try { sessionStorage.setItem(cKey, JSON.stringify(items)); } catch (_) {}
+      }
     }
     return items;
   }
@@ -1497,7 +1576,7 @@
   }
 
   function cacheKey(CFG) {
-    return ['related-block-v7.5', CFG.key, location.pathname].join('::');
+    return ['related-block-v7.6', CFG.key, location.pathname].join('::');
   }
 
   function createRunner(CFG) {
@@ -1719,23 +1798,61 @@
   // ════════════════════════════════════════════════════════════════
 
   const runners = CONFIGS.map(createRunner).filter(Boolean);
-  if (!runners.length) return;
 
   async function startSequentially() {
     for (const runner of runners) await runner.start();
     syncBodyRelatedBlockClasses();
   }
 
+  /**
+   * Précharge les collections déclarées dans l'entrée _shared.
+   * Exécuté en requestIdleCallback avant startSequentially pour que
+   * les blocs trouvent les collections déjà en cache mémoire.
+   * En devMode, les caches sont désactivés — les fetches se font
+   * quand même pour que les runners aient les données fraîches.
+   */
+  function runSharedCollections() {
+    if (!SHARED_CONFIG) return;
+    const collections = Array.isArray(SHARED_CONFIG.collections)
+      ? SHARED_CONFIG.collections : [];
+    if (!collections.length) return;
+    const opts = {
+      useMemoryCache:  DEV_MODE ? false : (SHARED_CONFIG.cache?.useMemoryCache  !== false),
+      useSessionCache: DEV_MODE ? false : (SHARED_CONFIG.cache?.useSessionCache === true)
+    };
+    const runner = async () => {
+      for (const col of collections) {
+        if (!col?.path) continue;
+        try {
+          await fetchCollectionItemsFromPath(
+            col.path,
+            col.maxPages || 5,
+            col.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+            opts
+          );
+        } catch (_) {}
+      }
+    };
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(runner, { timeout: 800 });
+    } else {
+      setTimeout(runner, 100);
+    }
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
+      runSharedCollections();
       startSequentially();
       runPreloadQueue();
     }, { once: true });
   } else {
+    runSharedCollections();
     startSequentially();
     runPreloadQueue();
   }
   document.addEventListener('turbolinks:load', () => {
+    runSharedCollections();
     startSequentially();
     runPreloadQueue();
   });
