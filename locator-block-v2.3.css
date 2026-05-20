@@ -1,17 +1,13 @@
 /*!
- * Locator Block v2.2 — CSS global
+ * Locator Block v2.3 — CSS global
  * github.com/jonas-nicollin/squarespace-blocks
  *
- * CSS universel — aucune valeur spécifique à un site.
- * Toute personnalisation va dans le CSS du site (ex. pcc-locator.css).
- *
- * VARIABLES (à définir par site) :
- *   --locator-height            66.666vh par défaut
- *   --locator-height-mobile     45vh par défaut
- *   --locator-list-width        400px (mode list)
- *   --locator-grid-list-width   50%   (mode grid)
- *   --locator-marker-color      #333
- *   --locator-marker-active     #000
+ * Universel — aucune valeur spécifique à un site.
+ * Variables à définir par site :
+ *   --locator-height, --locator-height-mobile
+ *   --locator-list-width (mode list, défaut 400px)
+ *   --locator-grid-list-width (mode grid, défaut 50%)
+ *   --locator-marker-color, --locator-marker-active
  */
 
 /* ── Icône générique ── */
@@ -41,9 +37,27 @@ body.sqs-edit-mode-active .locator-block {
   font-family:    var(--body-font-font-family, system-ui, sans-serif);
   font-style:     var(--body-font-font-style, normal);
   font-weight:    var(--body-font-font-weight, normal);
-  line-height:    var(--body-font-line-height, 1.5);
+  line-height:    var(--body-font-line-height, 1.333);
   letter-spacing: var(--body-font-letter-spacing, 0);
   text-transform: var(--body-font-text-transform, none);
+}
+
+/* ── Opacité 0.666 sur tout sauf le titre, filtres et markers ── */
+.locator-block__count,
+.locator-block__tag-prefix--numero,
+.locator-block__tag-prefix--lieu,
+.locator-block__zones,
+.locator-block__card-link,
+.locator-block__popup-num,
+.locator-block__popup-lieu {
+  opacity: .666;
+}
+
+/* Le titre : opacité 1 (jamais réduit) */
+.locator-block__title,
+.locator-block__popup-title {
+  opacity: 1;
+  line-height: var(--body-font-line-height, 1.333);
 }
 
 /* ── Conteneur ── */
@@ -83,18 +97,45 @@ body.sqs-edit-mode-active .locator-block {
 }
 
 .locator-block__count {
-  opacity: .55;
   flex: 1 0 auto;
+  line-height: var(--body-font-line-height, 1.333);
+}
+
+/* ── Filtre zone — pill style (aligné avec Query Block) ── */
+.locator-block__filter-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 
 .locator-block__filter-zone {
+  /* Retire l'apparence native pour contrôle total */
+  appearance: none;
+  -webkit-appearance: none;
   font-size: inherit;
-  padding: .35em .6em;
+  font-family: inherit;
+  line-height: var(--body-font-line-height, 1.333);
+  /* Style pill (identique Query Block) */
+  padding: .3em 2em .3em .875em; /* espace à droite pour l'icône custom */
   border: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.2));
-  border-radius: .25rem;
+  border-radius: 999px;           /* pill */
   background: transparent;
   color: inherit;
   cursor: pointer;
+}
+
+.locator-block__filter-zone:focus {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* Icône chevron custom positionnée à droite */
+.locator-block__filter-icon {
+  position: absolute;
+  right: .5em;
+  pointer-events: none;
+  font-size: 1em;
+  opacity: .666;
 }
 
 /* ── Liste ── */
@@ -141,8 +182,8 @@ body.sqs-edit-mode-active .locator-block {
 .locator-block__inner--grid .locator-block__card {
   display: flex;
   flex-direction: column;
+  gap: .5rem;    /* espace entre media et body — pas de padding sur le body */
   color: inherit;
-  /* Pas de border-radius, pas de box-shadow — personnaliser en CSS site */
 }
 
 /* ── Media ── */
@@ -165,7 +206,7 @@ body.sqs-edit-mode-active .locator-block {
 
 /* ── Body ── */
 .locator-block__body {
-  padding: .75rem 1rem;
+  padding: .75rem 1rem;           /* mode list : padding normal */
   display: flex;
   flex-direction: column;
   gap: .25rem;
@@ -173,11 +214,20 @@ body.sqs-edit-mode-active .locator-block {
   position: relative;
 }
 
-/* Éléments texte du body — couleur héritée, pas de surcharge couleur ou opacité ici */
-.locator-block__title { line-height: 1.25; }
-.locator-block__tag-prefix--lieu { display: flex; align-items: center; gap: .3rem; }
+/* Mode grid : pas de padding (le gap sur la card suffit) */
+.locator-block__inner--grid .locator-block__body {
+  padding: 0;
+}
+
+/* Éléments texte */
+.locator-block__tag-prefix--lieu {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  line-height: var(--body-font-line-height, 1.333);
+}
 .locator-block__zones { display: flex; flex-wrap: wrap; gap: .2rem; }
-.locator-block__zone { font-size: .6875em; padding: .1em .4em; }
+.locator-block__zone  { font-size: .6875em; padding: .1em .4em; }
 
 /* ── Bouton navigation directe ── */
 .locator-block__card-link {
@@ -189,16 +239,16 @@ body.sqs-edit-mode-active .locator-block {
   gap: .2rem;
   text-decoration: none;
   color: inherit;
-  opacity: .35;
   transition: opacity .15s;
   z-index: 2;
 }
-.locator-block__card-link:hover { opacity: 1; }
+.locator-block__card-link:hover { opacity: 1 !important; }
 
 /* ── Load more ── */
 .locator-block__load-more-wrap {
   padding: .875rem 1.25rem;
   border-top: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
+  line-height: var(--body-font-line-height, 1.333);
 }
 .locator-block__inner--grid .locator-block__load-more-wrap {
   border-top: none;
@@ -218,6 +268,7 @@ body.sqs-edit-mode-active .locator-block {
   cursor: pointer;
   text-align: center;
   transition: background .15s;
+  line-height: var(--body-font-line-height, 1.333);
 }
 .locator-block__load-more:hover { background: rgba(0,0,0,.05); }
 
@@ -248,7 +299,7 @@ body.sqs-edit-mode-active .locator-block {
   width: 14px;
   height: 8px;
   clip-path: polygon(0 0, 100% 0, 50% 100%);
-  /* La couleur est définie dans le CSS site (ex: background: #fff) */
+  /* couleur définie dans CSS site : background: #fff; */
 }
 
 .locator-block__popup {
@@ -260,11 +311,7 @@ body.sqs-edit-mode-active .locator-block {
   color: inherit;
 }
 
-.locator-block__popup-media {
-  overflow: hidden;
-  aspect-ratio: 3 / 2;
-  width: 100%;
-}
+.locator-block__popup-media { overflow: hidden; aspect-ratio: 3 / 2; width: 100%; }
 .locator-block__popup-image {
   width: 100%;
   height: 100%;
@@ -282,7 +329,7 @@ body.sqs-edit-mode-active .locator-block {
   gap: .15rem;
   font-family:    var(--body-font-font-family, system-ui, sans-serif) !important;
   font-size:      1rem;
-  line-height:    1.4;
+  line-height:    var(--body-font-line-height, 1.333);
   letter-spacing: var(--body-font-letter-spacing, 0);
   text-transform: var(--body-font-text-transform, none);
 }
@@ -302,7 +349,11 @@ body.sqs-edit-mode-active .locator-block {
   50%       { opacity: .3; }
 }
 
-.locator-block__error { padding: 2rem; opacity: .5; }
+.locator-block__error {
+  padding: 2rem;
+  opacity: .5;
+  line-height: var(--body-font-line-height, 1.333);
+}
 
 /* ── Mobile ── */
 @media (max-width: 767px) {
@@ -321,8 +372,5 @@ body.sqs-edit-mode-active .locator-block {
   }
   .locator-block__map-wrap { order: 1; }
   .locator-block__inner--list .locator-block__card { grid-template-columns: 80px 1fr; }
-  .locator-block__inner--grid .locator-block__list {
-    grid-template-columns: 1fr;
-    padding: .5rem;
-  }
+  .locator-block__inner--grid .locator-block__list { grid-template-columns: 1fr; padding: .5rem; }
 }
