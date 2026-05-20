@@ -1,5 +1,5 @@
 /*!
- * Locator Block v1.8
+ * Locator Block v2.4
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * CONFIGURATION (window.LOCATOR_BLOCK_CONFIG)
@@ -17,16 +17,23 @@
 (function(){
 'use strict';
 
-/* clean : désactive les POI (restaurants, commerces) et
-   réduit les labels secondaires pour une carte plus lisible.
-   Usage dans la config : mapStyle: clean
-   null = carte Google par défaut. */
+/* clean : désactive tous les POI (restaurants, commerces, icônes).
+   IMPORTANT: mapStyle: clean  →  sans guillemets (variable JS)
+              mapStyle: 'clean' → guillemets = chaîne invalide, Google ignore */
 var clean=[
+  /* Tous les POI off — restaurants, commerces, loisirs, etc. */
   {featureType:'poi',stylers:[{visibility:'off'}]},
-  {featureType:'poi.park',stylers:[{visibility:'simplified'}]},
+  /* Parcs : garder la géométrie, supprimer les icônes */
+  {featureType:'poi.park',elementType:'geometry',stylers:[{visibility:'on'}]},
+  {featureType:'poi.park',elementType:'labels',stylers:[{visibility:'off'}]},
+  /* Transport : icônes off */
   {featureType:'transit',elementType:'labels.icon',stylers:[{visibility:'off'}]},
+  {featureType:'transit.station',elementType:'labels.text',stylers:[{visibility:'off'}]},
+  /* Routes : icônes de direction off */
   {featureType:'road',elementType:'labels.icon',stylers:[{visibility:'off'}]},
+  /* Quartiers : labels off (trop de bruit) */
   {featureType:'administrative.neighborhood',stylers:[{visibility:'off'}]},
+  {featureType:'administrative.land_parcel',stylers:[{visibility:'off'}]},
 ];
 
 var cfg=Object.assign({
@@ -263,7 +270,22 @@ function loadMapsAPI(){return new Promise(function(resolve,reject){if(window.goo
 function loadClusterer(){return new Promise(function(resolve){if(window.markerClusterer){resolve();return;}var s=document.createElement('script');s.src='https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';s.onload=function(){resolve();};s.onerror=function(){resolve();};document.head.appendChild(s);});}
 
 /* ── Contrôles + skeleton ── */
-function buildControls(zones,total){var f='';if(cfg.showZoneFilter&&zones.length){var opts=['<option value="">Toutes les zones</option>'].concat(zones.map(function(z){return'<option value="'+escHtml(z)+'">'+escHtml(z)+'</option>';})).join('');f='<select class="locator-block__filter-zone" aria-label="Filtrer par zone">'+opts+'</select>';}return'<div class="locator-block__controls"><span class="locator-block__count">'+total+' exposition'+(total>1?'s':'')+'</span>'+f+'</div>';}
+function buildControls(zones,total){
+  var f='';
+  if(cfg.showZoneFilter&&zones.length){
+    /* Wrapper pour contrôle total du style (icône custom, appearance:none) */
+    var opts=['<option value="">Toutes les zones</option>']
+      .concat(zones.map(function(z){return'<option value="'+escHtml(z)+'">'+escHtml(z)+'</option>';})).join('');
+    f='<div class="locator-block__filter-wrap">'
+      +'<select class="locator-block__filter-zone" aria-label="Filtrer par zone">'+opts+'</select>'
+      +'<span class="locator-block__filter-icon ui-icon" aria-hidden="true">expand_more</span>'
+      +'</div>';
+  }
+  /* showCount respecté */
+  var countHtml=cfg.display.showCount!==false
+    ?'<span class="locator-block__count">'+total+' exposition'+(total>1?'s':'')+'</span>':'';
+  return'<div class="locator-block__controls">'+countHtml+f+'</div>';
+}
 function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="locator-block__card locator-block__card--skeleton"><div class="locator-block__media"></div><div class="locator-block__body"><div class="locator-block__skeleton-line" style="width:20%"></div><div class="locator-block__skeleton-line" style="width:70%"></div><div class="locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
 
 /* ── Instance ── */
