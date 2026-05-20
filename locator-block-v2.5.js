@@ -1,5 +1,5 @@
 /*!
- * Locator Block v2.4
+ * Locator Block v2.5
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * CONFIGURATION (window.LOCATOR_BLOCK_CONFIG)
@@ -40,7 +40,11 @@ var cfg=Object.assign({
   collectionUrl:'',category:'',tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
   mapZoomOnSelect:16,mapStyle:null,mapOptions:{},map:{},
-  openInNewTab:false,showCardLink:true,showZoneFilter:true,sortBy:'numero',
+  openInNewTab:false,
+  /* cardClickable: false (défaut) → clic active la carte + popup, card-link gère la navigation
+     cardClickable: true           → card entière = lien vers l'exposition (pas de card-link) */
+  cardClickable:false,
+  showCardLink:true,showZoneFilter:true,sortBy:'numero',
   customClass:'',
   rootSelector:'.locator-block',noCache:false,cacheTTL:600000,debug:false,
 },window.LOCATOR_BLOCK_CONFIG||{});
@@ -186,7 +190,11 @@ function buildCardHTML(item){
     /* cardLink toujours en dernier dans le dernier body group */
     var clHtml='';
     if(cfg.showCardLink&&item.url){var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="locator-block__card-link" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
-    return'<div class="locator-block__card" data-item-id="'+escHtml(item.id)+'">'+html+clHtml+'</div>';
+    if(cfg.cardClickable&&item.url){
+    var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
+    return'<a class="locator-block__card locator-block__card--clickable" href="'+escHtml(item.url)+'"'+lt+' data-item-id="'+escHtml(item.id)+'">'+html+'</a>';
+  }
+  return'<div class="locator-block__card" data-item-id="'+escHtml(item.id)+'">'+html+clHtml+'</div>';
   }
 
   /* Comportement par défaut : media (image seule) + body (tous les champs texte) */
@@ -326,7 +334,23 @@ function createInstance(root,allItems){
       if(popupH > 0) setTimeout(function(){ map.panBy(0, -(popupH/2)); }, 50);
     }
   }
-  function bindCards(){root.querySelectorAll('.locator-block__card:not(.locator-block__card--skeleton)').forEach(function(card){var id=card.dataset.itemId;card.addEventListener('mouseenter',function(){if(!markers[id])return;updateMarker(id,true);if(activeId&&activeId!==id)updateMarker(activeId,false);});card.addEventListener('mouseleave',function(){if(id!==activeId)updateMarker(id,false);});card.addEventListener('click',function(e){if(e.target.closest('.locator-block__card-link'))return;activate(id,true);showPopup(markers[id]&&markers[id].item);});});}
+  function bindCards(){root.querySelectorAll('.locator-block__card:not(.locator-block__card--skeleton)').forEach(function(card){
+    var id=card.dataset.itemId;
+    /* Hover : allume le marker correspondant */
+    card.addEventListener('mouseenter',function(){if(!markers[id])return;updateMarker(id,true);if(activeId&&activeId!==id)updateMarker(activeId,false);});
+    card.addEventListener('mouseleave',function(){if(id!==activeId)updateMarker(id,false);});
+    if(!cfg.cardClickable){
+      /* Mode par défaut : clic → active carte + popup (navigation via card-link) */
+      card.addEventListener('click',function(e){
+        if(e.target.closest('.locator-block__card-link'))return;
+        activate(id,true);showPopup(markers[id]&&markers[id].item);
+      });
+    } else {
+      /* Mode cardClickable : card = <a>, clic navigue.
+         On active quand même le marker au clic pour feedback visuel. */
+      card.addEventListener('click',function(){activate(id,false);});
+    }
+  });}
   function renderList(items,count){
     var list=root.querySelector('.locator-block__list');if(!list)return;
     var n=cfg.display.pageSize>0?Math.min(count,items.length):items.length;
