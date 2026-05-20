@@ -61,7 +61,10 @@ body.sqs-edit-mode-active .locator-block {
 }
 
 /* ── Conteneur ── */
-.locator-block__inner { overflow: hidden; }
+.locator-block__inner {
+  overflow: hidden;
+  border: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
+}
 
 .locator-block__inner--list {
   display: grid;
@@ -214,9 +217,9 @@ body.sqs-edit-mode-active .locator-block {
   position: relative;
 }
 
-/* Mode grid : pas de padding (le gap sur la card suffit) */
+/* Mode grid : padding réduit (le gap card gère l'espace au-dessus) */
 .locator-block__inner--grid .locator-block__body {
-  padding: 0;
+  padding: .25rem .5rem .5rem;
 }
 
 /* Éléments texte */
@@ -228,6 +231,16 @@ body.sqs-edit-mode-active .locator-block {
 }
 .locator-block__zones { display: flex; flex-wrap: wrap; gap: .2rem; }
 .locator-block__zone  { font-size: .6875em; padding: .1em .4em; }
+
+/* ── Card cliquable (cardClickable: true) ── */
+.locator-block__card--clickable {
+  text-decoration: none;
+  color: inherit;
+}
+/* En mode list clickable : effet hover identique */
+.locator-block__inner--list .locator-block__card--clickable:hover {
+  background: rgba(0,0,0,.03);
+}
 
 /* ── Bouton navigation directe ── */
 .locator-block__card-link {
