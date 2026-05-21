@@ -1,5 +1,5 @@
 /*!
- * Locator Block v2.6
+ * Locator Block v2.7
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * CONFIGURATION (window.LOCATOR_BLOCK_CONFIG)
@@ -36,18 +36,32 @@ var clean=[
   {featureType:'administrative.land_parcel',stylers:[{visibility:'off'}]},
 ];
 
+/* ── Auto-détection de la langue depuis Squarespace ── */
+function detectLocale(){
+  try{var l=(window.Static&&window.Static.SQUARESPACE_CONTEXT&&window.Static.SQUARESPACE_CONTEXT.website&&window.Static.SQUARESPACE_CONTEXT.website.language)||'fr';return l.slice(0,2).toLowerCase();}catch(_){return'fr';}
+}
+/* Dictionnaire i18n par défaut — surcharger via cfg.i18n */
+var I18N_DEFAULTS={
+  fr:{noResults:'Aucun résultat dans cette zone',allZones:'Toutes les zones',itemCount:function(n){return n+' exposition'+(n>1?'s':'');},loading:'Chargement…',error:'Impossible de charger les données.'},
+  en:{noResults:'No results in this area',allZones:'All areas',itemCount:function(n){return n+' exhibition'+(n>1?'s':'');},loading:'Loading…',error:'Unable to load data.'},
+};
+function getI18n(cfg){
+  var locale=detectLocale();
+  var base=I18N_DEFAULTS[locale]||I18N_DEFAULTS.fr;
+  return Object.assign({},base,cfg.i18n||{});
+}
+
 var cfg=Object.assign({
   collectionUrl:'',category:'',tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
   mapZoomOnSelect:16,mapStyle:null,mapOptions:{},map:{},
   openInNewTab:false,
-  filterMode:'dropdown',  /* 'dropdown' | 'buttons' (style pill, comme Query Block) */
-  filterMultiple:false,   /* true = multi-sélection (mode buttons uniquement) */
-  /* cardClickable: false (défaut) → clic active la carte + popup, card-link gère la navigation
-     cardClickable: true           → card entière = lien vers l'exposition (pas de card-link) */
+  filterMode:'dropdown',  /* 'dropdown' | 'buttons' */
+  filterMultiple:false,
   cardClickable:false,
   showCardLink:true,showZoneFilter:true,sortBy:'numero',
   customClass:'',
+  i18n:{},   /* surcharger les chaînes : {noResults:'...', allZones:'...', ...} */
   rootSelector:'.locator-block',noCache:false,cacheTTL:600000,debug:false,
 },window.LOCATOR_BLOCK_CONFIG||{});
 
@@ -195,13 +209,16 @@ function buildCardHTML(item){
     var clHtml='';
     if(cfg.showCardLink&&item.url){var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="locator-block__card-link" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
     if(cfg.cardClickable&&item.url){
-    var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
-    return'<a class="locator-block__card locator-block__card--clickable" href="'+escHtml(item.url)+'"'+lt+' data-item-id="'+escHtml(item.id)+'">'+html+'</a>';
-  }
-  /* Dans le mode groups, cardLink est géré via children:['cardLink'].
-     Si showCardLink=false, renderChild l'ignore déjà.
-     Le clHtml de secours (hors groups) est supprimé ici. */
-  return'<div class="locator-block__card" data-item-id="'+escHtml(item.id)+'">'+html+'</div>';
+      var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
+      return'<a class="locator-block__card locator-block__card--clickable" href="'+escHtml(item.url)+'"'+lt+' data-item-id="'+escHtml(item.id)+'">'+html+'</a>';
+    }
+    /* showCardLink : si true et cardClickable=false, ajouter la flèche
+       même si 'cardLink' n'est pas dans les children des groups */
+    if(cfg.showCardLink&&item.url&&!cfg.cardClickable){
+      var lt2=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
+      html+='<a class="locator-block__card-link" href="'+escHtml(item.url)+'"'+lt2+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';
+    }
+    return'<div class="locator-block__card" data-item-id="'+escHtml(item.id)+'">'+html+'</div>';
   }
 
   /* Comportement par défaut : media (image seule) + body (tous les champs texte) */
@@ -289,8 +306,8 @@ function buildControls(zones,total){
   var f='';
   if(cfg.showZoneFilter&&zones.length){
     if(cfg.filterMode==='buttons'){
-      /* Boutons pill — même style que Query Block */
-      var btns='<button class="locator-block__filter-btn is-active" data-zone="" type="button">Tout</button>';
+      /* Boutons pill — même apparence que Query Block (sqb-filter-btn) */
+      var btns='';
       zones.forEach(function(z){btns+='<button class="locator-block__filter-btn" data-zone="'+escHtml(z)+'" type="button">'+escHtml(z)+'</button>';});
       f='<div class="locator-block__filter-buttons">'+btns+'</div>';
     }else{
@@ -304,7 +321,7 @@ function buildControls(zones,total){
     }
   }
   var countHtml=cfg.display.showCount!==false
-    ?'<span class="locator-block__count">'+total+' exposition'+(total>1?'s':'')+'</span>':'';
+    ?'<span class="locator-block__count">'+getI18n(cfg).itemCount(total)+'</span>':'';
   return'<div class="locator-block__controls">'+countHtml+f+'</div>';
 }
 function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="locator-block__card locator-block__card--skeleton"><div class="locator-block__media"></div><div class="locator-block__body"><div class="locator-block__skeleton-line" style="width:20%"></div><div class="locator-block__skeleton-line" style="width:70%"></div><div class="locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
@@ -324,7 +341,7 @@ function createInstance(root,allItems){
       var b=map.getBounds();if(!b)return;
       var v=currentItems.filter(function(i){return b.contains(new google.maps.LatLng(i.lat,i.lng));});
       var list=root.querySelector('.locator-block__list');if(!list)return;
-      list.innerHTML=v.length?v.map(buildCardHTML).join(''):'<p class="locator-block__error" style="padding:1rem;opacity:.5">Aucune exposition dans cette zone.</p>';
+      list.innerHTML=v.length?v.map(buildCardHTML).join(''):'<p class="locator-block__error" style="padding:1rem;opacity:.5">'+getI18n(cfg).noResults+'</p>';
       bindCards();
     });
   }
@@ -386,9 +403,12 @@ function createInstance(root,allItems){
   var sel=root.querySelector('.locator-block__filter-zone');if(sel)sel.addEventListener('change',function(){applyFilter(sel.value);});
   root.querySelectorAll('.locator-block__filter-btn').forEach(function(btn){
     btn.addEventListener('click',function(){
-      root.querySelectorAll('.locator-block__filter-btn').forEach(function(b){b.classList.remove('is-active');});
-      btn.classList.add('is-active');
-      applyFilter(btn.dataset.zone||'');
+      var zone=btn.dataset.zone||'';
+      /* Toggle : clic sur bouton actif = désactiver (revenir à "tout") */
+      var isAlreadyActive=btn.classList.contains('locator-block__filter-btn--active');
+      root.querySelectorAll('.locator-block__filter-btn').forEach(function(b){b.classList.remove('locator-block__filter-btn--active');});
+      if(!isAlreadyActive){btn.classList.add('locator-block__filter-btn--active');}else{zone='';}
+      applyFilter(zone);
     });
   });
   log('Instance:',allItems.length,'marqueurs');
@@ -403,7 +423,7 @@ async function init(){
   try{
     var loaders=[fetchItems(),loadMapsAPI()];if(cfg.map.clustering)loaders.push(loadClusterer());
     var results=await Promise.all(loaders);var items=results[0];log('Items:',items.length);
-    if(!items.length){roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">Aucun élément trouvé.</p>';});return;}
+    if(!items.length){roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">'+getI18n(cfg).noResults+'</p>';});return;}
     roots.forEach(function(r){createInstance(r,items);});
   }catch(err){console.error('Locator Block:',err);roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">Erreur: '+escHtml(err.message)+'</p>';});}
 }
