@@ -1,5 +1,5 @@
 /*!
- * Related Block v7.6
+ * Related Block v7.7
  * Blocs de contenu relatif pour collections Squarespace
  * https://github.com/jonas-nicollin/squarespace-components
  *
@@ -238,6 +238,13 @@
  *             { type: 'titleMatchesCurrentTagValue', prefixes: ['Artiste'] },
  *             { type: 'nextCollectionItemOfCategory', values: ['Exposition'] },
  *             { type: 'nextCollectionItemWithTag', values: ['Statut: Case Study'] },
+ *             // nextByTagValue : item dont le tag préfixé a la valeur entière
+ *             // la plus petite strictement supérieure à celle de l'item courant.
+ *             // Idéal pour "numéro suivant" indépendamment de l'ordre Squarespace.
+ *             { type: 'nextByTagValue', prefix: 'Numéro', categories: ['Exposition'] },
+ *             //   prefix     : préfixe du tag (sans ':')
+ *             //   categories : filtre optionnel par catégorie
+ *             //   tags       : filtre optionnel par tags exacts
  *           ],
  *         },
  *       ],
@@ -794,6 +801,49 @@
       .sort((a, b) => getComparableDisplayIndex(a) - getComparableDisplayIndex(b))[0] || null;
   }
 
+  /**
+   * Cherche l'item dont le tag préfixé (ex. 'Numéro') a la valeur entière
+   * la plus petite strictement supérieure à celle de l'item courant.
+   * Filtre optionnel par catégories (rule.categories) et/ou tags exacts (rule.tags).
+   *
+   * Config :
+   *   { type: 'nextByTagValue', prefix: 'Numéro', categories: ['Exposition'] }
+   */
+  function findNextByTagValue(items, currentItem, rule) {
+    const prefix = String(rule?.prefix || '').replace(/:$/, '');
+    if (!prefix) return null;
+    const currentValues = getTagValuesByPrefix(currentItem, prefix);
+    if (!currentValues.length) return null;
+    const currentNum = parseFloat(currentValues[0]);
+    if (!isFinite(currentNum)) return null;
+
+    const filterCategories = Array.isArray(rule?.categories) ? rule.categories : [];
+    const filterTags = Array.isArray(rule?.tags) ? rule.tags.map(normalize) : [];
+    const currentUrl = String(currentItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+
+    let best = null;
+    let bestNum = Infinity;
+
+    (Array.isArray(items) ? items : []).forEach(item => {
+      if (!item) return;
+      if (String(item?.fullUrl || '').replace(/\/+$/, '') === currentUrl) return;
+      if (filterCategories.length && !itemHasAnyCategory(item, filterCategories)) return;
+      if (filterTags.length) {
+        const itemTags = (Array.isArray(item.tags) ? item.tags : []).map(normalize);
+        if (!filterTags.some(t => itemTags.includes(t))) return;
+      }
+      const vals = getTagValuesByPrefix(item, prefix);
+      if (!vals.length) return;
+      const n = parseFloat(vals[0]);
+      if (!isFinite(n)) return;
+      if (n > currentNum && n < bestNum) {
+        best = item;
+        bestNum = n;
+      }
+    });
+    return best;
+  }
+
   function ruleMatchesCandidate(rule, candidateItem, currentItem, context) {
     const type = rule?.type;
     if (type === 'sharedCategory') return itemSharesCategory(candidateItem, currentItem);
@@ -813,6 +863,13 @@
     }
     if (type === 'nextCollectionItemWithTag') {
       const next = findNextCollectionItemWithTag(context?.allItems || [], currentItem, rule);
+      if (!next) return false;
+      const cUrl = String(candidateItem?.fullUrl || '').replace(/\/+$/, '') || '/';
+      const nUrl = String(next?.fullUrl || '').replace(/\/+$/, '') || '/';
+      return (cUrl && nUrl && cUrl === nUrl) || String(candidateItem?.urlId || '') === String(next?.urlId || '');
+    }
+    if (type === 'nextByTagValue') {
+      const next = findNextByTagValue(context?.allItems || [], currentItem, rule);
       if (!next) return false;
       const cUrl = String(candidateItem?.fullUrl || '').replace(/\/+$/, '') || '/';
       const nUrl = String(next?.fullUrl || '').replace(/\/+$/, '') || '/';
@@ -1002,7 +1059,7 @@
 
   function getCollectionCacheKey(path, maxPages, suffix) {
     const pageKey = maxPages === 'all' ? 'all' : (maxPages || 5);
-    return ['related-block-collection-v7.6', path, pageKey, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
+    return ['related-block-collection-v7.7', path, pageKey, suffix || DEFAULT_JSON_FORMAT_SUFFIX].join('::');
   }
 
   function getCollectionCacheOptions(CFG) {
@@ -1576,7 +1633,7 @@
   }
 
   function cacheKey(CFG) {
-    return ['related-block-v7.6', CFG.key, location.pathname].join('::');
+    return ['related-block-v7.7', CFG.key, location.pathname].join('::');
   }
 
   function createRunner(CFG) {
@@ -1626,7 +1683,10 @@
       if (alreadyInjected(target, CFG.key)) { syncBodyRelatedBlockClasses(); return true; }
 
       const key = cacheKey(CFG);
-      if (CFG.performance?.useSessionStorage) {
+      // DEV_MODE désactive aussi le cache des items rendus
+      const useRenderedCache = !DEV_MODE && CFG.performance?.useSessionStorage;
+
+      if (useRenderedCache) {
         try {
           const cached = sessionStorage.getItem(key);
           if (cached) {
@@ -1695,13 +1755,13 @@
         if (CFG.emptyState?.message) {
           replaceBlockWithEmptyState(shell, CFG);
           syncBodyRelatedBlockClasses();
-          if (CFG.performance?.useSessionStorage) {
+          if (useRenderedCache) {
             try { sessionStorage.setItem(key, JSON.stringify([])); } catch (_) {}
           }
           return true;
         }
         shell.remove(); syncBodyRelatedBlockClasses();
-        if (CFG.performance?.useSessionStorage) {
+        if (useRenderedCache) {
           try { sessionStorage.setItem(key, JSON.stringify([])); } catch (_) {}
         }
         return false;
@@ -1709,7 +1769,7 @@
 
       replaceBlockContent(shell, finalItems, CFG, currentItem);
       syncBodyRelatedBlockClasses();
-      if (CFG.performance?.useSessionStorage) {
+      if (useRenderedCache) {
         try { sessionStorage.setItem(key, JSON.stringify(finalItems)); } catch (_) {}
       }
       return true;
