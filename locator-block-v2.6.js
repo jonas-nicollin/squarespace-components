@@ -1,5 +1,5 @@
 /*!
- * Locator Block v2.5
+ * Locator Block v2.6
  * github.com/jonas-nicollin/squarespace-blocks
  *
  * CONFIGURATION (window.LOCATOR_BLOCK_CONFIG)
@@ -41,6 +41,8 @@ var cfg=Object.assign({
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
   mapZoomOnSelect:16,mapStyle:null,mapOptions:{},map:{},
   openInNewTab:false,
+  filterMode:'dropdown',  /* 'dropdown' | 'buttons' (style pill, comme Query Block) */
+  filterMultiple:false,   /* true = multi-sélection (mode buttons uniquement) */
   /* cardClickable: false (défaut) → clic active la carte + popup, card-link gère la navigation
      cardClickable: true           → card entière = lien vers l'exposition (pas de card-link) */
   cardClickable:false,
@@ -93,7 +95,7 @@ function getTags(tags,p){if(!Array.isArray(tags))return[];var re=tagRe(p);return
 var SW=[300,500,750,1000,1500];
 function buildSrcset(b){return SW.map(function(w){return b+'?format='+w+'w '+w+'w';}).join(', ');}
 function getImgBase(item){return(item.assetUrl||item.thumbnailUrl||item.mainImageUrl||(item.media&&item.media[0]&&item.media[0].url)||'').split('?')[0];}
-function imgTag(base,alt,cls,sizes){if(!base)return'';return'<img class="'+escHtml(cls)+'" src="'+escHtml(base+'?format=750w')+'" srcset="'+escHtml(buildSrcset(base))+'" sizes="'+escHtml(sizes||'(max-width:768px) 100vw, 400px')+'" alt="'+escHtml(alt)+'" loading="lazy" decoding="async">';}
+function imgTag(base,alt,cls,sizes,fp){if(!base)return'';var pos=fp||'50% 50%';return'<img class="'+escHtml(cls)+'" src="'+escHtml(base+'?format=750w')+'" srcset="'+escHtml(buildSrcset(base))+'" sizes="'+escHtml(sizes||'(max-width:768px) 100vw, 400px')+'" alt="'+escHtml(alt)+'" loading="lazy" decoding="async" style="object-position:'+escHtml(pos)+'">';}
 
 /* ── Coordonnées ── */
 function getCoords(loc){loc=loc||{};return{lat:parseFloat(loc.mapLat||loc.markerLat||''),lng:parseFloat(loc.mapLng||loc.markerLng||'')};}
@@ -128,9 +130,11 @@ async function fetchItems(){
   });
   var items=filtered.map(function(item){
     var c=getCoords(item.location);
+    var fp=item.mediaFocalPoint||{x:0.5,y:0.5};
+    var focalPos=(Math.round(fp.x*100))+'% '+(Math.round(fp.y*100))+'%';
     return{id:item.id||item.urlId||'',url:item.fullUrl||item.url||'',title:item.title||'',
       numero:getTag(item.tags,cfg.tagNumero),lieu:getTag(item.tags,cfg.tagLieu),zones:getTags(item.tags,cfg.tagZone),
-      imageBase:getImgBase(item),lat:c.lat,lng:c.lng};
+      imageBase:getImgBase(item),focalPos:focalPos,lat:c.lat,lng:c.lng};
   });
   if(cfg.sortBy==='numero')items.sort(function(a,b){return(parseInt(a.numero,10)||999)-(parseInt(b.numero,10)||999);});
   else if(cfg.sortBy==='title')items.sort(function(a,b){return a.title.localeCompare(b.title,'fr');});
@@ -142,7 +146,7 @@ function renderChild(child,item){
   var d=cfg.display;
   if(child==='image'){
     if(!d.showImage||!item.imageBase)return'';
-    return imgTag(item.imageBase,item.title,'locator-block__image','(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'));
+    return imgTag(item.imageBase,item.title,'locator-block__image','(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos);
   }
   if(child==='title'){
     if(!d.showTitle||!item.title)return'';
@@ -194,12 +198,15 @@ function buildCardHTML(item){
     var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
     return'<a class="locator-block__card locator-block__card--clickable" href="'+escHtml(item.url)+'"'+lt+' data-item-id="'+escHtml(item.id)+'">'+html+'</a>';
   }
-  return'<div class="locator-block__card" data-item-id="'+escHtml(item.id)+'">'+html+clHtml+'</div>';
+  /* Dans le mode groups, cardLink est géré via children:['cardLink'].
+     Si showCardLink=false, renderChild l'ignore déjà.
+     Le clHtml de secours (hors groups) est supprimé ici. */
+  return'<div class="locator-block__card" data-item-id="'+escHtml(item.id)+'">'+html+'</div>';
   }
 
   /* Comportement par défaut : media (image seule) + body (tous les champs texte) */
   var mediaHtml='';
-  if(d.showImage&&item.imageBase)mediaHtml='<div class="locator-block__media">'+imgTag(item.imageBase,item.title,'locator-block__image','(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'))+'</div>';
+  if(d.showImage&&item.imageBase)mediaHtml='<div class="locator-block__media">'+imgTag(item.imageBase,item.title,'locator-block__image','(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos)+'</div>';
 
   var bodyHtml='';
   if(d.showNumero&&item.numero)bodyHtml+='<div class="locator-block__tag-prefix locator-block__tag-prefix--numero">'+escHtml(item.numero)+'</div>';
@@ -281,15 +288,21 @@ function loadClusterer(){return new Promise(function(resolve){if(window.markerCl
 function buildControls(zones,total){
   var f='';
   if(cfg.showZoneFilter&&zones.length){
-    /* Wrapper pour contrôle total du style (icône custom, appearance:none) */
-    var opts=['<option value="">Toutes les zones</option>']
-      .concat(zones.map(function(z){return'<option value="'+escHtml(z)+'">'+escHtml(z)+'</option>';})).join('');
-    f='<div class="locator-block__filter-wrap">'
-      +'<select class="locator-block__filter-zone" aria-label="Filtrer par zone">'+opts+'</select>'
-      +'<span class="locator-block__filter-icon ui-icon" aria-hidden="true">expand_more</span>'
-      +'</div>';
+    if(cfg.filterMode==='buttons'){
+      /* Boutons pill — même style que Query Block */
+      var btns='<button class="locator-block__filter-btn is-active" data-zone="" type="button">Tout</button>';
+      zones.forEach(function(z){btns+='<button class="locator-block__filter-btn" data-zone="'+escHtml(z)+'" type="button">'+escHtml(z)+'</button>';});
+      f='<div class="locator-block__filter-buttons">'+btns+'</div>';
+    }else{
+      /* Dropdown (défaut) */
+      var opts=['<option value="">Toutes les zones</option>']
+        .concat(zones.map(function(z){return'<option value="'+escHtml(z)+'">'+escHtml(z)+'</option>';})).join('');
+      f='<div class="locator-block__filter-wrap">'
+        +'<select class="locator-block__filter-zone" aria-label="Filtrer par zone">'+opts+'</select>'
+        +'<span class="locator-block__filter-icon ui-icon" aria-hidden="true">expand_more</span>'
+        +'</div>';
+    }
   }
-  /* showCount respecté */
   var countHtml=cfg.display.showCount!==false
     ?'<span class="locator-block__count">'+total+' exposition'+(total>1?'s':'')+'</span>':'';
   return'<div class="locator-block__controls">'+countHtml+f+'</div>';
@@ -371,6 +384,13 @@ function createInstance(root,allItems){
   if(allItems.length){var bounds=new google.maps.LatLngBounds();allItems.forEach(function(i){bounds.extend({lat:i.lat,lng:i.lng});});if(cfg.mapCenter&&cfg.mapZoom){map.setCenter(cfg.mapCenter);map.setZoom(cfg.mapZoom);}else map.fitBounds(bounds,{padding:60});}
   renderList(allItems,visibleCount);
   var sel=root.querySelector('.locator-block__filter-zone');if(sel)sel.addEventListener('change',function(){applyFilter(sel.value);});
+  root.querySelectorAll('.locator-block__filter-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      root.querySelectorAll('.locator-block__filter-btn').forEach(function(b){b.classList.remove('is-active');});
+      btn.classList.add('is-active');
+      applyFilter(btn.dataset.zone||'');
+    });
+  });
   log('Instance:',allItems.length,'marqueurs');
 }
 
