@@ -1,18 +1,17 @@
 /*!
- * Locator Block v2.3 — CSS global
+ * Locator Block v2.6 — CSS global
  * github.com/jonas-nicollin/squarespace-blocks
  *
- * Universel — aucune valeur spécifique à un site.
  * Variables à définir par site :
  *   --locator-height, --locator-height-mobile
- *   --locator-list-width (mode list, défaut 400px)
- *   --locator-grid-list-width (mode grid, défaut 50%)
+ *   --locator-list-width       (mode list, défaut: 400px)
+ *   --locator-grid-list-width  (mode grid, défaut: 50%)
  *   --locator-marker-color, --locator-marker-active
  */
 
 /* ── Icône générique ── */
 .ui-icon {
-  font-family: var(--ui-font-font-family, inherit);
+  font-family: var(--ui-font-font-family);
   font-size: inherit;
   line-height: 1;
   vertical-align: middle;
@@ -28,7 +27,7 @@ body.sqs-edit-mode-active .locator-block {
   border-radius: .5rem;
 }
 
-/* ── Typo — hérite du thème via body-font vars ── */
+/* ── Typo — body-font vars ── */
 .locator-block__count,
 .locator-block__filter-zone,
 .locator-block__load-more,
@@ -42,7 +41,7 @@ body.sqs-edit-mode-active .locator-block {
   text-transform: var(--body-font-text-transform, none);
 }
 
-/* ── Opacité 0.666 sur tout sauf le titre, filtres et markers ── */
+/* ── Opacité 0.666 — tout sauf titre, filtres et markers ── */
 .locator-block__count,
 .locator-block__tag-prefix--numero,
 .locator-block__tag-prefix--lieu,
@@ -53,7 +52,6 @@ body.sqs-edit-mode-active .locator-block {
   opacity: .666;
 }
 
-/* Le titre : opacité 1 (jamais réduit) */
 .locator-block__title,
 .locator-block__popup-title {
   opacity: 1;
@@ -104,7 +102,7 @@ body.sqs-edit-mode-active .locator-block {
   line-height: var(--body-font-line-height, 1.333);
 }
 
-/* ── Filtre zone — pill style (aligné avec Query Block) ── */
+/* ── Filtre — dropdown pill ── */
 .locator-block__filter-wrap {
   position: relative;
   display: inline-flex;
@@ -112,33 +110,62 @@ body.sqs-edit-mode-active .locator-block {
 }
 
 .locator-block__filter-zone {
-  /* Retire l'apparence native pour contrôle total */
   appearance: none;
   -webkit-appearance: none;
-  font-size: inherit;
   font-family: inherit;
+  font-size: inherit;
   line-height: var(--body-font-line-height, 1.333);
-  /* Style pill (identique Query Block) */
-  padding: .3em 2em .3em .875em; /* espace à droite pour l'icône custom */
+  padding: .3em 2em .3em .875em;
   border: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.2));
-  border-radius: 999px;           /* pill */
+  border-radius: 999px;
   background: transparent;
   color: inherit;
   cursor: pointer;
 }
-
 .locator-block__filter-zone:focus {
   outline: 1px solid currentColor;
   outline-offset: 2px;
 }
 
-/* Icône chevron custom positionnée à droite */
 .locator-block__filter-icon {
   position: absolute;
   right: .5em;
   pointer-events: none;
   font-size: 1em;
   opacity: .666;
+}
+
+/* ── Filtre — boutons pill (filterMode: 'buttons') ── */
+.locator-block__filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+}
+
+.locator-block__filter-btn {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: var(--body-font-line-height, 1.333);
+  padding: .3em .875em;
+  border: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.2));
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  opacity: .666;
+}
+
+.locator-block__filter-btn.is-active {
+  background: currentColor;
+  border-color: transparent;
+  opacity: 1;
+}
+/* texte du bouton actif en couleur de fond (inversion) */
+.locator-block__filter-btn.is-active span,
+.locator-block__filter-btn.is-active {
+  color: var(--siteBackgroundColor, #fff);
+  mix-blend-mode: normal;
 }
 
 /* ── Liste ── */
@@ -153,7 +180,6 @@ body.sqs-edit-mode-active .locator-block {
 .locator-block__list::-webkit-scrollbar-track { background: transparent; }
 .locator-block__list::-webkit-scrollbar-thumb { background: rgba(0,0,0,.12); border-radius: 2px; }
 
-/* Grille interne pour mode grid */
 .locator-block__inner--grid .locator-block__list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
@@ -174,18 +200,20 @@ body.sqs-edit-mode-active .locator-block {
   transition: background .12s;
 }
 .locator-block__inner--list .locator-block__card:hover,
-.locator-block__inner--list .locator-block__card.is-active {
-  background: rgba(0,0,0,.03);
-}
-.locator-block__inner--list .locator-block__card.is-active {
-  box-shadow: inset 3px 0 0 var(--locator-marker-active, #000);
-}
+.locator-block__inner--list .locator-block__card.is-active { background: rgba(0,0,0,.03); }
+.locator-block__inner--list .locator-block__card.is-active { box-shadow: inset 3px 0 0 var(--locator-marker-active, #000); }
 
 /* ── Card — mode grid ── */
 .locator-block__inner--grid .locator-block__card {
   display: flex;
   flex-direction: column;
-  gap: .5rem;    /* espace entre media et body — pas de padding sur le body */
+  gap: .5rem;
+  color: inherit;
+}
+
+/* Card cliquable (cardClickable: true) */
+.locator-block__card--clickable {
+  text-decoration: none;
   color: inherit;
 }
 
@@ -204,43 +232,35 @@ body.sqs-edit-mode-active .locator-block {
   object-fit: cover;
   display: block;
   transition: transform .3s ease;
+  /* object-position posé en inline style via mediaFocalPoint (script) */
 }
 .locator-block__card:hover .locator-block__image { transform: scale(1.03); }
+.locator-block__card--clickable:hover .locator-block__image { transform: scale(1.03); }
 
 /* ── Body ── */
 .locator-block__body {
-  padding: .75rem 1rem;           /* mode list : padding normal */
   display: flex;
   flex-direction: column;
   gap: .25rem;
   justify-content: flex-start;
   position: relative;
+  /* Pas de padding par défaut — à définir dans le CSS site */
 }
 
-/* Mode grid : padding réduit (le gap card gère l'espace au-dessus) */
+/* Mode list : padding nécessaire pour l'alignement */
+.locator-block__inner--list .locator-block__body {
+  padding: .75rem 1rem;
+}
+
+/* Mode grid : pas de padding (gap sur la card gère l'espace) */
 .locator-block__inner--grid .locator-block__body {
-  padding: .25rem .5rem .5rem;
+  padding: 0;
 }
 
-/* Éléments texte */
-.locator-block__tag-prefix--lieu {
-  display: flex;
-  align-items: center;
-  gap: .3rem;
-  line-height: var(--body-font-line-height, 1.333);
-}
+.locator-block__title { line-height: var(--body-font-line-height, 1.333); }
+.locator-block__tag-prefix--lieu { display: flex; align-items: center; gap: .3rem; line-height: var(--body-font-line-height, 1.333); }
 .locator-block__zones { display: flex; flex-wrap: wrap; gap: .2rem; }
 .locator-block__zone  { font-size: .6875em; padding: .1em .4em; }
-
-/* ── Card cliquable (cardClickable: true) ── */
-.locator-block__card--clickable {
-  text-decoration: none;
-  color: inherit;
-}
-/* En mode list clickable : effet hover identique */
-.locator-block__inner--list .locator-block__card--clickable:hover {
-  background: rgba(0,0,0,.03);
-}
 
 /* ── Bouton navigation directe ── */
 .locator-block__card-link {
@@ -263,24 +283,12 @@ body.sqs-edit-mode-active .locator-block {
   border-top: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.1));
   line-height: var(--body-font-line-height, 1.333);
 }
-.locator-block__inner--grid .locator-block__load-more-wrap {
-  border-top: none;
-  padding: 1rem;
-  grid-column: 1 / -1;
-}
+.locator-block__inner--grid .locator-block__load-more-wrap { border-top: none; padding: 1rem; grid-column: 1 / -1; }
 .locator-block__load-more {
-  display: block;
-  width: 100%;
-  padding: .75em 1rem;
+  display: block; width: 100%; padding: .75em 1rem;
   border: 1px solid var(--tweak-line-block-line-color, rgba(0,0,0,.2));
-  border-radius: .25rem;
-  background: transparent;
-  font-family: inherit;
-  font-size: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-align: center;
-  transition: background .15s;
+  border-radius: .25rem; background: transparent; font-family: inherit; font-size: inherit;
+  color: inherit; cursor: pointer; text-align: center; transition: background .15s;
   line-height: var(--body-font-line-height, 1.333);
 }
 .locator-block__load-more:hover { background: rgba(0,0,0,.05); }
@@ -292,9 +300,7 @@ body.sqs-edit-mode-active .locator-block {
 
 /* ── Popup OverlayView ── */
 .locator-block__popup-wrap {
-  position: absolute;
-  z-index: 100;
-  pointer-events: auto;
+  position: absolute; z-index: 100; pointer-events: auto;
   filter: drop-shadow(0 3px 10px rgba(0,0,0,.22)) drop-shadow(0 1px 3px rgba(0,0,0,.12));
   animation: locator-popup-in .15s ease;
 }
@@ -304,42 +310,31 @@ body.sqs-edit-mode-active .locator-block {
 }
 
 .locator-block__popup-wrap::after {
-  content: '';
-  position: absolute;
-  bottom: -7px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 14px;
-  height: 8px;
+  content: ''; position: absolute; bottom: -7px; left: 50%;
+  transform: translateX(-50%); width: 14px; height: 8px;
   clip-path: polygon(0 0, 100% 0, 50% 100%);
-  /* couleur définie dans CSS site : background: #fff; */
+  /* background défini dans CSS site */
 }
 
 .locator-block__popup {
-  display: flex;
-  flex-direction: column;
-  width: 200px;
-  overflow: hidden;
-  text-decoration: none;
-  color: inherit;
+  display: flex; flex-direction: column;
+  width: 240px;   /* 240px desktop — safe */
+  overflow: hidden; text-decoration: none; color: inherit;
+}
+
+@media (max-width: 1023px) {
+  .locator-block__popup { width: 200px; }
 }
 
 .locator-block__popup-media { overflow: hidden; aspect-ratio: 3 / 2; width: 100%; }
-.locator-block__popup-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform .3s ease;
-}
+.locator-block__popup-image { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s ease; }
 .locator-block__popup:hover .locator-block__popup-image { transform: scale(1.03); }
 
 /* Surcharge .gm-style { font: 400 11px Roboto } */
 .locator-block__popup-body {
   padding: .5rem .625rem .625rem;
-  display: flex;
-  flex-direction: column;
-  gap: .15rem;
+  display: flex; flex-direction: column;
+  /* Pas de gap — espacement géré par les opacités et les tailles */
   font-family:    var(--body-font-font-family, system-ui, sans-serif) !important;
   font-size:      1rem;
   line-height:    var(--body-font-line-height, 1.333);
@@ -350,26 +345,13 @@ body.sqs-edit-mode-active .locator-block {
 /* ── Skeleton ── */
 .locator-block__card--skeleton { pointer-events: none; }
 .locator-block__card--skeleton .locator-block__media { background: rgba(0,0,0,.06); }
-.locator-block__skeleton-line {
-  height: .75rem;
-  border-radius: .2rem;
-  background: rgba(0,0,0,.06);
-  margin-bottom: .35rem;
-  animation: locator-skeleton 1.4s ease-in-out infinite;
-}
-@keyframes locator-skeleton {
-  0%, 100% { opacity: .7; }
-  50%       { opacity: .3; }
-}
+.locator-block__skeleton-line { height: .75rem; border-radius: .2rem; background: rgba(0,0,0,.06); margin-bottom: .35rem; animation: locator-skeleton 1.4s ease-in-out infinite; }
+@keyframes locator-skeleton { 0%,100% { opacity:.7; } 50% { opacity:.3; } }
 
-.locator-block__error {
-  padding: 2rem;
-  opacity: .5;
-  line-height: var(--body-font-line-height, 1.333);
-}
+.locator-block__error { padding: 2rem; opacity: .5; line-height: var(--body-font-line-height, 1.333); }
 
-/* ── Mobile ── */
-@media (max-width: 767px) {
+/* ── Mobile — breakpoint 1023px (tablette paysage et moins) ── */
+@media (max-width: 1023px) {
   .locator-block__inner--list,
   .locator-block__inner--grid {
     grid-template-columns: 1fr;
