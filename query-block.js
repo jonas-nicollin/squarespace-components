@@ -1022,8 +1022,9 @@
    * 11. PANNEAU MOBILE (téléporté dans body)
    * ════════════════════════════════════ */
 
-  function buildMobilePanel(appendSecondary, tabPool, i18n) {
+  function buildMobilePanel(appendSecondary, tabPool, i18n, blockKey) {
     var panel = el('div', { class: 'sqb-mobile-panel', 'aria-hidden': 'true', role: 'dialog', 'aria-modal': 'true' });
+    if (blockKey) panel.setAttribute('data-sqb-key', blockKey);
     var inner = el('div', { class: 'sqb-mobile-panel-inner' });
 
     // Barre de titre + croix
@@ -1063,7 +1064,11 @@
       }
       backdrop.classList.add('sqb-backdrop--visible');
       // Hériter du thème de couleur de la section
-      var sourceBlock = document.querySelector('[data-sqb-key]');
+      // Trouver le bloc parent correspondant au bon sqb-key (pas le premier venu)
+      var panelKey = panel.dataset && panel.dataset.sqbKey;
+      var sourceBlock = panelKey
+        ? document.querySelector('[data-sqb-key="' + panelKey + '"]')
+        : document.querySelector('[data-sqb-key]');
       if (sourceBlock) {
         var section = sourceBlock.closest('[data-section-theme]');
         if (section) panel.setAttribute('data-section-theme', section.getAttribute('data-section-theme'));
@@ -1356,7 +1361,7 @@
         bar.appendChild(mobileRow);
       }
 
-      mobileObj = buildMobilePanel(appendSecondary, tabPool, i18n);
+      mobileObj = buildMobilePanel(appendSecondary, tabPool, i18n, cfg.key || '');
       toggleBtn.addEventListener('click', function() { mobileObj.open(); });
 
       // Récupérer la référence du bouton clearAll dans le panneau
@@ -1580,7 +1585,7 @@
 
       if (!shown.length) {
         setText(grid.appendChild(el('p', { class: 'sqb-empty' })), i18n.noResults);
-        if (disp.counter !== false) counter.textContent = '';
+        if (disp.counter === true) counter.textContent = '';
         if (hook) hook(grid, [], cfg);
         return;
       }
