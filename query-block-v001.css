@@ -148,7 +148,7 @@ body:not(.sqs-edit-mode-active) .sqb-target[data-sqb-label]::before {
 
 .sqb-tabs-row {
   display: flex;
-  align-items: flex-end;
+  align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
   border-bottom: 1px solid var(--tweak-line-block-line-color, var(--paragraphMediumColor));
