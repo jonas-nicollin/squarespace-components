@@ -1548,16 +1548,51 @@
     }
   }
 
+  function shouldLazyStartRelated() {
+  if (!('IntersectionObserver' in window)) return false;
+  return true;
+}
+
+function startRunnerWhenNearTarget(runner, CFG) {
+  const target = getInsertTarget(CFG.insertion?.targetSelector);
+
+  if (!target || !shouldLazyStartRelated()) {
+    runner.start();
+    return;
+  }
+
+  const lazyInit = CFG.performance?.lazyInit !== false;
+
+  if (!lazyInit) {
+    runner.start();
+    return;
+  }
+
+  const observer = new IntersectionObserver(entries => {
+    if (!entries[0].isIntersecting) return;
+    observer.disconnect();
+    runner.start();
+  }, {
+    rootMargin: '1200px 0px'
+  });
+
+  observer.observe(target);
+}
+
   // ════════════════════════════════════════════════════════════════
   // DÉMARRAGE
   // ════════════════════════════════════════════════════════════════
 
-  const runners = CONFIGS.map(createRunner).filter(Boolean);
+  const runnerEntries = CONFIGS
+  .map(CFG => ({ CFG, runner: createRunner(CFG) }))
+  .filter(entry => entry.runner);
 
-  async function startSequentially() {
-    for (const runner of runners) await runner.start();
-    syncBodyRelatedBlockClasses();
-  }
+  function startSequentially() {
+  runnerEntries.forEach(entry => {
+    startRunnerWhenNearTarget(entry.runner, entry.CFG);
+  });
+  syncBodyRelatedBlockClasses();
+}
 
   /**
    * Précharge les collections déclarées dans l'entrée _shared.
