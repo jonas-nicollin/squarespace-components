@@ -1869,10 +1869,13 @@
    * ════════════════════════════════════ */
 
   async function runConfig(cfg) {
-    if (!cfg || cfg.enabled === false) return;
+  if (!cfg || cfg.enabled === false) return;
 
-    var target = document.querySelector(cfg.target || '');
-    if (!target) return;
+  var target = document.querySelector(cfg.target || '');
+  if (!target) return;
+
+  if (target.dataset.sqbInitialized === 'true') return;
+  target.dataset.sqbInitialized = 'true';
 
     var perf = cfg.performance || {};
     var pag = cfg.pagination || {};
@@ -2264,13 +2267,19 @@
    * ════════════════════════════════════ */
 
   function init() {
-    var configs = Array.isArray(window.SQB_CONFIGS)
-      ? window.SQB_CONFIGS
-      : [];
+  var configs = Array.isArray(window.SQB_CONFIGS)
+    ? window.SQB_CONFIGS
+    : [];
 
-    if (!configs.length) return;
+  if (!configs.length) return;
 
-    configs = configs.slice().sort(function(a, b) {
+  configs = configs
+    .filter(function(cfg) {
+      if (!cfg || cfg.enabled === false) return false;
+      if (!cfg.target) return false;
+      return !!document.querySelector(cfg.target);
+    })
+    .sort(function(a, b) {
       var ta = document.querySelector(a.target || '');
       var tb = document.querySelector(b.target || '');
 
@@ -2280,22 +2289,24 @@
       return ya - yb;
     });
 
+  if (!configs.length) return;
+
+  configs.forEach(function(cfg) {
+    runConfig(cfg).catch(function(err) {
+      if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err);
+    });
+  });
+
+  document.addEventListener('turbolinks:load', function() {
     configs.forEach(function(cfg) {
-      runConfig(cfg).catch(function(err) {
-        if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err);
-      });
-    });
+      var t = document.querySelector(cfg.target || '');
 
-    document.addEventListener('turbolinks:load', function() {
-      configs.forEach(function(cfg) {
-        var t = document.querySelector(cfg.target || '');
-
-        if (t && !t.classList.contains('sqb-block')) {
-          runConfig(cfg).catch(noop);
-        }
-      });
+      if (t && t.dataset.sqbInitialized !== 'true') {
+        runConfig(cfg).catch(noop);
+      }
     });
-  }
+  });
+}
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init, { once: true });
