@@ -1924,8 +1924,14 @@ var SQB_RENDER_IMAGE_INDEX = 0;
     if (dispLayout === 'list') target.classList.add('sqb-block--list');
     target.classList.add('sqb-block--loading');
 
-    injectLoaderStyles();
-    target.appendChild(buildLoader(i18n.loading));
+injectLoaderStyles();
+
+var initialLoader = buildLoader(i18n.loading);
+target.appendChild(initialLoader);
+
+requestAnimationFrame(function() {
+  target.classList.add('sqb-block--rendering');
+});
 
     var rawItems = [];
 
@@ -1966,9 +1972,14 @@ var SQB_RENDER_IMAGE_INDEX = 0;
     if (cfg.debug) console.log('[SQB]', cfg.key, rawItems.length, 'items');
 
     var loaderEl = target.querySelector('.sqb-loader, .sqb-loader--text');
-    if (loaderEl) loaderEl.remove();
 
-    target.classList.remove('sqb-block--loading');
+requestAnimationFrame(function() {
+  if (loaderEl) loaderEl.remove();
+
+  target.classList.remove('sqb-block--loading');
+  target.classList.remove('sqb-block--rendering');
+  target.classList.add('sqb-block--ready');
+});
 
     var activeFilters = {
       tab: null,
