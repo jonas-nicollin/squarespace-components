@@ -983,27 +983,41 @@
   }
 
   function buildImageElement(item, CFG) {
-    if (!CFG.display?.showImage || !item.assetUrl) return null;
-    const media = document.createElement('div');
-    media.className = 'related-block__image';
-    const img = document.createElement('img');
-    img.src = item.assetUrl;
-    img.alt = cleanText(item.title || '');
-    img.loading = 'lazy';
-    img.decoding = 'async';
-    img.style.objectPosition =
-      item.mediaFocalPoint &&
-      typeof item.mediaFocalPoint.x === 'number' &&
-      typeof item.mediaFocalPoint.y === 'number'
-        ? `${Math.round(item.mediaFocalPoint.x * 100)}% ${Math.round(item.mediaFocalPoint.y * 100)}%`
-        : '50% 50%';
-    const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths)
-      ? CFG.display.srcsetWidths : DEFAULT_SRCSET_WIDTHS;
-    img.srcset = srcsetWidths.map(w => `${item.assetUrl}?format=${w}w ${w}w`).join(', ');
-    img.sizes = CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES;
-    media.appendChild(img);
-    return media;
-  }
+  if (!CFG.display?.showImage || !item.assetUrl) return null;
+
+  const media = document.createElement('div');
+  media.className = 'related-block__image';
+
+  const img = document.createElement('img');
+
+  const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths)
+    ? CFG.display.srcsetWidths
+    : [300, 500, 750, 1000, 1500];
+
+  const fallbackSrc = `${item.assetUrl}?format=750w`;
+
+  img.src = fallbackSrc;
+  img.srcset = srcsetWidths
+    .filter(w => Number(w) <= 1500)
+    .map(w => `${item.assetUrl}?format=${w}w ${w}w`)
+    .join(', ');
+
+  img.sizes = CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES;
+  img.alt = cleanText(item.title || '');
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.fetchPriority = 'low';
+
+  img.style.objectPosition =
+    item.mediaFocalPoint &&
+    typeof item.mediaFocalPoint.x === 'number' &&
+    typeof item.mediaFocalPoint.y === 'number'
+      ? `${Math.round(item.mediaFocalPoint.x * 100)}% ${Math.round(item.mediaFocalPoint.y * 100)}%`
+      : '50% 50%';
+
+  media.appendChild(img);
+  return media;
+}
 
   /**
    * Construit les nœuds DOM pour un type de contenu.
@@ -1553,33 +1567,40 @@
    * quand même pour que les runners aient les données fraîches.
    */
   function runSharedCollections() {
-    if (!SHARED_CONFIG) return;
-    const collections = Array.isArray(SHARED_CONFIG.collections)
-      ? SHARED_CONFIG.collections : [];
-    if (!collections.length) return;
-    const opts = {
-      useMemoryCache:  DEV_MODE ? false : (SHARED_CONFIG.cache?.useMemoryCache  !== false),
-      useSessionCache: DEV_MODE ? false : (SHARED_CONFIG.cache?.useSessionCache === true)
-    };
-    const runner = async () => {
-      for (const col of collections) {
-        if (!col?.path) continue;
-        try {
-          await fetchCollectionItemsFromPath(
-            col.path,
-            col.maxPages || 5,
-            col.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
-            opts
-          );
-        } catch (_) {}
-      }
-    };
-    if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(runner, { timeout: 800 });
-    } else {
-      setTimeout(runner, 100);
+  if (!SHARED_CONFIG) return;
+  if (SHARED_CONFIG.preload !== true) return;
+
+  const collections = Array.isArray(SHARED_CONFIG.collections)
+    ? SHARED_CONFIG.collections : [];
+  if (!collections.length) return;
+
+  const opts = {
+    useMemoryCache:  DEV_MODE ? false : (SHARED_CONFIG.cache?.useMemoryCache  !== false),
+    useSessionCache: DEV_MODE ? false : (SHARED_CONFIG.cache?.useSessionCache === true)
+  };
+
+  const runner = async () => {
+    for (const col of collections) {
+      if (!col?.path) continue;
+      try {
+        await fetchCollectionItemsFromPath(
+          col.path,
+          col.maxPages || 5,
+          col.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+          opts
+        );
+      } catch (_) {}
     }
+  };
+
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(runner, { timeout: 2500 });
+  } else {
+    setTimeout(runner, 800);
   }
+}
+
+  
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
