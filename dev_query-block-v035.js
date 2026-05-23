@@ -415,9 +415,9 @@
   var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500];
 var SQB_RENDER_IMAGE_INDEX = 0;
 
-  function buildImg(assetUrl, focalPoint, alt) {
+  function buildImg(assetUrl, focalPoint, alt, priority) {
   var imgIndex = SQB_RENDER_IMAGE_INDEX++;
-  var isPriority = imgIndex < 3;
+var isPriority = priority === true || imgIndex < 3;
 
   var srcset = SRCSET_WIDTHS.map(function(w) {
     return assetUrl + '?format=' + w + 'w ' + w + 'w';
