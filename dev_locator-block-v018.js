@@ -1,19 +1,4 @@
-/*!
- * Locator Block v2.7
- * github.com/jonas-nicollin/squarespace-blocks
- *
- * CONFIGURATION (window.LOCATOR_BLOCK_CONFIG)
- * SOURCE : collectionUrl, category, tagNumero, tagLieu, tagZone
- * DISPLAY: layout, display.{showImage,showTitle,showNumero,showLieu,showZones,imageInMedia,lieuIcon,pageSize}
- * CARTE  : apiKey, mapCenter, mapZoom, mapZoomOnSelect, mapStyle, mapOptions
- *          map.{markerLabel,markerStyle,markerFontSize,markerShadow,
- *               popup,popupShowImage,
- *               clustering,clusterMinCount,
- *               updateListOnMapMove}  ← IMPORTANT: doit être dans map:{}, pas à la racine
- * UI     : openInNewTab, showCardLink, showZoneFilter, sortBy
- * CSS    : customClass (classe CSS ajoutée sur .locator-block__inner pour CSS spécifique par site)
- * PERF   : rootSelector, noCache, cacheTTL, debug
- */
+
 (function(){
 'use strict';
 
@@ -56,14 +41,24 @@ var cfg=Object.assign({
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
   mapZoomOnSelect:16,mapStyle:null,mapOptions:{},map:{},
   openInNewTab:false,
-  filterMode:'dropdown',  /* 'dropdown' | 'buttons' */
+  filterMode:'dropdown',
   filterMultiple:false,
   cardClickable:false,
   showCardLink:true,showZoneFilter:true,sortBy:'numero',
   customClass:'',
-  i18n:{},   /* surcharger les chaînes : {noResults:'...', allZones:'...', ...} */
-  rootSelector:'.locator-block',noCache:false,cacheTTL:600000,debug:false,
+  i18n:{},
+  rootSelector:'.locator-block',
+  noCache:false,
+  cacheTTL:600000,
+  performance:{},
+  debug:false,
 },window.LOCATOR_BLOCK_CONFIG||{});
+
+cfg.performance=Object.assign({
+  lazyInit:true,
+  lazyRootMargin:'1200px 0px',
+  priorityImages:true,
+},cfg.performance||{});
 
 /* display — même modèle que Related Block / Query Block.
    groups définit la construction des cards (media + body).
@@ -107,10 +102,41 @@ function getTags(tags,p){if(!Array.isArray(tags))return[];var re=tagRe(p);return
 
 /* ── Image srcset ── */
 var SW=[300,500,750,1000,1500];
-function buildSrcset(b){return SW.map(function(w){return b+'?format='+w+'w '+w+'w';}).join(', ');}
-function getImgBase(item){return(item.assetUrl||item.thumbnailUrl||item.mainImageUrl||(item.media&&item.media[0]&&item.media[0].url)||'').split('?')[0];}
-function imgTag(base,alt,cls,sizes,fp){if(!base)return'';var pos=fp||'50% 50%';return'<img class="'+escHtml(cls)+'" src="'+escHtml(base+'?format=750w')+'" srcset="'+escHtml(buildSrcset(base))+'" sizes="'+escHtml(sizes||'(max-width:768px) 100vw, 400px')+'" alt="'+escHtml(alt)+'" loading="lazy" decoding="async" style="object-position:'+escHtml(pos)+'">';}
+var LOCATOR_RENDER_IMAGE_INDEX=0;
 
+function buildSrcset(b){
+  return SW.map(function(w){return b+'?format='+w+'w '+w+'w';}).join(', ');
+}
+
+function getImgBase(item){
+  return(item.assetUrl||item.thumbnailUrl||item.mainImageUrl||(item.media&&item.media[0]&&item.media[0].url)||'').split('?')[0];
+}
+
+function imgTag(base,alt,cls,sizes,fp,priority){
+  if(!base)return'';
+
+  var useIndexPriority = priority == null;
+  var idx = useIndexPriority ? LOCATOR_RENDER_IMAGE_INDEX++ : 999;
+  var isPriority = priority === true || (
+    useIndexPriority &&
+    cfg.performance.priorityImages !== false &&
+    idx < 3
+  );
+
+  var pos=fp||'50% 50%';
+  var fallback=base+'?format=750w';
+
+  return '<img class="'+escHtml(cls)+'"'
+    +' src="'+escHtml(fallback)+'"'
+    +' srcset="'+escHtml(buildSrcset(base))+'"'
+    +' sizes="'+escHtml(sizes||'(max-width:768px) 100vw, 400px')+'"'
+    +' alt="'+escHtml(alt)+'"'
+    +' loading="'+(isPriority?'eager':'lazy')+'"'
+    +' fetchpriority="'+(isPriority?'high':'low')+'"'
+    +' decoding="async"'
+    +' style="object-position:'+escHtml(pos)+'">';
+}
+   
 /* ── Coordonnées ── */
 function getCoords(loc){loc=loc||{};return{lat:parseFloat(loc.mapLat||loc.markerLat||''),lng:parseFloat(loc.mapLng||loc.markerLng||'')};}
 
@@ -245,7 +271,7 @@ function defineCustomPopup(){
   CustomPopup.prototype=Object.create(google.maps.OverlayView.prototype);
   CustomPopup.prototype.onAdd=function(){
     var d=cfg.display,item=this.item;
-    var im=(cfg.map.popupShowImage&&d.showImage&&item.imageBase)?'<div class="locator-block__popup-media">'+imgTag(item.imageBase,item.title,'locator-block__popup-image','240px')+'</div>':'';
+    var im=(cfg.map.popupShowImage&&d.showImage&&item.imageBase)?'<div class="locator-block__popup-media">'+imgTag(item.imageBase,item.title,'locator-block__popup-image','240px',item.focalPos,false)+'</div>':'';
     var b='';if(item.numero)b+='<div class="locator-block__popup-num">'+escHtml(item.numero)+'</div>';if(item.title)b+='<div class="locator-block__popup-title">'+escHtml(item.title)+'</div>';if(item.lieu)b+='<div class="locator-block__popup-lieu">'+escHtml(item.lieu)+'</div>';
     this.container=document.createElement('div');this.container.className='locator-block__popup-wrap';
     var pt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
@@ -341,7 +367,8 @@ function createInstance(root,allItems){
       var b=map.getBounds();if(!b)return;
       var v=currentItems.filter(function(i){return b.contains(new google.maps.LatLng(i.lat,i.lng));});
       var list=root.querySelector('.locator-block__list');if(!list)return;
-      list.innerHTML=v.length?v.map(buildCardHTML).join(''):'<p class="locator-block__error" style="padding:1rem;opacity:.5">'+getI18n(cfg).noResults+'</p>';
+      LOCATOR_RENDER_IMAGE_INDEX=0;
+list.innerHTML=v.length?v.map(buildCardHTML).join(''):'<p class="locator-block__error" style="padding:1rem;opacity:.5">'+getI18n(cfg).noResults+'</p>';
       bindCards();
     });
   }
@@ -384,7 +411,9 @@ function createInstance(root,allItems){
   function renderList(items,count){
     var list=root.querySelector('.locator-block__list');if(!list)return;
     var n=cfg.display.pageSize>0?Math.min(count,items.length):items.length;
-    list.innerHTML=items.slice(0,n).map(buildCardHTML).join('');bindCards();
+    LOCATOR_RENDER_IMAGE_INDEX=0;
+list.innerHTML=items.slice(0,n).map(buildCardHTML).join('');
+bindCards();
     var lw=root.querySelector('.locator-block__load-more-wrap');if(lw)lw.remove();
     if(cfg.display.pageSize>0&&items.length>n){var sb=root.querySelector('.locator-block__sidebar');if(sb){sb.insertAdjacentHTML('beforeend','<div class="locator-block__load-more-wrap"><button class="locator-block__load-more" type="button">Voir plus</button></div>');var btn=sb.querySelector('.locator-block__load-more');if(btn)btn.addEventListener('click',function(){visibleCount=Math.min(visibleCount+cfg.display.pageSize,items.length);renderList(items,visibleCount);});}}
   }
@@ -428,6 +457,33 @@ async function init(){
   }catch(err){console.error('Locator Block:',err);roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">Erreur: '+escHtml(err.message)+'</p>';});}
 }
 
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',init);}else{init();}
+function scheduleInit(){
+  var roots=Array.from(document.querySelectorAll(cfg.rootSelector));
+  log('Schedule —',roots.length,'conteneur(s)');
+  if(!roots.length)return;
+
+  if(cfg.performance.lazyInit===false||!('IntersectionObserver'in window)){
+    init();
+    return;
+  }
+
+  var started=false;
+  var obs=new IntersectionObserver(function(entries){
+    if(started)return;
+    var hit=entries.some(function(e){return e.isIntersecting;});
+    if(!hit)return;
+    started=true;
+    obs.disconnect();
+    init();
+  },{rootMargin:cfg.performance.lazyRootMargin||'1200px 0px'});
+
+  roots.forEach(function(r){obs.observe(r);});
+}
+
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',scheduleInit,{once:true});
+}else{
+  scheduleInit();
+}
 
 })();
