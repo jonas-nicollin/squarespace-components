@@ -416,37 +416,42 @@
 
   var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500, 2500];
 
-  function buildImg(assetUrl, focalPoint, alt) {
-    var srcset = SRCSET_WIDTHS.map(function(w) {
-      return assetUrl + '?format=' + w + 'w ' + w + 'w';
-    }).join(', ');
+  function buildImg(assetUrl, focalPoint, alt, isPriority) {
+  var srcset = SRCSET_WIDTHS.map(function(w) {
+    return assetUrl + '?format=' + w + 'w ' + w + 'w';
+  }).join(', ');
 
-    var wrap = el('div', { class: 'sqb-card__img-wrap' });
-    var img = el('img', {
-      class: 'sqb-card__img',
-      alt: alt || '',
-      sizes: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
-      decoding: 'async',
-    });
+  var fallbackSrc = assetUrl + '?format=750w';
 
-    img.style.objectPosition = focalPoint;
+  var wrap = el('div', { class: 'sqb-card__img-wrap' });
+  var img = el('img', {
+    class: 'sqb-card__img',
+    alt: alt || '',
+    sizes: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+    decoding: 'async',
+  });
 
-    if (IO_LAZY) {
-      img.dataset.src = assetUrl;
-      img.dataset.srcset = srcset;
-      IO_LAZY.observe(img);
-    } else {
-      img.srcset = srcset;
-      img.src = assetUrl;
-    }
+  img.style.objectPosition = focalPoint;
 
-    img.addEventListener('load', function() {
-      img.classList.add('sqb-card__img--loaded');
-    }, { once: true });
-
-    wrap.appendChild(img);
-    return wrap;
+  if (isPriority) {
+    img.src = fallbackSrc;
+    img.srcset = srcset;
+    img.loading = 'eager';
+    img.setAttribute('fetchpriority', 'high');
+  } else {
+    img.src = fallbackSrc;
+    img.srcset = srcset;
+    img.loading = 'lazy';
+    img.setAttribute('fetchpriority', 'auto');
   }
+
+  img.addEventListener('load', function() {
+    img.classList.add('sqb-card__img--loaded');
+  }, { once: true });
+
+  wrap.appendChild(img);
+  return wrap;
+}
 
   /* ════════════════════════════════════
    * 7. RENDU CARTE
@@ -476,11 +481,11 @@
     return null;
   }
 
-  function buildChild(def, item) {
+  function buildChild(def, item, cardIndex) {
     var type = typeof def === 'string' ? def : (def && def.type);
 
     if (type === 'image') {
-      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title) : null;
+      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, cardIndex < 3) : null;
     }
 
     if (type === 'categories') {
@@ -632,7 +637,7 @@
           wrapper.classList.add('sqb-card__group--inline');
 
           var built = children.map(function(def) {
-            return buildChild(def, item);
+            return buildChild(def, item, index);
           }).filter(Boolean);
 
           built.forEach(function(node, ni) {
@@ -646,7 +651,7 @@
           });
         } else {
           children.forEach(function(def) {
-            var node = buildChild(def, item);
+            var node = buildChild(def, item, index);
             if (node) wrapper.appendChild(node);
           });
         }
@@ -657,7 +662,7 @@
       return card;
     }
 
-    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title));
+    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, index < 3));
 
     var body = el('div', { class: 'sqb-card__body' });
 
