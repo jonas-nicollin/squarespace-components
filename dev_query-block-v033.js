@@ -1148,13 +1148,6 @@ var SQB_RENDER_IMAGE_INDEX = 0;
     });
   }
 
-
-    function appendPlainItems(items, cfg, grid, startIndex) {
-    items.forEach(function(item, offset) {
-      grid.appendChild(buildCard(item, cfg, startIndex + offset));
-    });
-  }
-
   /* ════════════════════════════════════
    * 9. TRI CHRONOLOGIQUE DATES
    * ════════════════════════════════════ */
@@ -2207,13 +2200,8 @@ requestAnimationFrame(function() {
           activeGroupFilter = getISODatePart(activeGroupFilter) || activeGroupFilter;
         }
       }
-if (canAppendIncrementally) {
-  var newItems = shown.slice(prevCardCount);
-  appendPlainItems(newItems, cfgForRender, grid, prevCardCount);
-} else {
-  SQB_RENDER_IMAGE_INDEX = 0;
-  renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
-}
+SQB_RENDER_IMAGE_INDEX = 0;
+      renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
 
       if ((cfgForRender.display || disp).fadeIn !== false) {
         var cards = Array.from(grid.querySelectorAll('.sqb-card'));
