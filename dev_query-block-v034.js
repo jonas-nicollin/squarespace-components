@@ -1148,6 +1148,13 @@ var SQB_RENDER_IMAGE_INDEX = 0;
     });
   }
 
+
+    function appendPlainItems(items, cfg, grid, startIndex) {
+    items.forEach(function(item, offset) {
+      grid.appendChild(buildCard(item, cfg, startIndex + offset));
+    });
+  }
+
   /* ════════════════════════════════════
    * 9. TRI CHRONOLOGIQUE DATES
    * ════════════════════════════════════ */
@@ -2164,11 +2171,20 @@ requestAnimationFrame(function() {
       var total = filtered.length;
       var shown = filtered.slice(0, currentPage * perPage);
 
-      var prevCardCount = fromPagination
+            var prevCardCount = fromPagination
         ? grid.querySelectorAll('.sqb-card').length
         : 0;
 
-      grid.innerHTML = '';
+      var canAppendIncrementally =
+        fromPagination &&
+        !fromFilter &&
+        !currentGroupBy &&
+        currentLayout !== 'list';
+
+      if (!canAppendIncrementally) {
+        grid.innerHTML = '';
+      }
+
       footer.innerHTML = '';
 
       if (!shown.length) {
@@ -2200,8 +2216,13 @@ requestAnimationFrame(function() {
           activeGroupFilter = getISODatePart(activeGroupFilter) || activeGroupFilter;
         }
       }
-SQB_RENDER_IMAGE_INDEX = 0;
-      renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
+if (canAppendIncrementally) {
+  var newItems = shown.slice(prevCardCount);
+  appendPlainItems(newItems, cfgForRender, grid, prevCardCount);
+} else {
+  SQB_RENDER_IMAGE_INDEX = 0;
+  renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
+}
 
       if ((cfgForRender.display || disp).fadeIn !== false) {
         var cards = Array.from(grid.querySelectorAll('.sqb-card'));
