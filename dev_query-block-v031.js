@@ -2282,11 +2282,48 @@ SQB_RENDER_IMAGE_INDEX = 0;
     render(false);
   }
 
+function scheduleConfig(cfg) {
+  if (!cfg || cfg.enabled === false) return;
+
+  var target = document.querySelector(cfg.target || '');
+  if (!target) return;
+
+  if (target.dataset.sqbInitialized === 'true') return;
+  if (target.dataset.sqbScheduled === 'true') return;
+
+  var perf = cfg.performance || {};
+  var lazyInit = perf.lazyInit !== false;
+
+  if (!lazyInit || !('IntersectionObserver' in window)) {
+    runConfig(cfg).catch(function(err) {
+      if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err);
+    });
+    return;
+  }
+
+  target.dataset.sqbScheduled = 'true';
+
+  var observer = new IntersectionObserver(function(entries) {
+    if (!entries[0].isIntersecting) return;
+
+    observer.disconnect();
+    target.dataset.sqbScheduled = 'false';
+
+    runConfig(cfg).catch(function(err) {
+      if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err);
+    });
+  }, {
+    rootMargin: '1200px 0px'
+  });
+
+  observer.observe(target);
+}
+  
   /* ════════════════════════════════════
    * 14. POINT D'ENTRÉE
    * ════════════════════════════════════ */
 
-  function init() {
+ function init() {
   var configs = Array.isArray(window.SQB_CONFIGS)
     ? window.SQB_CONFIGS
     : [];
@@ -2311,20 +2348,10 @@ SQB_RENDER_IMAGE_INDEX = 0;
 
   if (!configs.length) return;
 
-  configs.forEach(function(cfg) {
-    runConfig(cfg).catch(function(err) {
-      if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err);
-    });
-  });
+  configs.forEach(scheduleConfig);
 
   document.addEventListener('turbolinks:load', function() {
-    configs.forEach(function(cfg) {
-      var t = document.querySelector(cfg.target || '');
-
-      if (t && t.dataset.sqbInitialized !== 'true') {
-        runConfig(cfg).catch(noop);
-      }
-    });
+    configs.forEach(scheduleConfig);
   });
 }
 
