@@ -1,9 +1,3 @@
-/*!
- * Squarespace Collection Block (SQB) v12
- * Fetch JSON paginé · filtres · tabs · groupBy · sticky · hooks · masonry · cache
- * https://github.com/jonas-nicollin/squarespace-components
- */
-
 (function () {
   'use strict';
 
@@ -414,39 +408,56 @@
       }, { rootMargin: '300px 0px' })
     : null;
 
-  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500, 2500];
+  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500];
+var SQB_RENDER_IMAGE_INDEX = 0;
 
-  function buildImg(assetUrl, focalPoint, alt) {
-    var srcset = SRCSET_WIDTHS.map(function(w) {
-      return assetUrl + '?format=' + w + 'w ' + w + 'w';
-    }).join(', ');
+  function buildImg(assetUrl, focalPoint, alt, priority) {
+  var imgIndex = SQB_RENDER_IMAGE_INDEX++;
+var isPriority = priority === true || imgIndex < 3;
 
-    var wrap = el('div', { class: 'sqb-card__img-wrap' });
-    var img = el('img', {
-      class: 'sqb-card__img',
-      alt: alt || '',
-      sizes: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
-      decoding: 'async',
-    });
+  var srcset = SRCSET_WIDTHS.map(function(w) {
+    return assetUrl + '?format=' + w + 'w ' + w + 'w';
+  }).join(', ');
 
-    img.style.objectPosition = focalPoint;
+  var fallbackSrc = assetUrl + '?format=750w';
+
+  var wrap = el('div', { class: 'sqb-card__img-wrap' });
+
+  var img = el('img', {
+    class: 'sqb-card__img',
+    alt: alt || '',
+    sizes: '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+    decoding: 'async',
+  });
+
+  img.style.objectPosition = focalPoint;
+    
+    if (isPriority) {
+      img.loading = 'eager';
+  img.fetchPriority = 'high';
+  img.srcset = srcset;
+  img.src = fallbackSrc;
+} else {
+  img.fetchPriority = 'low';
+  img.loading = 'lazy';
 
     if (IO_LAZY) {
-      img.dataset.src = assetUrl;
+      img.dataset.src = fallbackSrc;
       img.dataset.srcset = srcset;
       IO_LAZY.observe(img);
     } else {
       img.srcset = srcset;
-      img.src = assetUrl;
+      img.src = fallbackSrc;
     }
-
-    img.addEventListener('load', function() {
-      img.classList.add('sqb-card__img--loaded');
-    }, { once: true });
-
-    wrap.appendChild(img);
-    return wrap;
   }
+
+  img.addEventListener('load', function() {
+    img.classList.add('sqb-card__img--loaded');
+  }, { once: true });
+
+  wrap.appendChild(img);
+  return wrap;
+}
 
   /* ════════════════════════════════════
    * 7. RENDU CARTE
@@ -476,11 +487,11 @@
     return null;
   }
 
-  function buildChild(def, item) {
+  function buildChild(def, item, cardIndex) {
     var type = typeof def === 'string' ? def : (def && def.type);
 
     if (type === 'image') {
-      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title) : null;
+      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, cardIndex < 3) : null;
     }
 
     if (type === 'categories') {
@@ -632,7 +643,7 @@
           wrapper.classList.add('sqb-card__group--inline');
 
           var built = children.map(function(def) {
-            return buildChild(def, item);
+            return buildChild(def, item, index);
           }).filter(Boolean);
 
           built.forEach(function(node, ni) {
@@ -646,7 +657,7 @@
           });
         } else {
           children.forEach(function(def) {
-            var node = buildChild(def, item);
+            var node = buildChild(def, item, index);
             if (node) wrapper.appendChild(node);
           });
         }
@@ -657,7 +668,7 @@
       return card;
     }
 
-    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title));
+    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, index < 3));
 
     var body = el('div', { class: 'sqb-card__body' });
 
@@ -1131,6 +1142,13 @@
       gi.forEach(function(item) {
         grid.appendChild(buildCard(item, cfg, idx++));
       });
+    });
+  }
+
+
+    function appendPlainItems(items, cfg, grid, startIndex) {
+    items.forEach(function(item, offset) {
+      grid.appendChild(buildCard(item, cfg, startIndex + offset));
     });
   }
 
@@ -1864,10 +1882,13 @@
    * ════════════════════════════════════ */
 
   async function runConfig(cfg) {
-    if (!cfg || cfg.enabled === false) return;
+  if (!cfg || cfg.enabled === false) return;
 
-    var target = document.querySelector(cfg.target || '');
-    if (!target) return;
+  var target = document.querySelector(cfg.target || '');
+  if (!target) return;
+
+  if (target.dataset.sqbInitialized === 'true') return;
+  target.dataset.sqbInitialized = 'true';
 
     var perf = cfg.performance || {};
     var pag = cfg.pagination || {};
@@ -1907,8 +1928,14 @@
     if (dispLayout === 'list') target.classList.add('sqb-block--list');
     target.classList.add('sqb-block--loading');
 
-    injectLoaderStyles();
-    target.appendChild(buildLoader(i18n.loading));
+injectLoaderStyles();
+
+var initialLoader = buildLoader(i18n.loading);
+target.appendChild(initialLoader);
+
+requestAnimationFrame(function() {
+  target.classList.add('sqb-block--rendering');
+});
 
     var rawItems = [];
 
@@ -1949,9 +1976,14 @@
     if (cfg.debug) console.log('[SQB]', cfg.key, rawItems.length, 'items');
 
     var loaderEl = target.querySelector('.sqb-loader, .sqb-loader--text');
-    if (loaderEl) loaderEl.remove();
 
-    target.classList.remove('sqb-block--loading');
+requestAnimationFrame(function() {
+  if (loaderEl) loaderEl.remove();
+
+  target.classList.remove('sqb-block--loading');
+  target.classList.remove('sqb-block--rendering');
+  target.classList.add('sqb-block--ready');
+});
 
     var activeFilters = {
       tab: null,
@@ -2136,11 +2168,20 @@
       var total = filtered.length;
       var shown = filtered.slice(0, currentPage * perPage);
 
-      var prevCardCount = fromPagination
+            var prevCardCount = fromPagination
         ? grid.querySelectorAll('.sqb-card').length
         : 0;
 
-      grid.innerHTML = '';
+      var canAppendIncrementally =
+        fromPagination &&
+        !fromFilter &&
+        !currentGroupBy &&
+        currentLayout !== 'list';
+
+      if (!canAppendIncrementally) {
+        grid.innerHTML = '';
+      }
+
       footer.innerHTML = '';
 
       if (!shown.length) {
@@ -2172,8 +2213,13 @@
           activeGroupFilter = getISODatePart(activeGroupFilter) || activeGroupFilter;
         }
       }
-
-      renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
+if (canAppendIncrementally) {
+  var newItems = shown.slice(prevCardCount);
+  appendPlainItems(newItems, cfgForRender, grid, prevCardCount);
+} else {
+  SQB_RENDER_IMAGE_INDEX = 0;
+  renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
+}
 
       if ((cfgForRender.display || disp).fadeIn !== false) {
         var cards = Array.from(grid.querySelectorAll('.sqb-card'));
@@ -2254,18 +2300,61 @@
     render(false);
   }
 
+function scheduleConfig(cfg) {
+  if (!cfg || cfg.enabled === false) return;
+
+  var target = document.querySelector(cfg.target || '');
+  if (!target) return;
+
+  if (target.dataset.sqbInitialized === 'true') return;
+  if (target.dataset.sqbScheduled === 'true') return;
+
+  var perf = cfg.performance || {};
+  var lazyInit = perf.lazyInit !== false;
+
+  if (!lazyInit || !('IntersectionObserver' in window)) {
+    runConfig(cfg).catch(function(err) {
+      if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err);
+    });
+    return;
+  }
+
+  target.dataset.sqbScheduled = 'true';
+
+  var observer = new IntersectionObserver(function(entries) {
+    if (!entries[0].isIntersecting) return;
+
+    observer.disconnect();
+    target.dataset.sqbScheduled = 'false';
+
+    runConfig(cfg).catch(function(err) {
+      if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err);
+    });
+  }, {
+    rootMargin: '1200px 0px'
+  });
+
+  observer.observe(target);
+}
+  
   /* ════════════════════════════════════
    * 14. POINT D'ENTRÉE
    * ════════════════════════════════════ */
 
-  function init() {
-    var configs = Array.isArray(window.SQB_CONFIGS)
-      ? window.SQB_CONFIGS
-      : [];
+ function init() {
+  var configs = Array.isArray(window.SQB_CONFIGS)
+    ? window.SQB_CONFIGS
+    : [];
 
-    if (!configs.length) return;
+  if (!configs.length) return;
 
-    configs = configs.slice().sort(function(a, b) {
+  configs = configs
+    .filter(function(cfg) {
+      if (!cfg || cfg.enabled === false) return false;
+      if (!cfg.target) return false;
+      return !!document.querySelector(cfg.target);
+    })
+    .sort(function(a, b) {
       var ta = document.querySelector(a.target || '');
       var tb = document.querySelector(b.target || '');
 
@@ -2275,22 +2364,14 @@
       return ya - yb;
     });
 
-    configs.forEach(function(cfg) {
-      runConfig(cfg).catch(function(err) {
-        if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err);
-      });
-    });
+  if (!configs.length) return;
 
-    document.addEventListener('turbolinks:load', function() {
-      configs.forEach(function(cfg) {
-        var t = document.querySelector(cfg.target || '');
+  configs.forEach(scheduleConfig);
 
-        if (t && !t.classList.contains('sqb-block')) {
-          runConfig(cfg).catch(noop);
-        }
-      });
-    });
-  }
+  document.addEventListener('turbolinks:load', function() {
+    configs.forEach(scheduleConfig);
+  });
+}
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init, { once: true });
