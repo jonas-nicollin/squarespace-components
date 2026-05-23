@@ -435,14 +435,15 @@ var isPriority = priority === true || imgIndex < 3;
   });
 
   img.style.objectPosition = focalPoint;
-
-  if (isPriority) {
-    img.loading = 'eager';
-    img.fetchPriority = 'high';
-    img.srcset = srcset;
-    img.src = fallbackSrc;
-  } else {
-    img.loading = 'lazy';
+    
+    if (isPriority) {
+      img.loading = 'eager';
+  img.fetchPriority = 'high';
+  img.srcset = srcset;
+  img.src = fallbackSrc;
+} else {
+  img.fetchPriority = 'low';
+  img.loading = 'lazy';
 
     if (IO_LAZY) {
       img.dataset.src = fallbackSrc;
