@@ -1,7 +1,5 @@
 /*!
  * Squarespace Collection Block (SQB) v12
- * Fetch JSON paginé · filtres · tabs · groupBy · sticky · hooks · masonry · cache
- * https://github.com/jonas-nicollin/squarespace-components
  */
 
 (function () {
@@ -414,9 +412,13 @@
       }, { rootMargin: '300px 0px' })
     : null;
 
-  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500, 2500];
+  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500];
+var SQB_RENDER_IMAGE_INDEX = 0;
 
-  function buildImg(assetUrl, focalPoint, alt, isPriority) {
+  function buildImg(assetUrl, focalPoint, alt) {
+  var imgIndex = SQB_RENDER_IMAGE_INDEX++;
+  var isPriority = imgIndex < 3;
+
   var srcset = SRCSET_WIDTHS.map(function(w) {
     return assetUrl + '?format=' + w + 'w ' + w + 'w';
   }).join(', ');
@@ -424,6 +426,7 @@
   var fallbackSrc = assetUrl + '?format=750w';
 
   var wrap = el('div', { class: 'sqb-card__img-wrap' });
+
   var img = el('img', {
     class: 'sqb-card__img',
     alt: alt || '',
@@ -434,15 +437,21 @@
   img.style.objectPosition = focalPoint;
 
   if (isPriority) {
-    img.src = fallbackSrc;
-    img.srcset = srcset;
     img.loading = 'eager';
-    img.setAttribute('fetchpriority', 'high');
-  } else {
-    img.src = fallbackSrc;
+    img.fetchPriority = 'high';
     img.srcset = srcset;
+    img.src = fallbackSrc;
+  } else {
     img.loading = 'lazy';
-    img.setAttribute('fetchpriority', 'auto');
+
+    if (IO_LAZY) {
+      img.dataset.src = fallbackSrc;
+      img.dataset.srcset = srcset;
+      IO_LAZY.observe(img);
+    } else {
+      img.srcset = srcset;
+      img.src = fallbackSrc;
+    }
   }
 
   img.addEventListener('load', function() {
@@ -2180,7 +2189,7 @@
           activeGroupFilter = getISODatePart(activeGroupFilter) || activeGroupFilter;
         }
       }
-
+SQB_RENDER_IMAGE_INDEX = 0;
       renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
 
       if ((cfgForRender.display || disp).fadeIn !== false) {
