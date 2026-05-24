@@ -13,12 +13,10 @@
     const DEFAULT_JSON_FORMAT_SUFFIX = "?format=json";
     const DEFAULT_SRCSET_WIDTHS = [ 100, 300, 500, 750, 1e3, 1500, 2500 ];
     const DEFAULT_IMAGE_SIZES = "(max-width: 768px) 100vw, 50vw";
-    const COLLECTION_CACHE = new Map();
     const BODY_CLASS_PREFIX = "has-related-block--";
     // Déduplication des fetches en vol :
     // si deux blocs demandent la même collection simultanément,
     // le second attend la promesse du premier au lieu de relancer un fetch.
-    const FETCH_IN_PROGRESS = new Map();
     // ── Fuseau horaire Squarespace ────────────────────────────────────
     const SITE_TZ = function() {
         try {
@@ -684,10 +682,6 @@
     // ════════════════════════════════════════════════════════════════
     // FETCH
     // ════════════════════════════════════════════════════════════════
-    function getCollectionCacheKey(path, maxPages, suffix) {
-        const pageKey = maxPages === "all" ? "all" : maxPages || 5;
-        return [ "related-block-collection-v7.7", path, pageKey, suffix || DEFAULT_JSON_FORMAT_SUFFIX ].join("::");
-    }
     function getCollectionCacheOptions(CFG) {
         // DEV_MODE écrase tout : zéro cache
         if (DEV_MODE) return {
