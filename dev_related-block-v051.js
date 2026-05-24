@@ -1454,67 +1454,48 @@
         });
         observer.observe(target);
     }
-    // ════════════════════════════════════════════════════════════════
-    // DÉMARRAGE
-    // ════════════════════════════════════════════════════════════════
-    const runnerEntries = CONFIGS.map(CFG => ({
-        CFG: CFG,
-        runner: createRunner(CFG)
-    })).filter(entry => entry.runner);
-    function startSequentially() {
-        runnerEntries.forEach(entry => {
-            startRunnerWhenNearTarget(entry.runner, entry.CFG);
-        });
-        syncBodyRelatedBlockClasses();
-    }
-    /**
-   * Précharge les collections déclarées dans l'entrée _shared.
-   * Exécuté en requestIdleCallback avant startSequentially pour que
-   * les blocs trouvent les collections déjà en cache mémoire.
-   * En devMode, les caches sont désactivés — les fetches se font
-   * quand même pour que les runners aient les données fraîches.
-   */
-    function runSharedCollections() {
-        if (!SHARED_CONFIG) return;
-        if (SHARED_CONFIG.preload !== true) return;
-        const collections = Array.isArray(SHARED_CONFIG.collections) ? SHARED_CONFIG.collections : [];
-        if (!collections.length) return;
-        const opts = {
-            useMemoryCache: DEV_MODE ? false : SHARED_CONFIG.cache?.useMemoryCache !== false,
-            useSessionCache: DEV_MODE ? false : SHARED_CONFIG.cache?.useSessionCache === true
-        };
-        const runner = async () => {
-            for (const col of collections) {
-                if (!col?.path) continue;
-                try {
-                    await fetchCollectionItemsFromPath(col.path, col.maxPages || 5, col.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX, opts);
-                } catch (_) {}
-            }
-        };
-        if ("requestIdleCallback" in window) {
-            window.requestIdleCallback(runner, {
-                timeout: 2500
-            });
-        } else {
-            setTimeout(runner, 800);
-        }
-    }
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", () => {
-            runSharedCollections();
-            startSequentially();
-            runPreloadQueue();
-        }, {
-            once: true
-        });
-    } else {
-        runSharedCollections();
-        startSequentially();
-        runPreloadQueue();
-    }
-    document.addEventListener("turbolinks:load", () => {
-        runSharedCollections();
-        startSequentially();
-        runPreloadQueue();
+  // ════════════════════════════════════════════════════════════════
+  // DÉMARRAGE
+  // ════════════════════════════════════════════════════════════════
+
+  const runnerEntries = CONFIGS
+    .map(CFG => ({ CFG, runner: createRunner(CFG) }))
+    .filter(entry => entry.runner);
+
+  let IS_STARTING = false;
+  let LAST_PATHNAME = '';
+
+  function startSequentially() {
+    runnerEntries.forEach(entry => {
+      startRunnerWhenNearTarget(entry.runner, entry.CFG);
     });
+    syncBodyRelatedBlockClasses();
+  }
+
+  function startOnce() {
+    const pathname = location.pathname || '';
+
+    if (IS_STARTING && pathname === LAST_PATHNAME) return;
+
+    IS_STARTING = true;
+    LAST_PATHNAME = pathname;
+
+    try {
+      runSharedCollections();
+      startSequentially();
+      runPreloadQueue();
+    } finally {
+      window.setTimeout(function() {
+        IS_STARTING = false;
+      }, 300);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startOnce, { once: true });
+  } else {
+    startOnce();
+  }
+
+  document.addEventListener('turbolinks:load', startOnce);
 })();
