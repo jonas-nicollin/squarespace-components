@@ -755,39 +755,94 @@
   }
 
   async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions) {
-    const suffix = jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
-    const cKey = getCollectionCacheKey(path, maxPages, suffix);
-    const opts = cacheOptions || {};
+  const suffix = jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
+  const opts = cacheOptions || {};
 
-    // DEV_MODE : vider le cache mémoire au démarrage pour cette clé
-    if (DEV_MODE) {
-      COLLECTION_CACHE.delete(cKey);
-    }
+  if (window.CollectionData && typeof window.CollectionData.get === 'function') {
+    return window.CollectionData.get(path, {
+      maxPages: maxPages || 5,
+      ttl: 900,
+      memoryCache: opts.useMemoryCache !== false,
+      sessionCache: opts.useSessionCache === true,
+      credentials: 'same-origin'
+    });
+  }
 
-    // Cache mémoire
-    if (!DEV_MODE && opts.useMemoryCache !== false && COLLECTION_CACHE.has(cKey)) {
-      return COLLECTION_CACHE.get(cKey);
-    }
+  const cKey = getCollectionCacheKey(path, maxPages, suffix);
 
-    // Cache sessionStorage
-    if (!DEV_MODE && opts.useSessionCache) {
-      try {
-        const cached = sessionStorage.getItem(cKey);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) {
-            if (opts.useMemoryCache !== false) COLLECTION_CACHE.set(cKey, parsed);
-            return parsed;
-          }
+  if (DEV_MODE) {
+    COLLECTION_CACHE.delete(cKey);
+  }
+
+  if (!DEV_MODE && opts.useMemoryCache !== false && COLLECTION_CACHE.has(cKey)) {
+    return COLLECTION_CACHE.get(cKey);
+  }
+
+  if (!DEV_MODE && opts.useSessionCache) {
+    try {
+      const cached = sessionStorage.getItem(cKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          if (opts.useMemoryCache !== false) COLLECTION_CACHE.set(cKey, parsed);
+          return parsed;
         }
-      } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  if (FETCH_IN_PROGRESS.has(cKey)) {
+    return FETCH_IN_PROGRESS.get(cKey);
+  }
+
+  function ensureJsonFormat(url) {
+    const raw = String(url || '');
+    if (!raw || raw.includes('format=json')) return raw;
+    return raw.includes('?') ? raw + '&format=json' : raw + '?format=json';
+  }
+
+  const fetchPromise = (async () => {
+    let url = path + suffix;
+    const items = [];
+    const pageLimit = maxPages === 'all' ? Infinity : (maxPages || 5);
+
+    for (let page = 0; page < pageLimit; page++) {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (!res.ok) break;
+
+      const data = await res.json();
+      const batch = Array.isArray(data?.items) ? data.items
+        : Array.isArray(data?.itemList) ? data.itemList : [];
+
+      items.push(...batch);
+
+      const next = data?.pagination?.nextPageUrl || null;
+      if (!next) break;
+
+      url = ensureJsonFormat(next);
     }
 
-    // Déduplication des fetches en vol :
-    // si un fetch pour cette clé est déjà en cours, on attend sa promesse
-    if (FETCH_IN_PROGRESS.has(cKey)) {
-      return FETCH_IN_PROGRESS.get(cKey);
+    return items;
+  })();
+
+  FETCH_IN_PROGRESS.set(cKey, fetchPromise);
+
+  let items;
+  try {
+    items = await fetchPromise;
+  } finally {
+    FETCH_IN_PROGRESS.delete(cKey);
+  }
+
+  if (!DEV_MODE) {
+    if (opts.useMemoryCache !== false) COLLECTION_CACHE.set(cKey, items);
+    if (opts.useSessionCache) {
+      try { sessionStorage.setItem(cKey, JSON.stringify(items)); } catch (_) {}
     }
+  }
+
+  return items;
+}
 
     function ensureJsonFormat(url) {
       const raw = String(url || '');
