@@ -1247,7 +1247,7 @@
             }
             const key = cacheKey(CFG);
             // DEV_MODE désactive aussi le cache des items rendus
-            const useRenderedCache = !DEV_MODE && CFG.performance?.useSessionStorage;
+            const useRenderedCache = false;
             if (useRenderedCache) {
                 try {
                     const cached = sessionStorage.getItem(key);
