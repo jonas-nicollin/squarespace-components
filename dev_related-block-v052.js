@@ -1454,6 +1454,44 @@
         });
         observer.observe(target);
     }
+
+      function runSharedCollections() {
+    if (!SHARED_CONFIG) return;
+    if (SHARED_CONFIG.preload !== true) return;
+
+    const collections = Array.isArray(SHARED_CONFIG.collections)
+      ? SHARED_CONFIG.collections
+      : [];
+
+    if (!collections.length) return;
+
+    const opts = {
+      useMemoryCache: DEV_MODE ? false : (SHARED_CONFIG.cache?.useMemoryCache !== false),
+      useSessionCache: DEV_MODE ? false : (SHARED_CONFIG.cache?.useSessionCache === true)
+    };
+
+    const runner = async () => {
+      for (const col of collections) {
+        if (!col?.path) continue;
+
+        try {
+          await fetchCollectionItemsFromPath(
+            col.path,
+            col.maxPages || 5,
+            col.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+            opts
+          );
+        } catch (_) {}
+      }
+    };
+
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(runner, { timeout: 2500 });
+    } else {
+      setTimeout(runner, 800);
+    }
+  }
+    
   // ════════════════════════════════════════════════════════════════
   // DÉMARRAGE
   // ════════════════════════════════════════════════════════════════
