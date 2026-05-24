@@ -795,54 +795,7 @@
     return FETCH_IN_PROGRESS.get(cKey);
   }
 
-  function ensureJsonFormat(url) {
-    const raw = String(url || '');
-    if (!raw || raw.includes('format=json')) return raw;
-    return raw.includes('?') ? raw + '&format=json' : raw + '?format=json';
-  }
-
-  const fetchPromise = (async () => {
-    let url = path + suffix;
-    const items = [];
-    const pageLimit = maxPages === 'all' ? Infinity : (maxPages || 5);
-
-    for (let page = 0; page < pageLimit; page++) {
-      const res = await fetch(url, { credentials: 'same-origin' });
-      if (!res.ok) break;
-
-      const data = await res.json();
-      const batch = Array.isArray(data?.items) ? data.items
-        : Array.isArray(data?.itemList) ? data.itemList : [];
-
-      items.push(...batch);
-
-      const next = data?.pagination?.nextPageUrl || null;
-      if (!next) break;
-
-      url = ensureJsonFormat(next);
-    }
-
-    return items;
-  })();
-
-  FETCH_IN_PROGRESS.set(cKey, fetchPromise);
-
-  let items;
-  try {
-    items = await fetchPromise;
-  } finally {
-    FETCH_IN_PROGRESS.delete(cKey);
-  }
-
-  if (!DEV_MODE) {
-    if (opts.useMemoryCache !== false) COLLECTION_CACHE.set(cKey, items);
-    if (opts.useSessionCache) {
-      try { sessionStorage.setItem(cKey, JSON.stringify(items)); } catch (_) {}
-    }
-  }
-
-  return items;
-}
+  
 
     function ensureJsonFormat(url) {
       const raw = String(url || '');
