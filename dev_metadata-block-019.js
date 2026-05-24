@@ -1,245 +1,3 @@
-/*!
- * Metadata Blocks v2.0
- * Génère des blocs de métadonnées à partir du JSON Squarespace
- * https://github.com/jonas-nicollin/squarespace-components
- *
- * SITES
- *   — Parcours Céramique Carouge   pcc.jonasnicollin.ch
- *   — Carneiro Architectes         carneiro.jonasnicollin.ch
- *
- * ════════════════════════════════════════════════════════════════════
- * PRINCIPE DE FONCTIONNEMENT
- * ════════════════════════════════════════════════════════════════════
- *
- * Le script lit window.metadataBlocksSettingsList (tableau de configurations).
- * Pour chaque configuration, il :
- *   1. Fetch le JSON Squarespace de la page courante
- *   2. Résout l'item courant (par fullUrl ou urlId)
- *   3. Monte un container .metadata-blocks-wrapper dans le DOM
- *   4. Construit les blocs de métadonnées à partir des tags / catégories
- *
- * ════════════════════════════════════════════════════════════════════
- * RÉFÉRENCE CONFIGURATION — OPTIONS EXHAUSTIVES
- * ════════════════════════════════════════════════════════════════════
- *
- * window.metadataBlocksSettingsList = [ { ...cfg }, ... ]
- *
- * ── STRUCTURE PRINCIPALE ─────────────────────────────────────────────
- * {
- *   bodyClassConfiguration: 'collection-type-blog-basic-grid',
- *     // Classe CSS requise sur <body> pour activer cette config.
- *     // Si absent, la config s'applique sur toutes les pages.
- *
- *   buildAutomatically: true,
- *     // Crée automatiquement le container si absent (défaut : true).
- *
- *   jsonUrl: '/ma-collection',
- *     // URL JSON à fetcher. Par défaut : window.location.pathname.
- *     // ?format=json est ajouté automatiquement si absent.
- *
- *   moveToDestination: '.blog-item-top-wrapper',
- *     // Sélecteur CSS du container cible.
- *     // Fallback : '.blog-item-top-wrapper'.
- *
- *   moveToDestinationPosition: '3',
- *     // Position d'insertion dans le container cible (1 = premier enfant).
- *     // Défaut : 999 (dernier).
- *
- *   blockSeparator: '·',
- *     // Caractère affiché entre les blocs (span.metadata-block-separator).
- *     // Absent = pas de séparateur.
- *
- *   customClass: 'metadata-blocks--hero-line',
- *     // Classes CSS supplémentaires sur le container .metadata-blocks.
- *
- *   blocksOrder: ['date', 'location', 'zone'],
- *     // Ordre CSS des blocs (via flex order).
- *     // Les blocs non listés reçoivent order : 99.
- *
- * ── BLOCS ────────────────────────────────────────────────────────────
- *   blocks: [
- *     {
- *       name: 'date',
- *         // Identifiant unique → classe CSS metadata-block--date.
- *
- *       title: 'Date',
- *         // Label singulier. Absent ou 'hidden' = pas de titre.
- *
- *       titlePlural: 'Dates',
- *         // Label pluriel (si plusieurs valeurs). Fallback sur title.
- *
- *       titleSuffix: '\u00A0',
- *         // Suffixe ajouté après le titre (singulier et pluriel).
- *         // Utile pour ajouter un espace insécable entre le titre et la valeur.
- *         // Ex : titleSuffix: '\u00A0' → 'Étape 3' au lieu de 'Étape3'.
- *
- *       iconTitle: 'event',
- *         // Icône Material Symbols (remplace title/titlePlural).
- *         // Ajoute la classe metadata-icon-title sur le wrapper.
- *
- *       showTitle: true,
- *         // false = masque le titre (ajoute metadata-block--title-hidden).
- *
- *       source: 'tags',
- *         // Clé JSON de la source : 'tags' | 'categories' (défaut : 'tags').
- *
- *       // ── Filtrage des valeurs ──────────────────────────────────────
- *       allowedPrefixSuffix: 'Date:',
- *         // Garde uniquement les valeurs qui commencent OU finissent
- *         // par ce préfixe. Retire ensuite le préfixe de la valeur affichée.
- *
- *       allowedTags: ['Tag A', 'Tag B'],
- *         // Whitelist de valeurs exactes.
- *
- *       allowedCategories: ['Cat A'],
- *         // Whitelist de catégories exactes.
- *
- *       allowedCaracter: '#',
- *         // Garde uniquement les valeurs contenant ce caractère.
- *
- *       // ── Formatage des dates ───────────────────────────────────────
- *       formatDates: true,
- *         // Active la détection et le formatage des valeurs ISO 8601.
- *         // Format reconnu : 2026-09-19 | 2026-09-19T15:00
- *         // Intervalle     : 2026-09-14/2026-09-22
- *
- *       dateFormat: 'datetime',
- *         // Format d'affichage — identiques à SQB :
- *         //   'datetime' → Samedi 19 septembre, 15h00  (défaut)
- *         //   'date'     → Samedi 19 septembre 2026
- *         //   'day'      → Samedi 19 septembre
- *         //   'short'    → Sam. 19 sept.
- *         //   'numeric'  → 19.09.2026
- *         //   'time'     → 15h00
- *         //   { weekday:'long', day:'numeric', month:'long' }  // objet Intl custom
- *
- *       dateLocale: 'fr-CH',
- *         // Surcharge de la locale Intl.
- *         // Fallback : document.documentElement.lang → 'fr-CH'.
- *         // Fuseau horaire : lu depuis Static.SQUARESPACE_CONTEXT.websiteTimeZone.
- *
- *       // ── Tri ──────────────────────────────────────────────────────
- *       sortOrder: 'asc',
- *         // 'asc' | 'desc' | 'customOrder'
- *         // Pour les dates ISO, le tri est chronologique (timestamp).
- *
- *       customOrder: ['Val A', 'Val B'],
- *         // Ordre custom (utilisé si sortOrder = 'customOrder').
- *         // Les valeurs non listées vont en fin de liste.
- *
- *       // ── Affichage ────────────────────────────────────────────────
- *       displayInline: true,
- *         // Valeurs sur une ligne (span) avec séparateur.
- *
- *       inlineSeparator: ',\u00A0',
- *         // Séparateur inline entre les valeurs d'un même bloc (défaut : ',\u00A0').
- *
- *       maxValues: 3,
- *         // Limite le nombre de valeurs affichées.
- *
- *       hideIfEmpty: false,
- *         // Par défaut, un bloc sans valeur est masqué (true).
- *         // false = rendre le bloc vide avec classe metadata-block--empty.
- *
- *       order: 2,
- *         // Surcharge directe de la valeur CSS flex order.
- *
- *       // ── Groupement ───────────────────────────────────────────────
- *       group: 'location',
- *         // Greffe les valeurs de ce bloc dans le bloc parent 'location'.
- *
- *       groupPosition: 'append',
- *         // 'append' (défaut) | 'prepend'.
- *
- *       groupSeparator: ',\u00A0',
- *         // Séparateur inséré entre la dernière valeur existante du bloc
- *         // parent et la première valeur greffée (défaut : ',\u00A0').
- *         // Ex : 'Gy' + groupSeparator + 'Suisse' → 'Gy, Suisse'
- *     },
- *   ],
- *
- * ── EXCERPT ──────────────────────────────────────────────────────────
- *   excerpt: [
- *     {
- *       name: 'excerpt',
- *       fetchExcerpt: true,
- *         // Injecte l'extrait HTML de l'item (innerHTML).
- *     },
- *   ],
- *
- * ── LOCALISATION ─────────────────────────────────────────────────────
- *   location: {
- *     name: 'map',
- *     useGoogleMapsLink: true,
- *       // Enveloppe les valeurs dans un lien Google Maps.
- *     googleMapsLabel: 'Voir sur la carte',
- *       // Texte du lien si aucune adresse trouvée dans le JSON.
- *     googleMapsTarget: '_blank',
- *   },
- *
- * ════════════════════════════════════════════════════════════════════
- * CLASSES CSS GÉNÉRÉES
- * ════════════════════════════════════════════════════════════════════
- *
- * .metadata-blocks-wrapper              Container injecté dans moveToDestination
- * .metadata-blocks                      Container interne (+ customClass)
- *   .metadata-blocks--single            Un seul bloc visible
- *   .metadata-blocks--multiple          Plusieurs blocs
- *   .metadata-blocks--has-excerpt       Contient un bloc excerpt
- *   .metadata-blocks--has-inline        Contient au moins un bloc inline
- *   .metadata-blocks--with-block-separator  blockSeparator activé
- *
- * .metadata-block                       Bloc individuel
- * .metadata-block--{name}              Classe spécifique au nom du bloc
- * .metadata-block--title-hidden        showTitle: false
- * .metadata-block--empty               hideIfEmpty: false + aucune valeur
- * .metadata-icon-title                 iconTitle défini
- * .display-inline                      displayInline: true
- *
- * .metadata-title                      Titre du bloc
- * .metadata-elements                   Container des valeurs
- *   .metadata-excerpt                  (sur .metadata-elements si excerpt)
- * .metadata-value                      Valeur individuelle (div ou span)
- * .metadata-separator                  Séparateur inline entre valeurs
- * .metadata-group-separator            Séparateur entre groupe greffé et bloc parent
- * .metadata-block-separator            Séparateur entre blocs
- *
- * ════════════════════════════════════════════════════════════════════
- * EXEMPLES DE CONFIGURATION
- * ════════════════════════════════════════════════════════════════════
- *
- * // Bloc date — format lisible
- * {
- *   name: 'date', title: 'Date', source: 'tags',
- *   allowedPrefixSuffix: 'Date:',
- *   formatDates: true,
- *   dateFormat: 'day',        // → 'Samedi 19 septembre'
- *   displayInline: true, sortOrder: 'asc'
- * }
- *
- * // Bloc date avec heure
- * {
- *   name: 'date', source: 'tags', allowedPrefixSuffix: 'Date:',
- *   formatDates: true,
- *   dateFormat: 'datetime',   // → 'Samedi 19 septembre, 15h00'
- *   displayInline: true,
- * }
- *
- * // Intervalle de dates
- * // Tag : 'Date:2026-09-14/2026-09-22'  →  '14–22 septembre 2026'
- *
- * // Titre avec suffixe (espace insécable entre titre et valeur)
- * {
- *   name: 'stage', title: 'Étape', titlePlural: 'Étapes',
- *   titleSuffix: '\u00A0',    // → 'Étape 3'
- * }
- *
- * // Bloc groupé avec séparateur (ex : lieu + pays → 'Gy, Suisse')
- * { name: 'location', title: 'Lieu', allowedPrefixSuffix: 'Lieu:', source: 'tags' },
- * { name: 'land', allowedPrefixSuffix: 'Pays:', source: 'tags',
- *   group: 'location', groupPosition: 'append', groupSeparator: ',\u00A0' }
- *
- */
 (function () {
   'use strict';
 
@@ -252,6 +10,8 @@
   if (!SETTINGS_LIST.length) return;
 
   const JSON_FORMAT_SUFFIX = '?format=json';
+  let MB_IS_STARTING = false;
+  let MB_LAST_RUN_PATH = '';
 
   /* ════════════════════════════════════
    * UTILITAIRES TEXTE
@@ -929,6 +689,20 @@ async function fetchPageJson(settings) {
   }
 
   async function startAll() {
+    const currentPath = getCurrentPath();
+    
+    if (MB_IS_STARTING) return;
+
+  if (
+    MB_LAST_RUN_PATH === currentPath &&
+    document.querySelector('.metadata-blocks-wrapper .metadata-block')
+  ) {
+    return;
+  }
+
+  MB_IS_STARTING = true;
+
+  try {
     for (const settings of SETTINGS_LIST) {
       try {
         await runSettings(settings);
@@ -936,7 +710,12 @@ async function fetchPageJson(settings) {
         console.warn('[Metadata Blocks]', error);
       }
     }
+
+    MB_LAST_RUN_PATH = currentPath;
+  } finally {
+    MB_IS_STARTING = false;
   }
+}
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', startAll, { once: true });
