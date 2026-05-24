@@ -1137,9 +1137,6 @@
         }
         reorderRelatedBlocks(target);
     }
-    function cacheKey(CFG) {
-        return [ "related-block-v7.7", CFG.key, location.pathname ].join("::");
-    }
     function createRunner(CFG) {
         CFG = Object.assign({
             enabled: true,
@@ -1245,8 +1242,6 @@
                 syncBodyRelatedBlockClasses();
                 return true;
             }
-            const key = cacheKey(CFG);
-            // DEV_MODE désactive aussi le cache des items rendus
             const useRenderedCache = false;
             if (useRenderedCache) {
                 try {
