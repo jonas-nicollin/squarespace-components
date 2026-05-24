@@ -1319,13 +1319,49 @@
     return !!target.querySelector(`:scope > .related-block[data-related-key="${cfgKey}"]`);
   }
 
-  function insertInto(target, el, mode) {
-    if ((mode || 'append').toLowerCase() === 'prepend') {
-      target.insertAdjacentElement('afterbegin', el);
-    } else {
-      target.insertAdjacentElement('beforeend', el);
-    }
+  function getRelatedBlockOrder() {
+  if (Array.isArray(SHARED_CONFIG?.blockOrder) && SHARED_CONFIG.blockOrder.length) {
+    return SHARED_CONFIG.blockOrder;
   }
+
+  return CONFIGS
+    .map(cfg => cfg?.key)
+    .filter(Boolean);
+}
+
+function getRelatedBlockOrderIndex(key) {
+  const order = getRelatedBlockOrder();
+  const index = order.indexOf(key);
+  return index === -1 ? 9999 : index;
+}
+
+function reorderRelatedBlocks(target) {
+  if (!target) return;
+
+  const blocks = Array.from(
+    target.querySelectorAll(':scope > .related-block[data-related-key]')
+  );
+
+  if (blocks.length < 2) return;
+
+  blocks
+    .sort((a, b) => {
+      const ai = getRelatedBlockOrderIndex(a.dataset.relatedKey || '');
+      const bi = getRelatedBlockOrderIndex(b.dataset.relatedKey || '');
+      return ai - bi;
+    })
+    .forEach(block => target.appendChild(block));
+}
+
+function insertInto(target, el, mode) {
+  if ((mode || 'append').toLowerCase() === 'prepend') {
+    target.insertAdjacentElement('afterbegin', el);
+  } else {
+    target.insertAdjacentElement('beforeend', el);
+  }
+
+  reorderRelatedBlocks(target);
+}
 
   function cacheKey(CFG) {
     return ['related-block-v7.7', CFG.key, location.pathname].join('::');
