@@ -147,40 +147,109 @@ function cacheWrite(d){if(cfg.noCache)return;try{localStorage.setItem(CK,JSON.st
 
 /* ── Fetch SQS + pagination timestamp ── */
 async function fetchItems(){
-  var cached=cacheRead();if(cached){log('Cache:',cached.length);return cached;}
-  if(!cfg.collectionUrl)throw new Error('collectionUrl manquant');
-  var all=[],nextOffset=null,pc=0;
-  while(pc<10){
-    var url=cfg.collectionUrl+'?format=json'+(nextOffset!==null?'&offset='+nextOffset:'');
-    log('GET',url);
-    var res=await fetch(url,{cache:'no-store'});
-    if(!res.ok)throw new Error('Collection inaccessible ('+res.status+')');
-    var data=await res.json();
-    var page=data.items||(data.collection&&data.collection.items)||[];
-    all=all.concat(page);pc++;
-    var pag=data.pagination||{};
-    if(pag.nextPage&&pag.nextPageOffset){nextOffset=pag.nextPageOffset;}else{break;}
+  if(!cfg.collectionUrl) throw new Error('collectionUrl manquant');
+
+  var all;
+
+  if(window.CollectionData && typeof window.CollectionData.get === 'function'){
+    all = await window.CollectionData.get(cfg.collectionUrl, {
+      maxPages: 'all',
+      ttl: Math.round((cfg.cacheTTL || 600000) / 1000),
+      memoryCache: true,
+      sessionCache: !cfg.noCache,
+      credentials: 'same-origin'
+    });
+  } else {
+    var cached = cacheRead();
+    if(cached){
+      log('Cache:', cached.length);
+      return cached;
+    }
+
+    all = [];
+    var nextOffset = null;
+    var pc = 0;
+
+    while(pc < 10){
+      var url = cfg.collectionUrl + '?format=json' + (nextOffset !== null ? '&offset=' + nextOffset : '');
+      log('GET', url);
+
+      var res = await fetch(url, { cache: 'no-store' });
+      if(!res.ok) throw new Error('Collection inaccessible (' + res.status + ')');
+
+      var data = await res.json();
+      var page = data.items || (data.collection && data.collection.items) || [];
+      all = all.concat(page);
+      pc++;
+
+      var pag = data.pagination || {};
+      if(pag.nextPage && pag.nextPageOffset){
+        nextOffset = pag.nextPageOffset;
+      } else {
+        break;
+      }
+    }
   }
-  log('Brut:',all.length);
-  var filtered=all.filter(function(item){
-    var c=getCoords(item.location);
-    if(isNaN(c.lat)||isNaN(c.lng)){log('Sans coords:',item.title);return false;}
-    if(cfg.category){var cats=(item.categories||[]).map(function(c){return String(c).toLowerCase();});if(cats.indexOf(cfg.category.toLowerCase())===-1){log('Hors cat:',item.title);return false;}}
+
+  log('Brut:', all.length);
+
+  var filtered = all.filter(function(item){
+    var c = getCoords(item.location);
+
+    if(isNaN(c.lat) || isNaN(c.lng)){
+      log('Sans coords:', item.title);
+      return false;
+    }
+
+    if(cfg.category){
+      var cats = (item.categories || []).map(function(c){
+        return String(c).toLowerCase();
+      });
+
+      if(cats.indexOf(cfg.category.toLowerCase()) === -1){
+        log('Hors cat:', item.title);
+        return false;
+      }
+    }
+
     return true;
   });
-  var items=filtered.map(function(item){
-    var c=getCoords(item.location);
-    var fp=item.mediaFocalPoint||{x:0.5,y:0.5};
-    var focalPos=(Math.round(fp.x*100))+'% '+(Math.round(fp.y*100))+'%';
-    return{id:item.id||item.urlId||'',url:item.fullUrl||item.url||'',title:item.title||'',
-      numero:getTag(item.tags,cfg.tagNumero),lieu:getTag(item.tags,cfg.tagLieu),zones:getTags(item.tags,cfg.tagZone),
-      imageBase:getImgBase(item),focalPos:focalPos,lat:c.lat,lng:c.lng};
-  });
-  if(cfg.sortBy==='numero')items.sort(function(a,b){return(parseInt(a.numero,10)||999)-(parseInt(b.numero,10)||999);});
-  else if(cfg.sortBy==='title')items.sort(function(a,b){return a.title.localeCompare(b.title,'fr');});
-  cacheWrite(items);return items;
-}
 
+  var items = filtered.map(function(item){
+    var c = getCoords(item.location);
+    var fp = item.mediaFocalPoint || { x: 0.5, y: 0.5 };
+    var focalPos = Math.round(fp.x * 100) + '% ' + Math.round(fp.y * 100) + '%';
+
+    return {
+      id: item.id || item.urlId || '',
+      url: item.fullUrl || item.url || '',
+      title: item.title || '',
+      numero: getTag(item.tags, cfg.tagNumero),
+      lieu: getTag(item.tags, cfg.tagLieu),
+      zones: getTags(item.tags, cfg.tagZone),
+      imageBase: getImgBase(item),
+      focalPos: focalPos,
+      lat: c.lat,
+      lng: c.lng
+    };
+  });
+
+  if(cfg.sortBy === 'numero'){
+    items.sort(function(a,b){
+      return (parseInt(a.numero, 10) || 999) - (parseInt(b.numero, 10) || 999);
+    });
+  } else if(cfg.sortBy === 'title'){
+    items.sort(function(a,b){
+      return a.title.localeCompare(b.title, 'fr');
+    });
+  }
+
+  if(!(window.CollectionData && typeof window.CollectionData.get === 'function')){
+    cacheWrite(items);
+  }
+
+  return items;
+}
 /* ── Rendu d'un child dans un group ── */
 function renderChild(child,item){
   var d=cfg.display;
