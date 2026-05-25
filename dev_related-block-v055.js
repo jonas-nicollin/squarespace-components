@@ -700,12 +700,13 @@
 
   if (window.CollectionData && typeof window.CollectionData.get === 'function') {
     return window.CollectionData.get(path, {
-      maxPages: maxPages || 5,
-      ttl: 900,
-      memoryCache: opts.useMemoryCache !== false,
-      sessionCache: opts.useSessionCache === true,
-      credentials: 'same-origin'
-    });
+  maxPages: maxPages || 5,
+  ttl: 900,
+  memoryCache: opts.useMemoryCache !== false,
+  sessionCache: opts.useSessionCache === true,
+  credentials: 'same-origin',
+  stripFields: ['body']
+});
   }
 
   throw new Error('CollectionData unavailable');
