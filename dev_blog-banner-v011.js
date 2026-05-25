@@ -1,12 +1,3 @@
-/**
- * Blog Banner – v4.4.1
- *
- * Patch :
- *  1. Retire les classes body gérées avant chaque run.
- *     Elles ne sont ré-ajoutées que si une bannière est réellement insérée.
- *  2. Les icônes utilisent maintenant la classe "icon".
- */
-
 (function () {
   "use strict";
 
@@ -23,6 +14,8 @@
   }
 
   const insertedBanners = new Map();
+    const BANNER_WIDTHS = [750, 1000, 1500, 2500];
+  let didPreloadFirstBanner = false;
 
   window.BlogBanner = {
     getBannerFor(viewItem) {
@@ -164,16 +157,21 @@
     banner.style.setProperty("--image-focal-point", focalX + " " + focalY);
     banner.style.setProperty("--banner-aspect-ratio", config.bannerAspectRatio || "16 / 9");
 
-    const img = document.createElement("img");
-    img.src = source;
+        const img = document.createElement("img");
+    const bannerSrc = stripImageFormat(source) + "?format=" + (config.bannerFallbackWidth || 1500) + "w";
+    const bannerSrcset = buildBannerSrcset(source);
+    const bannerSizes = config.bannerSizes || "100vw";
 
-    const srcset = sourceImg.getAttribute("srcset");
-    if (srcset) img.setAttribute("srcset", srcset);
+    preloadBannerImage(bannerSrc, bannerSrcset, bannerSizes);
 
-    img.setAttribute("sizes", config.bannerSizes || "100vw");
+    img.src = bannerSrc;
+    img.setAttribute("srcset", bannerSrcset);
+    img.setAttribute("sizes", bannerSizes);
     img.setAttribute("alt", sourceImg.getAttribute("alt") || "");
     img.setAttribute("loading", "eager");
     img.setAttribute("decoding", "async");
+    img.setAttribute("fetchpriority", "high");
+    img.fetchPriority = "high";
     img.style.objectPosition = focalX + " " + focalY;
 
     const markLoaded = function () {
@@ -234,14 +232,41 @@
     }
   }
 
-  function getBestImageSource(img) {
+    function getBestImageSource(img) {
     return (
-      img.currentSrc ||
-      img.getAttribute("src") ||
       img.getAttribute("data-src") ||
       img.getAttribute("data-image") ||
+      img.getAttribute("src") ||
+      img.currentSrc ||
       ""
     );
+  }
+
+  function stripImageFormat(url) {
+    return String(url || "").replace(/\?format=\d+w.*$/, "");
+  }
+
+  function buildBannerSrcset(url) {
+    const base = stripImageFormat(url);
+
+    return BANNER_WIDTHS.map(function (w) {
+      return base + "?format=" + w + "w " + w + "w";
+    }).join(", ");
+  }
+
+  function preloadBannerImage(src, srcset, sizes) {
+    if (didPreloadFirstBanner || !src) return;
+    didPreloadFirstBanner = true;
+
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = src;
+
+    if (srcset) link.setAttribute("imagesrcset", srcset);
+    if (sizes) link.setAttribute("imagesizes", sizes);
+
+    document.head.appendChild(link);
   }
 
   function insertBanner(destination, bannerElement, method) {
