@@ -2273,7 +2273,12 @@ if (canAppendIncrementally) {
   appendPlainItemsProgressive(newItems, cfgForRender, grid, prevCardCount, perf.domBatchSize || 8);
 } else {
   SQB_RENDER_IMAGE_INDEX = 0;
-  renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
+
+  if (!currentGroupBy && currentLayout !== 'list') {
+    appendPlainItemsProgressive(shown, cfgForRender, grid, 0, perf.domBatchSize || 8);
+  } else {
+    renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
+  }
 }
       if ((cfgForRender.display || disp).fadeIn !== false) {
         var cards = Array.from(grid.querySelectorAll('.sqb-card'));
