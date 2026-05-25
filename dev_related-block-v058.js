@@ -1349,10 +1349,22 @@
                 });
             });
             let finalItems = sortItemsByRules(candidates, CFG.selection?.sort || []);
-            finalItems = uniqBy(finalItems, i => String(i.fullUrl || i.title || ""));
-            const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
-            if (limit > 0) finalItems = finalItems.slice(0, limit);
-            finalItems = applyFallbackFill(finalItems, items, currentItem, {
+finalItems = uniqBy(finalItems, i => String(i.fullUrl || i.title || ""));
+
+const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
+const progressiveMaxPages = getProgressiveMaxPages(CFG);
+
+if (limit > 0 && finalItems.length < limit && progressiveMaxPages !== (CFG.performance?.maxPages || 1)) {
+  try {
+    items = await fetchCollectionItems(CFG, progressiveMaxPages);
+  } catch (e) {
+    if (CFG.debug) console.warn("[RB]", CFG.key, "progressive fetch failed", e);
+  }
+}
+
+if (limit > 0) finalItems = finalItems.slice(0, limit);
+
+finalItems = applyFallbackFill(finalItems, items, currentItem, {
                 ...CFG.selection,
                 limit: limit
             }, CFG);
