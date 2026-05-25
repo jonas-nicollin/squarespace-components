@@ -2343,7 +2343,7 @@ if (canAppendIncrementally) {
         if (!existing) root.appendChild(headingResult.ctaBelowEl);
       }
 
-      var hasMore = shown.length < total;
+      var hasMore = shown.length < total || canFetchMorePages();
 
       if (!hasMore) {
         if (i18n.endLabel !== false && i18n.endLabel) {
