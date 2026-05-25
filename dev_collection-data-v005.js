@@ -1,9 +1,3 @@
-/*!
- * Collection Data v0.1
- * Shared Squarespace JSON fetch/cache layer
- * https://github.com/jonas-nicollin/squarespace-components
- */
-
 (function () {
   'use strict';
 
@@ -20,12 +14,25 @@ var STORE_KEY_PREFIX = 'collection-data::v0.2::';
   memoryCache: true,
   credentials: 'same-origin',
 
-  // Nettoyage par défaut des champs lourds inutiles aux blocs
-stripFields: ['body'],
+  // Par défaut : ne garder que les champs utiles aux blocs.
+  keepFields: [
+    'id',
+    'title',
+    'fullUrl',
+    'assetUrl',
+    'mediaFocalPoint',
+    'categories',
+    'tags',
+    'excerpt',
+    'location',
+    'displayIndex',
+    'publishOn',
+    'addedOn',
+    'updatedOn'
+  ],
 
-// Option plus stricte : ne garder que certains champs.
-// Désactivé par défaut pour ne rien casser.
-keepFields: null,
+  // Option complémentaire, utile si keepFields est désactivé ou élargi.
+  stripFields: []
 };
 
   function now() {
@@ -154,23 +161,30 @@ keepFields: null,
   }
 
   function cleanItems(items, options) {
-    options = options || {};
+  options = options || {};
 
-    var keepFields = Array.isArray(options.keepFields)
-      ? options.keepFields
-      : null;
+  var keepFields = Array.isArray(options.keepFields)
+    ? options.keepFields
+    : null;
 
-    var stripFields = Array.isArray(options.stripFields)
-      ? options.stripFields
-      : [];
+  var stripFields = Array.isArray(options.stripFields)
+    ? options.stripFields
+    : [];
 
-    if (!keepFields && !stripFields.length) return items;
+  if (!keepFields && !stripFields.length) return items;
 
-    return items.map(function(item) {
-      if (keepFields) return keepItemFields(item, keepFields);
-      return stripItemFields(item, stripFields);
-    });
-  }
+  return items.map(function(item) {
+    if (keepFields) {
+      item = keepItemFields(item, keepFields);
+    }
+
+    if (stripFields.length) {
+      item = stripItemFields(item, stripFields);
+    }
+
+    return item;
+  });
+}
 
   async function fetchCollection(path, options) {
     options = Object.assign({}, DEFAULTS, options || {});
