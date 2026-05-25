@@ -1,7 +1,3 @@
-/*!
- * Squarespace Collection Block (SQB) v12
- */
-
 (function () {
   'use strict';
 
