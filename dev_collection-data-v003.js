@@ -14,12 +14,15 @@
   var pendingFetches = new Map();
 
   var DEFAULTS = {
-    maxPages: 10,
-    ttl: 900,
-    sessionCache: true,
-    memoryCache: true,
-    credentials: 'same-origin',
-  };
+  maxPages: 10,
+  ttl: 900,
+  sessionCache: true,
+  memoryCache: true,
+  credentials: 'same-origin',
+
+  // Nettoyage par défaut des champs lourds inutiles aux blocs
+  stripFields: ['body'],
+};
 
   function now() {
     return Date.now();
@@ -113,6 +116,32 @@
     return [];
   }
 
+  function stripItemFields(item, fields) {
+  if (!item || !Array.isArray(fields) || !fields.length) return item;
+
+  var clone = Object.assign({}, item);
+
+  fields.forEach(function(field) {
+    if (field in clone) delete clone[field];
+  });
+
+  return clone;
+}
+
+function cleanItems(items, options) {
+  options = options || {};
+
+  var stripFields = Array.isArray(options.stripFields)
+    ? options.stripFields
+    : [];
+
+  if (!stripFields.length) return items;
+
+  return items.map(function(item) {
+    return stripItemFields(item, stripFields);
+  });
+}
+
   async function fetchCollection(path, options) {
     options = Object.assign({}, DEFAULTS, options || {});
 
@@ -148,7 +177,7 @@
       page++;
     }
 
-    return items;
+    return cleanItems(items, options);
   }
 
   async function get(path, options) {
