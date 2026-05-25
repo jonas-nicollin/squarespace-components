@@ -7,8 +7,8 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.1';
-  var STORE_KEY_PREFIX = 'collection-data::v0.1::';
+  var VERSION = '0.2';
+var STORE_KEY_PREFIX = 'collection-data::v0.2::';
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
@@ -21,7 +21,11 @@
   credentials: 'same-origin',
 
   // Nettoyage par défaut des champs lourds inutiles aux blocs
-  stripFields: ['body'],
+stripFields: ['body'],
+
+// Option plus stricte : ne garder que certains champs.
+// Désactivé par défaut pour ne rien casser.
+keepFields: null,
 };
 
   function now() {
@@ -47,9 +51,18 @@
   }
 
   function makeCacheKey(path, options) {
-    var maxPages = options.maxPages === 'all' ? 'all' : Number(options.maxPages || DEFAULTS.maxPages);
-    return STORE_KEY_PREFIX + normalizePath(path) + '::pages=' + maxPages;
-  }
+  var maxPages = options.maxPages === 'all' ? 'all' : Number(options.maxPages || DEFAULTS.maxPages);
+
+  var keepKey = Array.isArray(options.keepFields)
+    ? '::keep=' + options.keepFields.join(',')
+    : '';
+
+  var stripKey = Array.isArray(options.stripFields)
+    ? '::strip=' + options.stripFields.join(',')
+    : '';
+
+  return STORE_KEY_PREFIX + normalizePath(path) + '::pages=' + maxPages + keepKey + stripKey;
+}
 
   function readSession(key) {
     if (isPerfTest()) return null;
@@ -116,31 +129,48 @@
     return [];
   }
 
+    function keepItemFields(item, fields) {
+    if (!item || !Array.isArray(fields) || !fields.length) return item;
+
+    var clone = {};
+
+    fields.forEach(function(field) {
+      if (field in item) clone[field] = item[field];
+    });
+
+    return clone;
+  }
+
   function stripItemFields(item, fields) {
-  if (!item || !Array.isArray(fields) || !fields.length) return item;
+    if (!item || !Array.isArray(fields) || !fields.length) return item;
 
-  var clone = Object.assign({}, item);
+    var clone = Object.assign({}, item);
 
-  fields.forEach(function(field) {
-    if (field in clone) delete clone[field];
-  });
+    fields.forEach(function(field) {
+      if (field in clone) delete clone[field];
+    });
 
-  return clone;
-}
+    return clone;
+  }
 
-function cleanItems(items, options) {
-  options = options || {};
+  function cleanItems(items, options) {
+    options = options || {};
 
-  var stripFields = Array.isArray(options.stripFields)
-    ? options.stripFields
-    : [];
+    var keepFields = Array.isArray(options.keepFields)
+      ? options.keepFields
+      : null;
 
-  if (!stripFields.length) return items;
+    var stripFields = Array.isArray(options.stripFields)
+      ? options.stripFields
+      : [];
 
-  return items.map(function(item) {
-    return stripItemFields(item, stripFields);
-  });
-}
+    if (!keepFields && !stripFields.length) return items;
+
+    return items.map(function(item) {
+      if (keepFields) return keepItemFields(item, keepFields);
+      return stripItemFields(item, stripFields);
+    });
+  }
 
   async function fetchCollection(path, options) {
     options = Object.assign({}, DEFAULTS, options || {});
