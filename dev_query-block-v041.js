@@ -1987,30 +1987,73 @@ requestAnimationFrame(function() {
   target.classList.add('sqb-block--rendering');
 });
 
-    var rawItems = [];
+        var rawItems = [];
+    var sourceList = Array.isArray(cfg.sources) ? cfg.sources : [];
 
-    try {
-      var results = await Promise.all((Array.isArray(cfg.sources) ? cfg.sources : []).map(function(src) {
+    var initialMaxPages = perf.maxPages || 1;
+    var progressiveMaxPages = perf.progressiveMaxPages || 'all';
+    var loadedMaxPages = initialMaxPages;
+    var allRemoteLoaded = false;
+    var isFetchingMore = false;
+
+    function normalizeMaxPagesValue(value) {
+      return value === 'all' ? 'all' : Number(value || 1);
+    }
+
+    function canFetchMorePages() {
+      if (allRemoteLoaded) return false;
+      if (progressiveMaxPages === 'all') return true;
+      return Number(loadedMaxPages || 1) < Number(progressiveMaxPages || 1);
+    }
+
+    function nextMaxPagesValue() {
+      if (progressiveMaxPages === 'all') {
+        return Number(loadedMaxPages || 1) + 1;
+      }
+
+      return Math.min(
+        Number(loadedMaxPages || 1) + 1,
+        Number(progressiveMaxPages || 1)
+      );
+    }
+
+    async function loadSources(maxPagesValue) {
+      var results = await Promise.all(sourceList.map(function(src) {
         var stripFields = src.stripFields;
-if (stripFields === undefined) stripFields = perf.stripFields;
-if (stripFields === undefined) stripFields = ['body'];
+        if (stripFields === undefined) stripFields = perf.stripFields;
+        if (stripFields === undefined) stripFields = ['body'];
 
-return fetchAllItems(
-  src.path,
-  perf.maxPages || 10,
-  perf.sessionCache === true,
-  perf.sessionCacheTTL || 300,
-  stripFields
-).then(function(items) {
+        return fetchAllItems(
+          src.path,
+          maxPagesValue,
+          perf.sessionCache === true,
+          perf.sessionCacheTTL || 300,
+          stripFields
+        ).then(function(items) {
           return items.map(function(raw) {
             return mapItem(raw, src.path);
           });
         });
       }));
 
+      var merged = [];
+
       results.forEach(function(r) {
-        rawItems.push.apply(rawItems, r);
+        merged.push.apply(merged, r);
       });
+
+      merged = uniqBy(merged, function(i) {
+        return i.fullUrl || i.id;
+      });
+
+      merged = applyPreFilter(merged, cfg.preFilter || null);
+      merged = sortItems(merged, cfg.sort);
+
+      return merged;
+    }
+
+    try {
+      rawItems = await loadSources(loadedMaxPages);
     } catch (err) {
       if (cfg.debug) console.warn('[SQB]', cfg.key, err);
 
@@ -2020,13 +2063,6 @@ return fetchAllItems(
       setText(target.appendChild(el('p', { class: 'sqb-error' })), '\u26A0 Erreur de chargement');
       return;
     }
-
-    rawItems = uniqBy(rawItems, function(i) {
-      return i.fullUrl || i.id;
-    });
-
-    rawItems = applyPreFilter(rawItems, cfg.preFilter || null);
-    rawItems = sortItems(rawItems, cfg.sort);
 
     if (cfg.debug) console.log('[SQB]', cfg.key, rawItems.length, 'items');
 
@@ -2323,15 +2359,33 @@ if (canAppendIncrementally) {
           type: 'button',
         }), i18n.loadMoreLabel);
 
-        btn.addEventListener('click', function() {
-          btn.style.display = 'none';
-          footer.appendChild(buildLoader(false));
+        btn.addEventListener('click', async function() {
+  if (isFetchingMore) return;
 
-          requestAnimationFrame(function() {
-            currentPage++;
-            render(false, true);
-          });
-        });
+  isFetchingMore = true;
+  btn.style.display = 'none';
+  footer.appendChild(buildLoader(false));
+
+  currentPage++;
+
+  if (canFetchMorePages()) {
+    var previousCount = rawItems.length;
+    loadedMaxPages = nextMaxPagesValue();
+
+    try {
+      rawItems = await loadSources(loadedMaxPages);
+
+      if (rawItems.length <= previousCount) {
+        allRemoteLoaded = true;
+      }
+    } catch (err) {
+      if (cfg.debug) console.warn('[SQB]', cfg.key, err);
+    }
+  }
+
+  isFetchingMore = false;
+  render(false, true);
+});
 
         footer.appendChild(btn);
       } else if (mode === 'infinite' && 'IntersectionObserver' in window) {
@@ -2348,8 +2402,33 @@ if (canAppendIncrementally) {
           ioInfinite.disconnect();
           ioInfinite = null;
 
-          currentPage++;
-          render(false, true);
+          if (isFetchingMore) return;
+
+isFetchingMore = true;
+currentPage++;
+
+if (canFetchMorePages()) {
+  var previousCount = rawItems.length;
+  loadedMaxPages = nextMaxPagesValue();
+
+  loadSources(loadedMaxPages).then(function(items) {
+    rawItems = items;
+
+    if (rawItems.length <= previousCount) {
+      allRemoteLoaded = true;
+    }
+
+    isFetchingMore = false;
+    render(false, true);
+  }).catch(function(err) {
+    if (cfg.debug) console.warn('[SQB]', cfg.key, err);
+    isFetchingMore = false;
+    render(false, true);
+  });
+} else {
+  isFetchingMore = false;
+  render(false, true);
+}
         }, { rootMargin: '400px' });
 
         ioInfinite.observe(infS);
