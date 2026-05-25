@@ -204,6 +204,22 @@
     }
   }
 
+    function stripItemFields(items, fields) {
+    if (!Array.isArray(fields) || !fields.length) return items;
+
+    return (Array.isArray(items) ? items : []).map(function(item) {
+      if (!item || typeof item !== 'object') return item;
+
+      var clone = Object.assign({}, item);
+
+      fields.forEach(function(field) {
+        delete clone[field];
+      });
+
+      return clone;
+    });
+  }
+
   function ensureJson(url) {
     if (!url) return url;
     return url.indexOf('format=json') !== -1
@@ -211,17 +227,18 @@
       : (url.indexOf('?') !== -1 ? url + '&format=json' : url + '?format=json');
   }
 
-async function fetchAllItems(path, maxPages, useSession, ttl) {
+async function fetchAllItems(path, maxPages, useSession, ttl, stripFields) {
   var pages = maxPages || 10;
 
   if (window.CollectionData && typeof window.CollectionData.get === 'function') {
     return window.CollectionData.get(path, {
-      maxPages: pages,
-      ttl: ttl || 300,
-      memoryCache: true,
-      sessionCache: useSession !== false,
-      credentials: 'same-origin',
-    });
+  maxPages: pages,
+  ttl: ttl || 300,
+  memoryCache: true,
+  sessionCache: useSession !== false,
+  credentials: 'same-origin',
+  stripFields: stripFields,
+});
   }
 
   var key = 'sqb::v12::' + path + '::' + pages;
@@ -255,6 +272,8 @@ async function fetchAllItems(path, maxPages, useSession, ttl) {
 
     url = ensureJson(next);
   }
+
+    items = stripItemFields(items, stripFields);
 
   cacheSet(key, items, ttl || 300, useSession !== false);
   return items;
@@ -1954,12 +1973,17 @@ requestAnimationFrame(function() {
 
     try {
       var results = await Promise.all((Array.isArray(cfg.sources) ? cfg.sources : []).map(function(src) {
-        return fetchAllItems(
-          src.path,
-          perf.maxPages || 10,
-          perf.sessionCache === true,
-          perf.sessionCacheTTL || 300
-        ).then(function(items) {
+        var stripFields = src.stripFields;
+if (stripFields === undefined) stripFields = perf.stripFields;
+if (stripFields === undefined) stripFields = ['body'];
+
+return fetchAllItems(
+  src.path,
+  perf.maxPages || 10,
+  perf.sessionCache === true,
+  perf.sessionCacheTTL || 300,
+  stripFields
+).then(function(items) {
           return items.map(function(raw) {
             return mapItem(raw, src.path);
           });
