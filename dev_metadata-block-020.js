@@ -242,7 +242,8 @@ async function fetchPageJson(settings) {
       ttl: settings.cacheTTL || 900,
       memoryCache: true,
       sessionCache: settings.sessionCache !== false,
-      credentials: 'same-origin'
+      credentials: 'same-origin',
+      stripFields: ['body'],
     });
 
     return { items: Array.isArray(items) ? items : [] };
