@@ -695,29 +695,62 @@
             useSessionCache: sharedCache.useSessionCache ?? CFG?.performance?.useCollectionSessionCache === true
         };
     }
-    async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions) {
+    async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions, keepFields) {
   const opts = cacheOptions || {};
+
+  const fields = Array.isArray(keepFields) ? keepFields : [
+    'id',
+    'title',
+    'fullUrl',
+    'urlId',
+    'assetUrl',
+    'mediaFocalPoint',
+    'categories',
+    'tags',
+    'excerpt',
+    'location',
+    'displayIndex',
+    'workflowState',
+    'startDate',
+    'publishOn',
+    'addedOn',
+    'updatedOn'
+  ];
 
   if (window.CollectionData && typeof window.CollectionData.get === 'function') {
     return window.CollectionData.get(path, {
-  maxPages: maxPages || 5,
-  ttl: 900,
-  memoryCache: opts.useMemoryCache !== false,
-  sessionCache: opts.useSessionCache === true,
-  credentials: 'same-origin',
-  stripFields: ['body']
-});
+      maxPages: maxPages || 1,
+      ttl: 900,
+      memoryCache: opts.useMemoryCache !== false,
+      sessionCache: opts.useSessionCache === true,
+      credentials: 'same-origin',
+      keepFields: fields,
+      stripFields: []
+    });
   }
 
   throw new Error('CollectionData unavailable');
 }
-    async function fetchCollectionItems(CFG) {
-        return fetchCollectionItemsFromPath(CFG.sourceCollection.path, CFG.performance?.maxPages || 5, CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX, getCollectionCacheOptions(CFG));
+    async function fetchCollectionItems(CFG, maxPages) {
+        return fetchCollectionItemsFromPath(
+            CFG.sourceCollection.path,
+            maxPages || CFG.performance?.maxPages || 1,
+            CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
+            getCollectionCacheOptions(CFG),
+            CFG.performance?.keepFields
+        );
     }
-    async function fetchCurrentItemCollectionItems(CFG) {
+   async function fetchCurrentItemCollectionItems(CFG, maxPages) {
         const path = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
         const suffix = CFG.currentItem?.sourceCollection?.jsonFormatSuffix || CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
-        return fetchCollectionItemsFromPath(path, CFG.performance?.maxPages || 5, suffix, getCollectionCacheOptions(CFG));
+
+        return fetchCollectionItemsFromPath(
+            path,
+            maxPages || CFG.performance?.maxPages || 1,
+            suffix,
+            getCollectionCacheOptions(CFG),
+            CFG.performance?.keepFields
+        );
     }
     // ════════════════════════════════════════════════════════════════
     // ITEM COURANT
@@ -1227,7 +1260,8 @@
             },
             performance: {
                 useSessionStorage: true,
-                maxPages: 5,
+                maxPages: 1,
+                progressiveMaxPages: 'all',
                 useCollectionMemoryCache: true,
                 useCollectionSessionCache: false
             }
