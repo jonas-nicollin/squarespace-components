@@ -1,10 +1,5 @@
-
 (function(){
 'use strict';
-
-/* clean : désactive tous les POI (restaurants, commerces, icônes).
-   IMPORTANT: mapStyle: clean  →  sans guillemets (variable JS)
-              mapStyle: 'clean' → guillemets = chaîne invalide, Google ignore */
 var clean=[
   /* Tous les POI off — restaurants, commerces, loisirs, etc. */
   {featureType:'poi',stylers:[{visibility:'off'}]},
@@ -435,6 +430,33 @@ function buildControls(zones,total){
     ?'<span class="locator-block__count">'+getI18n(cfg).itemCount(total)+'</span>':'';
   return'<div class="locator-block__controls">'+countHtml+f+'</div>';
 }
+   function renderCardsProgressive(list, items, count, done){
+  var n = cfg.display.pageSize > 0 ? Math.min(count, items.length) : items.length;
+  var batchSize = Math.max(1, Number(cfg.performance.domBatchSize || 8));
+  var index = 0;
+
+  list.innerHTML = '';
+  LOCATOR_RENDER_IMAGE_INDEX = 0;
+
+  function appendBatch(){
+    var html = '';
+    var end = Math.min(index + batchSize, n);
+
+    for (; index < end; index++) {
+      html += buildCardHTML(items[index]);
+    }
+
+    list.insertAdjacentHTML('beforeend', html);
+
+    if (index < n) {
+      requestAnimationFrame(appendBatch);
+    } else if (typeof done === 'function') {
+      done(n);
+    }
+  }
+
+  appendBatch();
+}
 function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="locator-block__card locator-block__card--skeleton"><div class="locator-block__media"></div><div class="locator-block__body"><div class="locator-block__skeleton-line" style="width:20%"></div><div class="locator-block__skeleton-line" style="width:70%"></div><div class="locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
 
 /* ── Instance ── */
@@ -452,9 +474,26 @@ function createInstance(root,allItems){
       var b=map.getBounds();if(!b)return;
       var v=currentItems.filter(function(i){return b.contains(new google.maps.LatLng(i.lat,i.lng));});
       var list=root.querySelector('.locator-block__list');if(!list)return;
-      LOCATOR_RENDER_IMAGE_INDEX=0;
-list.innerHTML=v.length?v.map(buildCardHTML).join(''):'<p class="locator-block__error" style="padding:1rem;opacity:.5">'+getI18n(cfg).noResults+'</p>';
-      bindCards();
+      renderCardsProgressive(list, items, count, function(n){
+  bindCards();
+
+  var lw=root.querySelector('.locator-block__load-more-wrap');
+  if(lw)lw.remove();
+
+  if(cfg.display.pageSize>0&&items.length>n){
+    var sb=root.querySelector('.locator-block__sidebar');
+    if(sb){
+      sb.insertAdjacentHTML('beforeend','<div class="locator-block__load-more-wrap"><button class="locator-block__load-more" type="button">Voir plus</button></div>');
+      var btn=sb.querySelector('.locator-block__load-more');
+      if(btn)btn.addEventListener('click',function(){
+        visibleCount=Math.min(visibleCount+cfg.display.pageSize,items.length);
+        renderList(items,visibleCount);
+      });
+    }
+  }
+});
+
+return;
     });
   }
   function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.lat,item.lng),item);activePopup.setMap(map);}
