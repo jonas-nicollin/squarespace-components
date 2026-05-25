@@ -146,6 +146,15 @@ function cacheRead(){if(cfg.noCache)return null;try{if(Date.now()>parseInt(local
 function cacheWrite(d){if(cfg.noCache)return;try{localStorage.setItem(CK,JSON.stringify(d));localStorage.setItem(CKT,String(Date.now()+cfg.cacheTTL));}catch(_){}}
 
 /* ── Fetch SQS + pagination timestamp ── */
+   function stripLocatorItemFields(item){
+  if(!item || typeof item!=='object') return item;
+  if(Object.prototype.hasOwnProperty.call(item,'body')) delete item.body;
+  return item;
+}
+
+function stripLocatorItemsFields(items){
+  return Array.isArray(items) ? items.map(stripLocatorItemFields) : items;
+}
 async function fetchItems(){
   if(!cfg.collectionUrl) throw new Error('collectionUrl manquant');
 
@@ -157,7 +166,8 @@ async function fetchItems(){
       ttl: Math.round((cfg.cacheTTL || 600000) / 1000),
       memoryCache: true,
       sessionCache: !cfg.noCache,
-      credentials: 'same-origin'
+      credentials: 'same-origin',
+stripFields: ['body']
     });
   } else {
     var cached = cacheRead();
@@ -179,7 +189,13 @@ async function fetchItems(){
 
       var data = await res.json();
       var page = data.items || (data.collection && data.collection.items) || [];
-      all = all.concat(page);
+      page.forEach(function(item) {
+  if (item && Object.prototype.hasOwnProperty.call(item, 'body')) {
+    delete item.body;
+  }
+});
+
+all = all.concat(page);
       pc++;
 
       var pag = data.pagination || {};
