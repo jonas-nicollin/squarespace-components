@@ -19,6 +19,7 @@ var STORE_KEY_PREFIX = 'collection-data::v0.3::';
     'id',
     'title',
     'fullUrl',
+    'urlId',
     'assetUrl',
     'mediaFocalPoint',
     'categories',
@@ -26,6 +27,8 @@ var STORE_KEY_PREFIX = 'collection-data::v0.3::';
     'excerpt',
     'location',
     'displayIndex',
+    'workflowState',
+    'startDate',
     'publishOn',
     'addedOn',
     'updatedOn'
