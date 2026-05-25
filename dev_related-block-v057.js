@@ -1270,6 +1270,10 @@
         if (!matchesDevGuard(CFG)) return null;
         if (!CFG.requiredBodyClasses.every(cls => document.body.classList.contains(cls))) return null;
         let observer = null;
+        function getProgressiveMaxPages(CFG) {
+  const v = CFG.performance?.progressiveMaxPages;
+  return v === undefined ? 'all' : v;
+}
         async function apply() {
             const target = getInsertTarget(CFG.insertion?.targetSelector);
             if (!target) return false;
@@ -1295,7 +1299,7 @@
             insertInto(target, shell, CFG.insertion?.mode);
             let items;
             try {
-                items = await fetchCollectionItems(CFG);
+                items = await fetchCollectionItems(CFG, CFG.performance?.maxPages || 1);
             } catch (e) {
                 if (CFG.debug) console.warn("[RB]", CFG.key, "fetchCollectionItems failed", e);
                 shell.remove();
