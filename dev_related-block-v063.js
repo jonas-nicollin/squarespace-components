@@ -1394,10 +1394,7 @@ function computeFinalItems(allItems) {
 
     if (limit > 0) result = result.slice(0, limit);
 
-    return applyFallbackFill(result, allItems, currentItem, {
-        ...CFG.selection,
-        limit: limit
-    }, CFG);
+return result;
 }
 
 let finalItems = computeFinalItems(items);
@@ -1426,6 +1423,12 @@ while (
         break;
     }
 }
+
+finalItems = applyFallbackFill(finalItems, items, currentItem, {
+    ...CFG.selection,
+    limit: limit
+}, CFG);
+            
             if (!finalItems.length) {
                 if (CFG.emptyState?.message) {
                     replaceBlockWithEmptyState(shell, CFG);
