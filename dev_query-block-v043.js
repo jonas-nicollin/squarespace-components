@@ -166,43 +166,6 @@
    * 2. FETCH & CACHE
    * ════════════════════════════════════ */
 
-  var MEM = new Map();
-
-  function cacheGet(key, useSession) {
-    if (useSession === false) return null;
-    if (MEM.has(key)) return MEM.get(key);
-
-    try {
-      var raw = sessionStorage.getItem(key);
-      if (!raw) return null;
-      var p = JSON.parse(raw);
-
-      if (Date.now() - p.ts > (p.ttl || 300) * 1000) {
-        sessionStorage.removeItem(key);
-        return null;
-      }
-
-      MEM.set(key, p.data);
-      return p.data;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function cacheSet(key, data, ttl, useSession) {
-    MEM.set(key, data);
-    if (!useSession) return;
-
-    try {
-      sessionStorage.setItem(key, JSON.stringify({
-        ts: Date.now(),
-        ttl: ttl,
-        data: data,
-      }));
-    } catch (_) {
-      noop();
-    }
-  }
 
     function stripItemFields(items, fields) {
     if (!Array.isArray(fields) || !fields.length) return items;
@@ -228,18 +191,19 @@
   }
 
 async function fetchAllItems(path, maxPages, useSession, ttl, stripFields) {
-  var pages = maxPages || 10;
-
-  if (window.CollectionData && typeof window.CollectionData.get === 'function') {
-    return window.CollectionData.get(path, {
-  maxPages: pages,
-  ttl: ttl || 300,
-  memoryCache: true,
-  sessionCache: useSession !== false,
-  credentials: 'same-origin',
-  stripFields: stripFields,
-});
+  if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
+    throw new Error('CollectionData requis pour Query Block');
   }
+
+  return window.CollectionData.get(path, {
+    maxPages: maxPages || 1,
+    ttl: ttl || 300,
+    memoryCache: true,
+    sessionCache: useSession !== false,
+    credentials: 'same-origin',
+    stripFields: stripFields || [],
+  });
+}
 
   var key = 'sqb::v12::' + path + '::' + pages;
   var cached = cacheGet(key, useSession);
