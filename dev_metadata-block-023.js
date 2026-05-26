@@ -320,7 +320,8 @@ async function fetchPageJson(settings) {
       });
     }
 
-    return { items: Array.isArray(items) ? items : [] };
+        return { items: Array.isArray(items) ? items : [] };
+  }
 
   /*
    * Fallback original :
