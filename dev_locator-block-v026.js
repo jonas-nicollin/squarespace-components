@@ -429,7 +429,7 @@ function buildControls(zones,total){
 function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="locator-block__card locator-block__card--skeleton"><div class="locator-block__media"></div><div class="locator-block__body"><div class="locator-block__skeleton-line" style="width:20%"></div><div class="locator-block__skeleton-line" style="width:70%"></div><div class="locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
 
 /* ── Instance ── */
-function createInstance(root,allItems){
+function createInstance(root,allItems,fetchMoreItems){
   var map,markers={},clusterer=null,activeId=null,activePopup=null;
   var currentItems=allItems,visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:allItems.length;
 
@@ -549,7 +549,26 @@ async function init(){
         var loadedMaxPages = initialMaxPages;
     var progressiveMaxPages = cfg.performance.progressiveMaxPages || 'all';
     if(!items.length){roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">'+getI18n(cfg).noResults+'</p>';});return;}
-    roots.forEach(function(r){createInstance(r,items);});
+
+async function fetchMoreItems(){
+  if(progressiveMaxPages !== 'all' && Number(loadedMaxPages) >= Number(progressiveMaxPages)){
+    return items;
+  }
+
+  loadedMaxPages = progressiveMaxPages === 'all'
+    ? Number(loadedMaxPages || 1) + 1
+    : Math.min(Number(loadedMaxPages || 1) + 1, Number(progressiveMaxPages));
+
+  var more = await fetchItems(loadedMaxPages);
+
+  if(more.length > items.length){
+    items = more;
+  }
+
+  return items;
+}
+
+roots.forEach(function(r){createInstance(r,items,fetchMoreItems);});
   }catch(err){console.error('Locator Block:',err);roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">Erreur: '+escHtml(err.message)+'</p>';});}
 }
 
