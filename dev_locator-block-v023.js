@@ -157,11 +157,9 @@ async function fetchItems(maxPages){
     throw new Error('CollectionData requis pour Locator Block');
   }
 
-  var all;
   maxPages = maxPages || cfg.performance.maxPages || 1;
 
-  if(window.CollectionData && typeof window.CollectionData.get === 'function'){
-      all = await window.CollectionData.get(cfg.collectionUrl, {
+  var all = await window.CollectionData.get(cfg.collectionUrl, {
     maxPages: maxPages,
     ttl: Math.round((cfg.cacheTTL || 600000) / 1000),
     memoryCache: true,
@@ -171,6 +169,7 @@ async function fetchItems(maxPages){
       'id',
       'title',
       'fullUrl',
+      'urlId',
       'assetUrl',
       'mediaFocalPoint',
       'categories',
@@ -186,7 +185,6 @@ async function fetchItems(maxPages){
     ],
     stripFields: []
   });
-
 
   log('Brut:', all.length);
 
@@ -239,10 +237,6 @@ async function fetchItems(maxPages){
     items.sort(function(a,b){
       return a.title.localeCompare(b.title, 'fr');
     });
-  }
-
-  if(!(window.CollectionData && typeof window.CollectionData.get === 'function')){
-    cacheWrite(items);
   }
 
   return items;
