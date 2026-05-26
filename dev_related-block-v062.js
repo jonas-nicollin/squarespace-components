@@ -1362,65 +1362,70 @@ if (!currentItem) {
     syncBodyRelatedBlockClasses();
     return false;
 }
-            const candidates = [];
-            items.forEach(item => {
-                if (!item) return;
-                if (!passesConstraints(item, currentItem, CFG.selection)) return;
-                if (!evaluateMatchGroups(item, currentItem, CFG.selection, {
-                    allItems: items
-                })) return;
-                const score = computeCandidateScore(item, currentItem, CFG.selection);
-                if (CFG.selection?.score?.enabled && score < Number(CFG.selection.score.minScore || 0)) return;
-                candidates.push({
-                    ...mapItemForRender(item, CFG),
-                    _score: score
-                });
-            });
-            let finalItems = sortItemsByRules(candidates, CFG.selection?.sort || []);
-finalItems = uniqBy(finalItems, i => String(i.fullUrl || i.title || ""));
+            let sourceLoadedPages = getInitialMaxPages(CFG);
 
-const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
+function computeFinalItems(allItems) {
+    const candidates = [];
 
-if (limit > 0 && finalItems.length < limit && progressiveMaxPages !== (CFG.performance?.maxPages || 1)) {
-  try {
-    items = await fetchCollectionItems(CFG, progressiveMaxPages);
+    allItems.forEach(item => {
+        if (!item) return;
+        if (!passesConstraints(item, currentItem, CFG.selection)) return;
+        if (!evaluateMatchGroups(item, currentItem, CFG.selection, {
+            allItems: allItems
+        })) return;
 
-    const progressiveCandidates = [];
+        const score = computeCandidateScore(item, currentItem, CFG.selection);
 
-    items.forEach(item => {
-      if (!item) return;
-      if (!passesConstraints(item, currentItem, CFG.selection)) return;
-      if (!evaluateMatchGroups(item, currentItem, CFG.selection, {
-        allItems: items
-      })) return;
+        if (
+            CFG.selection?.score?.enabled &&
+            score < Number(CFG.selection.score.minScore || 0)
+        ) return;
 
-      const score = computeCandidateScore(item, currentItem, CFG.selection);
-
-      if (
-        CFG.selection?.score?.enabled &&
-        score < Number(CFG.selection.score.minScore || 0)
-      ) return;
-
-      progressiveCandidates.push({
-        ...mapItemForRender(item, CFG),
-        _score: score
-      });
+        candidates.push({
+            ...mapItemForRender(item, CFG),
+            _score: score
+        });
     });
 
-    finalItems = sortItemsByRules(progressiveCandidates, CFG.selection?.sort || []);
-    finalItems = uniqBy(finalItems, i => String(i.fullUrl || i.title || ""));
+    let result = sortItemsByRules(candidates, CFG.selection?.sort || []);
+    result = uniqBy(result, i => String(i.fullUrl || i.title || ""));
 
-  } catch (e) {
-    if (CFG.debug) console.warn("[RB]", CFG.key, "progressive fetch failed", e);
-  }
+    const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || result.length);
+
+    if (limit > 0) result = result.slice(0, limit);
+
+    return applyFallbackFill(result, allItems, currentItem, {
+        ...CFG.selection,
+        limit: limit
+    }, CFG);
 }
 
-if (limit > 0) finalItems = finalItems.slice(0, limit);
+let finalItems = computeFinalItems(items);
+const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
 
-finalItems = applyFallbackFill(finalItems, items, currentItem, {
-                ...CFG.selection,
-                limit: limit
-            }, CFG);
+while (
+    limit > 0 &&
+    finalItems.length < limit &&
+    canLoadMorePages(sourceLoadedPages, progressiveMaxPages)
+) {
+    const previousCount = items.length;
+
+    sourceLoadedPages = getNextPagesValue(sourceLoadedPages, progressiveMaxPages);
+
+    try {
+        const moreItems = await fetchCollectionItems(CFG, sourceLoadedPages);
+
+        if (!Array.isArray(moreItems) || moreItems.length <= previousCount) {
+            break;
+        }
+
+        items = moreItems;
+        finalItems = computeFinalItems(items);
+    } catch (e) {
+        if (CFG.debug) console.warn("[RB]", CFG.key, "progressive candidates fetch failed", e);
+        break;
+    }
+}
             if (!finalItems.length) {
                 if (CFG.emptyState?.message) {
                     replaceBlockWithEmptyState(shell, CFG);
