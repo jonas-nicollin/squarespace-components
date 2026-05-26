@@ -573,6 +573,38 @@ async function fetchMoreItems(){
 }
 
 roots.forEach(function(r){createInstance(r,items,fetchMoreItems);});
+
+function completeInIdle(){
+  if (typeof fetchMoreItems !== 'function') return;
+
+  fetchMoreItems().then(function(moreItems){
+    if (!Array.isArray(moreItems) || moreItems.length <= items.length) return;
+
+    items = moreItems;
+
+    roots.forEach(function(r){
+      createInstance(r,items,fetchMoreItems);
+    });
+
+    if (cfg.performance.progressiveMaxPages === 'all') {
+      scheduleIdleCompletion();
+    }
+  }).catch(function(err){
+    log('Idle fetch failed:', err);
+  });
+}
+
+function scheduleIdleCompletion(){
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(completeInIdle, { timeout: 2000 });
+  } else {
+    window.setTimeout(completeInIdle, 800);
+  }
+}
+
+if (cfg.performance.idleComplete !== false) {
+  scheduleIdleCompletion();
+}
   }catch(err){console.error('Locator Block:',err);roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">Erreur: '+escHtml(err.message)+'</p>';});}
 }
 
