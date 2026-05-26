@@ -1270,9 +1270,23 @@
         if (!matchesDevGuard(CFG)) return null;
         if (!CFG.requiredBodyClasses.every(cls => document.body.classList.contains(cls))) return null;
         let observer = null;
-        function getProgressiveMaxPages(CFG) {
+        function getInitialMaxPages(CFG) {
+  return CFG.performance?.maxPages || 1;
+}
+
+function getProgressiveMaxPages(CFG) {
   const v = CFG.performance?.progressiveMaxPages;
   return v === undefined ? 'all' : v;
+}
+
+function canLoadMorePages(currentPages, maxPages) {
+  if (maxPages === 'all') return true;
+  return Number(currentPages || 1) < Number(maxPages || 1);
+}
+
+function getNextPagesValue(currentPages, maxPages) {
+  if (maxPages === 'all') return Number(currentPages || 1) + 1;
+  return Math.min(Number(currentPages || 1) + 1, Number(maxPages || 1));
 }
         async function apply() {
             const target = getInsertTarget(CFG.insertion?.targetSelector);
@@ -1312,28 +1326,42 @@
                 return false;
             }
             let currentItemSourceItems = items;
-            const currentSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
-            if (currentSourcePath !== (CFG.sourceCollection?.path || "")) {
-                try {
-                    currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG);
-                } catch (e) {
-                    if (CFG.debug) console.warn("[RB]", CFG.key, "fetchCurrentItemCollectionItems failed", e);
-                    shell.remove();
-                    syncBodyRelatedBlockClasses();
-                    return false;
-                }
-            }
-            if (!Array.isArray(currentItemSourceItems) || !currentItemSourceItems.length) {
-                shell.remove();
-                syncBodyRelatedBlockClasses();
-                return false;
-            }
-            const currentItem = findCurrentItem(currentItemSourceItems, CFG);
-            if (!currentItem) {
-                shell.remove();
-                syncBodyRelatedBlockClasses();
-                return false;
-            }
+let currentItemLoadedPages = getInitialMaxPages(CFG);
+const currentSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
+const sourcePath = CFG.sourceCollection?.path || "";
+const progressiveMaxPages = getProgressiveMaxPages(CFG);
+
+if (currentSourcePath !== sourcePath) {
+    try {
+        currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG, currentItemLoadedPages);
+    } catch (e) {
+        if (CFG.debug) console.warn("[RB]", CFG.key, "fetchCurrentItemCollectionItems failed", e);
+        shell.remove();
+        syncBodyRelatedBlockClasses();
+        return false;
+    }
+}
+
+let currentItem = findCurrentItem(currentItemSourceItems, CFG);
+
+while (!currentItem && canLoadMorePages(currentItemLoadedPages, progressiveMaxPages)) {
+    currentItemLoadedPages = getNextPagesValue(currentItemLoadedPages, progressiveMaxPages);
+
+    try {
+        currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG, currentItemLoadedPages);
+    } catch (e) {
+        if (CFG.debug) console.warn("[RB]", CFG.key, "progressive current item fetch failed", e);
+        break;
+    }
+
+    currentItem = findCurrentItem(currentItemSourceItems, CFG);
+}
+
+if (!currentItem) {
+    shell.remove();
+    syncBodyRelatedBlockClasses();
+    return false;
+}
             const candidates = [];
             items.forEach(item => {
                 if (!item) return;
