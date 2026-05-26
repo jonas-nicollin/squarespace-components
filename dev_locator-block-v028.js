@@ -439,31 +439,21 @@ function createInstance(root,allItems,fetchMoreItems){
     map=new google.maps.Map(c,o);
     map.addListener('click',function(){closePopup();});
     /* updateListOnMapMove doit être dans map:{} dans la config, pas à la racine */
-    if(cfg.map.updateListOnMapMove)map.addListener('idle',function(){
-      var b=map.getBounds();if(!b)return;
-      var v=currentItems.filter(function(i){return b.contains(new google.maps.LatLng(i.lat,i.lng));});
-      var list=root.querySelector('.locator-block__list');if(!list)return;
-      renderCardsProgressive(list, items, count, function(n){
-  bindCards();
+   if(cfg.map.updateListOnMapMove)map.addListener('idle',function(){
+  var b=map.getBounds();
+  if(!b)return;
 
-  var lw=root.querySelector('.locator-block__load-more-wrap');
-  if(lw)lw.remove();
+  var v=currentItems.filter(function(i){
+    return b.contains(new google.maps.LatLng(i.lat,i.lng));
+  });
 
-  if(cfg.display.pageSize>0&&items.length>n){
-    var sb=root.querySelector('.locator-block__sidebar');
-    if(sb){
-      sb.insertAdjacentHTML('beforeend','<div class="locator-block__load-more-wrap"><button class="locator-block__load-more" type="button">Voir plus</button></div>');
-      var btn=sb.querySelector('.locator-block__load-more');
-      if(btn)btn.addEventListener('click',function(){
-        visibleCount=Math.min(visibleCount+cfg.display.pageSize,items.length);
-        renderList(items,visibleCount);
-      });
-    }
-  }
+  var list=root.querySelector('.locator-block__list');
+  if(!list)return;
+
+  renderCardsProgressive(list, v, v.length, function(){
+    bindCards();
+  });
 });
-
-return;
-    });
   }
   function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.lat,item.lng),item);activePopup.setMap(map);}
   function closePopup(){if(activePopup){activePopup.setMap(null);activePopup=null;}}
