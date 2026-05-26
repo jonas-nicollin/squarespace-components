@@ -205,43 +205,6 @@ async function fetchAllItems(path, maxPages, useSession, ttl, stripFields) {
   });
 }
 
-  var key = 'sqb::v12::' + path + '::' + pages;
-  var cached = cacheGet(key, useSession);
-  if (cached) return cached;
-
-  var items = [];
-  var url = ensureJson(path);
-
-  for (var p = 0; p < pages; p++) {
-    var data;
-
-    try {
-      var res = await fetch(url, { credentials: 'same-origin' });
-      if (!res.ok) break;
-      data = await res.json();
-    } catch (_) {
-      break;
-    }
-
-    var batch = Array.isArray(data && data.items)
-      ? data.items
-      : Array.isArray(data && data.itemList)
-        ? data.itemList
-        : [];
-
-    items.push.apply(items, batch);
-
-    var next = data && data.pagination && data.pagination.nextPageUrl;
-    if (!next) break;
-
-    url = ensureJson(next);
-  }
-
-    items = stripItemFields(items, stripFields);
-
-  cacheSet(key, items, ttl || 300, useSession !== false);
-  return items;
-}
   /* ════════════════════════════════════
    * 3. MAPPING
    * ════════════════════════════════════ */
