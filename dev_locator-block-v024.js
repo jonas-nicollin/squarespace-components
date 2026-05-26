@@ -53,6 +53,9 @@ cfg.performance=Object.assign({
   lazyInit:true,
   lazyRootMargin:'1200px 0px',
   priorityImages:true,
+  maxPages:1,
+  progressiveMaxPages:'all',
+  domBatchSize:8,
 },cfg.performance||{});
 
 /* display — même modèle que Related Block / Query Block.
@@ -135,22 +138,8 @@ function imgTag(base,alt,cls,sizes,fp,priority){
 /* ── Coordonnées ── */
 function getCoords(loc){loc=loc||{};return{lat:parseFloat(loc.mapLat||loc.markerLat||''),lng:parseFloat(loc.mapLng||loc.markerLng||'')};}
 
-/* ── Cache localStorage ── */
-var CK='locator_block_v18',CKT='locator_block_v18_ttl';
-function cacheRead(){if(cfg.noCache)return null;try{if(Date.now()>parseInt(localStorage.getItem(CKT)||'0',10))return null;var r=localStorage.getItem(CK);return r?JSON.parse(r):null;}catch(_){return null;}}
-function cacheWrite(d){if(cfg.noCache)return;try{localStorage.setItem(CK,JSON.stringify(d));localStorage.setItem(CKT,String(Date.now()+cfg.cacheTTL));}catch(_){}}
-
 /* ── Fetch SQS + pagination timestamp ── */
-   function stripLocatorItemFields(item){
-  if(!item || typeof item!=='object') return item;
-  if(Object.prototype.hasOwnProperty.call(item,'body')) delete item.body;
-  return item;
-}
-
-function stripLocatorItemsFields(items){
-  return Array.isArray(items) ? items.map(stripLocatorItemFields) : items;
-}
-async function fetchItems(maxPages){
+   async function fetchItems(maxPages){
   if(!cfg.collectionUrl) throw new Error('collectionUrl manquant');
 
   if(!window.CollectionData || typeof window.CollectionData.get !== 'function'){
