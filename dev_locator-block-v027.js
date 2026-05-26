@@ -504,11 +504,25 @@ return;
   function renderList(items,count){
     var list=root.querySelector('.locator-block__list');if(!list)return;
     var n=cfg.display.pageSize>0?Math.min(count,items.length):items.length;
-    LOCATOR_RENDER_IMAGE_INDEX=0;
-list.innerHTML=items.slice(0,n).map(buildCardHTML).join('');
-bindCards();
+    renderCardsProgressive(list, items, count, function(){
+  bindCards();
+});
     var lw=root.querySelector('.locator-block__load-more-wrap');if(lw)lw.remove();
-    if(cfg.display.pageSize>0&&items.length>n){var sb=root.querySelector('.locator-block__sidebar');if(sb){sb.insertAdjacentHTML('beforeend','<div class="locator-block__load-more-wrap"><button class="locator-block__load-more" type="button">Voir plus</button></div>');var btn=sb.querySelector('.locator-block__load-more');if(btn)btn.addEventListener('click',function(){visibleCount=Math.min(visibleCount+cfg.display.pageSize,items.length);renderList(items,visibleCount);});}}
+    if(cfg.display.pageSize>0&&items.length>n){var sb=root.querySelector('.locator-block__sidebar');if(sb){sb.insertAdjacentHTML('beforeend','<div class="locator-block__load-more-wrap"><button class="locator-block__load-more" type="button">Voir plus</button></div>');var btn=sb.querySelector('.locator-block__load-more');if(btn)btn.addEventListener('click',async function(){
+  visibleCount = Math.min(visibleCount + cfg.display.pageSize, items.length);
+
+  if(typeof fetchMoreItems === 'function' && visibleCount >= items.length){
+    try{
+      allItems = await fetchMoreItems();
+      currentItems = allItems;
+      items = allItems;
+    }catch(err){
+      log('Fetch more failed:', err);
+    }
+  }
+
+  renderList(items, visibleCount);
+});}}
   }
   function applyFilter(zone){closePopup();currentItems=zone?allItems.filter(function(i){return i.zones.indexOf(zone)!==-1;}):allItems;visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:currentItems.length;renderList(currentItems,visibleCount);allItems.forEach(function(i){if(!markers[i.id])return;markers[i.id].marker.setVisible(currentItems.some(function(ci){return ci.id===i.id;}));});if(currentItems.length&&zone){var b=new google.maps.LatLngBounds();currentItems.forEach(function(i){b.extend({lat:i.lat,lng:i.lng});});map.fitBounds(b,{padding:60});}}
 
