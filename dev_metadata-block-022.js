@@ -236,34 +236,91 @@ async function fetchPageJson(settings) {
   if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
     throw new Error('CollectionData requis pour Metadata Blocks avec jsonUrl');
   }
-    const items = await window.CollectionData.get(settings.jsonUrl, {
-      maxPages: settings.maxPages || settings.performance?.maxPages || 1,
+        const maxPages = settings.maxPages || settings.performance?.maxPages || 1;
+    const progressiveMaxPages = settings.performance?.progressiveMaxPages || 'all';
+
+    let items = await window.CollectionData.get(settings.jsonUrl, {
+      maxPages: maxPages,
       ttl: settings.cacheTTL || 900,
       memoryCache: true,
       sessionCache: settings.sessionCache !== false,
       credentials: 'same-origin',
       keepFields: settings.performance?.keepFields || [
-  'id',
-  'title',
-  'fullUrl',
-  'urlId',
-  'assetUrl',
-  'mediaFocalPoint',
-  'categories',
-  'tags',
-  'excerpt',
-  'location',
-  'displayIndex',
-  'workflowState',
-  'publishOn',
-  'addedOn',
-  'updatedOn'
-],
-stripFields: []
+        'id',
+        'title',
+        'fullUrl',
+        'urlId',
+        'assetUrl',
+        'mediaFocalPoint',
+        'categories',
+        'tags',
+        'excerpt',
+        'location',
+        'displayIndex',
+        'workflowState',
+        'publishOn',
+        'addedOn',
+        'updatedOn'
+      ],
+      stripFields: []
     });
 
+    const currentPath = getCurrentPath();
+    let found = Array.isArray(items) && items.some(item => {
+      if (normalizePath(item?.fullUrl) === currentPath) return true;
+      const urlId = trimSlashes(item?.urlId || '');
+      return urlId && currentPath.endsWith('/' + urlId);
+    });
+
+    let loadedMaxPages = maxPages;
+
+    while (!found && progressiveMaxPages) {
+      if (progressiveMaxPages !== 'all' && Number(loadedMaxPages) >= Number(progressiveMaxPages)) {
+        break;
+      }
+
+      loadedMaxPages = progressiveMaxPages === 'all'
+        ? Number(loadedMaxPages || 1) + 1
+        : Math.min(Number(loadedMaxPages || 1) + 1, Number(progressiveMaxPages));
+
+      const nextItems = await window.CollectionData.get(settings.jsonUrl, {
+        maxPages: loadedMaxPages,
+        ttl: settings.cacheTTL || 900,
+        memoryCache: true,
+        sessionCache: settings.sessionCache !== false,
+        credentials: 'same-origin',
+        keepFields: settings.performance?.keepFields || [
+          'id',
+          'title',
+          'fullUrl',
+          'urlId',
+          'assetUrl',
+          'mediaFocalPoint',
+          'categories',
+          'tags',
+          'excerpt',
+          'location',
+          'displayIndex',
+          'workflowState',
+          'publishOn',
+          'addedOn',
+          'updatedOn'
+        ],
+        stripFields: []
+      });
+
+      if (!Array.isArray(nextItems) || nextItems.length <= items.length) break;
+
+      items = nextItems;
+
+      found = items.some(item => {
+        if (normalizePath(item?.fullUrl) === currentPath) return true;
+        const urlId = trimSlashes(item?.urlId || '');
+        return urlId && currentPath.endsWith('/' + urlId);
+      });
+    }
+
     return { items: Array.isArray(items) ? items : [] };
-  }
 
   /*
    * Fallback original :
