@@ -543,8 +543,11 @@ async function init(){
   if(!cfg.apiKey){roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">apiKey manquant</p>';});return;}
   roots.forEach(function(r){r.innerHTML='<div class="locator-block__inner locator-block__inner--list"><div class="locator-block__sidebar"><div class="locator-block__list">'+buildSkeleton()+'</div></div><div class="locator-block__map-wrap"><div class="locator-block__map locator-block__map--loading"></div></div></div>';});
   try{
-    var loaders=[fetchItems(),loadMapsAPI()];if(cfg.map.clustering)loaders.push(loadClusterer());
+    var initialMaxPages = cfg.performance.maxPages || 1;
+    var loaders=[fetchItems(initialMaxPages),loadMapsAPI()];if(cfg.map.clustering)loaders.push(loadClusterer());
     var results=await Promise.all(loaders);var items=results[0];log('Items:',items.length);
+        var loadedMaxPages = initialMaxPages;
+    var progressiveMaxPages = cfg.performance.progressiveMaxPages || 'all';
     if(!items.length){roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">'+getI18n(cfg).noResults+'</p>';});return;}
     roots.forEach(function(r){createInstance(r,items);});
   }catch(err){console.error('Locator Block:',err);roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">Erreur: '+escHtml(err.message)+'</p>';});}
