@@ -1,0 +1,1402 @@
+/*!
+ * Squarespace Collection Block (SQB) v27
+ * Fetch JSON paginé · filtres · tabs · groupBy · sticky · hooks · cache
+ * https://github.com/jonas-nicollin/squarespace-components
+ *
+ * CHANGELOG v27
+ * — Suppression totale du cache interne (MEM + cacheGet/cacheSet)
+ *   → Collection Data est le seul responsable du cache
+ * — Suppression de fetchAllItems autonome : CollectionData.get() obligatoire
+ * — keepFields non répétés ici : Collection Data les fournit par défaut
+ * — Suppression de tout le code Swiper/hook
+ * — Fix allRemoteLoaded : distingue erreur réseau de fin de collection
+ *   via CollectionData.stats()
+ * — Defaults performance nettoyés
+ * — Suppression de MEM (Map cache interne) et cacheGet/cacheSet
+ */
+(function () {
+  'use strict';
+
+  /* ════════════════════════════════════
+   * 0. UTILITAIRES
+   * ════════════════════════════════════ */
+
+  function noop() {}
+
+  function norm(str) {
+    return String(str || '')
+      .replace(/\u00A0/g, ' ').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\u2019']/g, "'").replace(/&/g, 'and')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  function slugify(str) {
+    return norm(str).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  function cleanHTML(str) {
+    var d = document.createElement('div');
+    d.innerHTML = String(str || '');
+    return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function truncate(str, max) {
+    var s = cleanHTML(str);
+    if (!s || s.length <= max) return s;
+    var cut = s.slice(0, max), sp = cut.lastIndexOf(' ');
+    return (sp > 0 ? cut.slice(0, sp) : cut).trim() + '\u2026';
+  }
+
+  function uniqBy(arr, fn) {
+    var seen = new Set();
+    return arr.filter(function (x) {
+      var k = fn(x);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+
+  function el(tag, attrs) {
+    var e = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v == null) return;
+      if (k === 'class')               e.className = v;
+      else if (k === 'style')          e.style.cssText = v;
+      else if (k.indexOf('data-') === 0) e.setAttribute(k, v);
+      else                             e[k] = v;
+    });
+    return e;
+  }
+
+  function setText(e, s) { e.textContent = s; return e; }
+
+  function parseTag(tag) {
+    var raw = String(tag || ''), idx = raw.indexOf(':');
+    if (idx === -1) return { prefix: null, value: raw.trim() };
+    return { prefix: raw.slice(0, idx).trim(), value: raw.slice(idx + 1).trim() };
+  }
+
+  function getTagValuesByPrefix(item, prefix) {
+    var pn = norm(String(prefix).replace(/:$/, ''));
+    return (item.tags || []).reduce(function (acc, tag) {
+      var p = parseTag(tag);
+      if (p.prefix && norm(p.prefix) === pn && p.value) acc.push(p.value);
+      return acc;
+    }, []);
+  }
+
+  function applyCustomOrder(vals, order) {
+    if (!Array.isArray(order) || !order.length) return vals;
+    var orderMap = new Map(order.map(function (v, i) { return [norm(v), i]; }));
+    return vals.slice().sort(function (a, b) {
+      var ai = orderMap.has(norm(a)) ? orderMap.get(norm(a)) : 9999;
+      var bi = orderMap.has(norm(b)) ? orderMap.get(norm(b)) : 9999;
+      if (ai !== bi) return ai - bi;
+      return norm(a).localeCompare(norm(b));
+    });
+  }
+
+  function normalizePrefixes(tagPrefixes, globalLayout) {
+    if (!Array.isArray(tagPrefixes)) return [];
+    return tagPrefixes.map(function (p) {
+      if (typeof p === 'string') {
+        return { prefix: p, layout: globalLayout || 'pills', showLabel: true, order: null, filterFormat: null };
+      }
+      return {
+        prefix:       p.prefix,
+        layout:       p.layout       || globalLayout || 'pills',
+        showLabel:    p.showLabel    !== false,
+        order:        p.order        || null,
+        filterFormat: p.filterFormat || null,
+      };
+    });
+  }
+
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+
+  /* ════════════════════════════════════
+   * 1. LOADER
+   * ════════════════════════════════════ */
+
+  function injectLoaderStyles() {
+    if (document.getElementById('sqb-loader-styles')) return;
+    var css = [
+      '.sqb-loader{display:flex;align-items:center;justify-content:center;gap:16px;padding:3rem 1rem;min-height:6rem}',
+      '.sqb-loader-dot{width:4px;height:4px;border-radius:50%;background:var(--paragraphMediumColor,currentColor);opacity:.2;animation:sqb-pulse 1.2s infinite ease-in-out}',
+      '.sqb-loader-dot:nth-child(1){animation-delay:0s}',
+      '.sqb-loader-dot:nth-child(2){animation-delay:.4s}',
+      '.sqb-loader-dot:nth-child(3){animation-delay:.8s}',
+      '@keyframes sqb-pulse{0%,100%{opacity:.2}33%{opacity:.7}66%{opacity:.4}}',
+      '.sqb-loader--text{display:block;opacity:.5;text-align:center;padding:3rem 1rem}',
+    ].join('');
+    var s = document.createElement('style');
+    s.id = 'sqb-loader-styles';
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  function buildLoader(loadingText) {
+    if (loadingText) return setText(el('div', { class: 'sqb-loader sqb-loader--text', 'aria-live': 'polite' }), loadingText);
+    var w = el('div', { class: 'sqb-loader', role: 'status', 'aria-label': 'Chargement' });
+    for (var i = 0; i < 3; i++) w.appendChild(el('span', { class: 'sqb-loader-dot', 'aria-hidden': 'true' }));
+    return w;
+  }
+
+  /* ════════════════════════════════════
+   * 2. FETCH — délégué à Collection Data
+   *
+   * Plus de cache interne MEM ni de cacheGet/cacheSet.
+   * Collection Data est la seule source de vérité.
+   * keepFields non répétés ici : CollectionData les fournit par défaut.
+   * ════════════════════════════════════ */
+
+  function ensureJson(url) {
+    if (!url) return url;
+    return url.indexOf('format=json') !== -1
+      ? url
+      : (url.indexOf('?') !== -1 ? url + '&format=json' : url + '?format=json');
+  }
+
+  async function fetchAllItems(path, maxPages, useSession, ttl) {
+    if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
+      throw new Error('[SQB] CollectionData requis — charger collection-data.js avant query-block.js');
+    }
+    return window.CollectionData.get(path, {
+      maxPages:     maxPages || 1,
+      ttl:          ttl      || 300,
+      memoryCache:  true,
+      sessionCache: useSession !== false,
+      credentials:  'same-origin',
+      /* keepFields non déclaré ici : Collection Data utilise DEFAULT_KEEP_FIELDS */
+    });
+  }
+
+  /*
+   * Détection fin de collection via CollectionData.stats().
+   * Retourne true si la collection est marquée complete ET sans erreur réseau.
+   * Utilisé pour distinguer "plus de pages" de "erreur réseau silencieuse".
+   */
+  function isCollectionComplete(path) {
+    if (!window.CollectionData || typeof window.CollectionData.stats !== 'function') return false;
+    var s = window.CollectionData.stats();
+    var entry = (s.collections || []).find(function (c) {
+      return c.key && c.key.indexOf(path) !== -1;
+    });
+    return entry ? (entry.complete && !entry.fetchError) : false;
+  }
+
+  /* ════════════════════════════════════
+   * 3. MAPPING
+   * ════════════════════════════════════ */
+
+  function mapItem(raw, sourcePath) {
+    var assetUrl = raw.assetUrl || (raw.asset && raw.asset.url) || null;
+    var fp = raw.mediaFocalPoint;
+    var focalPoint = (fp && typeof fp.x === 'number' && typeof fp.y === 'number')
+      ? (Math.round(fp.x * 100) + '% ' + Math.round(fp.y * 100) + '%')
+      : '50% 50%';
+    var loc = raw.location;
+    return {
+      id:           raw.id,
+      title:        cleanHTML(raw.title || ''),
+      fullUrl:      raw.fullUrl || (sourcePath + '/' + (raw.urlId || '')),
+      urlId:        raw.urlId   || '',
+      assetUrl:     assetUrl,
+      focalPoint:   focalPoint,
+      categories:   (raw.categories || []).map(cleanHTML).filter(Boolean),
+      tags:         (raw.tags       || []).map(cleanHTML).filter(Boolean),
+      excerpt:      truncate(raw.excerpt || raw.body || '', 160),
+      excerptRaw:   raw.excerpt || raw.body || '',
+      location:     loc ? cleanHTML(loc.addressTitle || loc.addressLine1 || '') : '',
+      displayIndex: Number(raw.displayIndex != null ? raw.displayIndex : 999999),
+      timestamp:    Number(raw.startDate || raw.publishOn || raw.addedOn || raw.updatedOn || 0),
+    };
+  }
+
+  /* ════════════════════════════════════
+   * 4. FILTRAGE
+   * ════════════════════════════════════ */
+
+  function matchesCats(item, cats) {
+    return !cats || !cats.length || item.categories.some(function (c) {
+      return cats.some(function (w) { return norm(w) === norm(c); });
+    });
+  }
+
+  function applyPreFilter(items, pf) {
+    if (!pf) return items;
+    return items.filter(function (item) {
+      if (!matchesCats(item, pf.categories)) return false;
+      if (pf.excludeCategories && matchesCats(item, pf.excludeCategories)) return false;
+      if (pf.tagValues) {
+        for (var i = 0; i < pf.tagValues.length; i++) {
+          var tv = pf.tagValues[i];
+          if (!getTagValuesByPrefix(item, tv.prefix).some(function (v) { return norm(v) === norm(tv.value); })) return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  function applyTabFilter(items, tf) {
+    if (!tf) return items;
+    return items.filter(function (item) {
+      if (!matchesCats(item, tf.categories)) return false;
+      if (tf.excludeCategories && matchesCats(item, tf.excludeCategories)) return false;
+      if (tf.tagValues) {
+        for (var i = 0; i < tf.tagValues.length; i++) {
+          var tv = tf.tagValues[i];
+          if (!getTagValuesByPrefix(item, tv.prefix).some(function (v) { return norm(v) === norm(tv.value); })) return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  function matchesUIFilters(item, state) {
+    if (state.category && !item.categories.some(function (c) { return norm(c) === norm(state.category); })) return false;
+    var tags = state.tags || {};
+    for (var prefix in tags) {
+      if (!Object.prototype.hasOwnProperty.call(tags, prefix) || !tags[prefix]) continue;
+      if (!getTagValuesByPrefix(item, prefix).some(function (v) { return norm(v) === norm(tags[prefix]); })) return false;
+    }
+    if (state.search) {
+      var q = norm(state.search);
+      if (norm([item.title, item.excerpt, item.location].concat(item.categories, item.tags).join(' ')).indexOf(q) === -1) return false;
+    }
+    return true;
+  }
+
+  /* ════════════════════════════════════
+   * 5. TRI
+   * ════════════════════════════════════ */
+
+  function tryNum(s) {
+    var n = parseFloat(String(s || '').replace(',', '.'));
+    return isFinite(n) ? n : null;
+  }
+
+  function sortItems(items, sort) {
+    if (!sort) return items;
+    var type = sort.type || 'collection';
+    var dir  = (sort.direction || 'asc') === 'desc' ? -1 : 1;
+    if (type === 'random') return shuffle(items);
+    return items.slice().sort(function (a, b) {
+      if (type === 'date')     return (a.timestamp - b.timestamp) * dir;
+      if (type === 'title')    return norm(a.title).localeCompare(norm(b.title)) * dir;
+      if (type === 'category') return norm(a.categories[0] || '').localeCompare(norm(b.categories[0] || '')) * dir;
+      if (typeof type === 'object' && type.tagPrefix) {
+        var av = getTagValuesByPrefix(a, type.tagPrefix)[0] || '';
+        var bv = getTagValuesByPrefix(b, type.tagPrefix)[0] || '';
+        var an = tryNum(av), bn = tryNum(bv);
+        if (an !== null && bn !== null) return (an - bn) * dir;
+        return norm(av).localeCompare(norm(bv)) * dir;
+      }
+      return (a.displayIndex - b.displayIndex) * dir;
+    });
+  }
+
+  /* ════════════════════════════════════
+   * 6. LAZY-LOAD IMAGES
+   * ════════════════════════════════════ */
+
+  var IO_LAZY = ('IntersectionObserver' in window)
+    ? new IntersectionObserver(function (entries, obs) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          var img = entry.target;
+          if (img.dataset.srcset) img.srcset = img.dataset.srcset;
+          if (img.dataset.src)    img.src    = img.dataset.src;
+          img.removeAttribute('data-src');
+          img.removeAttribute('data-srcset');
+          obs.unobserve(img);
+        });
+      }, { rootMargin: '300px 0px' })
+    : null;
+
+  var SRCSET_WIDTHS = [300, 500, 750, 1000, 1500];
+  var SQB_RENDER_IMAGE_INDEX = 0;
+
+  function buildImg(assetUrl, focalPoint, alt, priority) {
+    var imgIndex   = SQB_RENDER_IMAGE_INDEX++;
+    var isPriority = priority === true || imgIndex < 3;
+    var srcset     = SRCSET_WIDTHS.map(function (w) { return assetUrl + '?format=' + w + 'w ' + w + 'w'; }).join(', ');
+    var fallbackSrc = assetUrl + '?format=750w';
+    var wrap = el('div', { class: 'sqb-card__img-wrap' });
+    var img  = el('img', {
+      class:    'sqb-card__img',
+      alt:      alt || '',
+      sizes:    '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw',
+      decoding: 'async',
+    });
+    img.style.objectPosition = focalPoint;
+    if (isPriority) {
+      img.loading       = 'eager';
+      img.fetchPriority = 'high';
+      img.srcset = srcset;
+      img.src    = fallbackSrc;
+    } else {
+      img.fetchPriority = 'low';
+      img.loading       = 'lazy';
+      if (IO_LAZY) {
+        img.dataset.src    = fallbackSrc;
+        img.dataset.srcset = srcset;
+        IO_LAZY.observe(img);
+      } else {
+        img.srcset = srcset;
+        img.src    = fallbackSrc;
+      }
+    }
+    img.addEventListener('load', function () { img.classList.add('sqb-card__img--loaded'); }, { once: true });
+    wrap.appendChild(img);
+    return wrap;
+  }
+
+  /* ════════════════════════════════════
+   * 7. RENDU CARTE
+   * ════════════════════════════════════ */
+
+  var ROLE_CLASS = {
+    media:  'sqb-card__media',
+    header: 'sqb-card__header',
+    body:   'sqb-card__body',
+    meta:   'sqb-card__meta',
+    footer: 'sqb-card__footer',
+  };
+
+  function buildLabelNode(label, labelIcon) {
+    if (labelIcon) {
+      var ic = el('span', { class: 'sqb-icon sqb-tag-icon' });
+      ic.textContent = labelIcon;
+      return ic;
+    }
+    if (label) {
+      var lbl = el('span', { class: 'sqb-card__tag-label' });
+      lbl.textContent = label + '\u00A0';
+      return lbl;
+    }
+    return null;
+  }
+
+  function buildChild(def, item, cardIndex) {
+    var type = typeof def === 'string' ? def : (def && def.type);
+
+    if (type === 'image') {
+      return item.assetUrl ? buildImg(item.assetUrl, item.focalPoint, item.title, cardIndex < 3) : null;
+    }
+    if (type === 'categories') {
+      if (!item.categories.length) return null;
+      var w = el('div', { class: 'sqb-card__cats' });
+      item.categories.forEach(function (c) { var s = el('span', { class: 'sqb-card__cat' }); s.textContent = c; w.appendChild(s); });
+      return w;
+    }
+    if (type === 'title') {
+      if (!item.title) return null;
+      var t = el('div', { class: 'sqb-card__title', role: 'heading', 'aria-level': '3' });
+      t.textContent = item.title;
+      return t;
+    }
+    if (type === 'excerpt') {
+      if (!item.excerpt) return null;
+      var p = el('p', { class: 'sqb-card__excerpt' });
+      if (def && def.excerptPlain) { p.textContent = item.excerpt; }
+      else                          { p.innerHTML   = sanitizeHTML(item.excerptRaw || item.excerpt); }
+      return p;
+    }
+    if (type === 'location') {
+      if (!item.location) return null;
+      var pl = el('p', { class: 'sqb-card__location' });
+      pl.textContent = item.location;
+      return pl;
+    }
+    if (type === 'tagPrefix') {
+      var prefix    = (def && def.prefix)    || '';
+      var label     = (def && def.label != null)  ? def.label  : '';
+      var labelIcon = (def && def.labelIcon) || null;
+      var joinWith  = (def && def.joinWith != null) ? def.joinWith
+        : (def && def.inlineSeparator != null) ? def.inlineSeparator
+        : ', ';
+      if (def && def.displayInline) joinWith = def.inlineSeparator || joinWith || ', ';
+      var displayFmt = (def && def.displayFormat) || null;
+      var locale     = (def && def.locale)        || null;
+      var rawVals    = getTagValuesByPrefix(item, prefix);
+      var vals       = displayFmt
+        ? rawVals.map(function (v) { return formatISOTag(v, displayFmt, locale); })
+        : rawVals;
+      if (!vals.length) return null;
+      var row = el('div', { class: 'sqb-card__tag-field', 'data-prefix': prefix });
+      var labelNode = buildLabelNode(label, labelIcon);
+      if (labelNode) row.appendChild(labelNode);
+      if (joinWith === '\n') {
+        var vw = el('span', { class: 'sqb-card__tag-value sqb-card__tag-value--multiline' });
+        vals.forEach(function (v, i) { if (i > 0) vw.appendChild(document.createElement('br')); vw.appendChild(document.createTextNode(v)); });
+        row.appendChild(vw);
+      } else {
+        setText(row.appendChild(el('span', { class: 'sqb-card__tag-value' })), vals.join(joinWith));
+      }
+      return row;
+    }
+    return null;
+  }
+
+  function buildCard(item, cfg, index) {
+    var disp = cfg.display || {};
+    var link = disp.cardLink !== false;
+    var card = el(link ? 'a' : 'div', { class: 'sqb-card', 'data-sqb-index': String(index) });
+    if (link) {
+      card.href = item.fullUrl;
+      if (disp.cardLinkNewTab) { card.target = '_blank'; card.rel = 'noopener noreferrer'; }
+    }
+    var cardClassesCfg = disp.cardClasses || null;
+    if (cardClassesCfg) {
+      if (cardClassesCfg.categories) {
+        item.categories.forEach(function (cat) { card.classList.add('sqb-cat--' + slugify(cat)); });
+      }
+      (Array.isArray(cardClassesCfg.tagPrefixes) ? cardClassesCfg.tagPrefixes : []).forEach(function (pfx) {
+        getTagValuesByPrefix(item, pfx).forEach(function (val) { card.classList.add('sqb-tag--' + slugify(pfx) + '--' + slugify(val)); });
+      });
+    }
+    var groups = Array.isArray(disp.groups) && disp.groups.length ? disp.groups : null;
+    if (groups) {
+      groups.forEach(function (grp) {
+        var wrapper  = el('div', { class: ROLE_CLASS[grp.role] || 'sqb-card__group' });
+        var sep      = grp.separator || ' ';
+        var useInline = grp.inline === true;
+        var children = grp.children || [];
+        if (useInline) {
+          wrapper.classList.add('sqb-card__group--inline');
+          var built = children.map(function (def) { return buildChild(def, item, index); }).filter(Boolean);
+          built.forEach(function (node, ni) {
+            wrapper.appendChild(node);
+            if (ni < built.length - 1 && sep) { var sepNode = el('span', { class: 'sqb-inline-sep' }); sepNode.textContent = sep; wrapper.appendChild(sepNode); }
+          });
+        } else {
+          children.forEach(function (def) { var node = buildChild(def, item, index); if (node) wrapper.appendChild(node); });
+        }
+        if (wrapper.hasChildNodes()) card.appendChild(wrapper);
+      });
+      return card;
+    }
+    /* Rendu par défaut sans groups */
+    if (item.assetUrl) card.appendChild(buildImg(item.assetUrl, item.focalPoint, item.title, index < 3));
+    var body = el('div', { class: 'sqb-card__body' });
+    if (item.categories.length) {
+      var meta = el('div', { class: 'sqb-card__cats' });
+      item.categories.forEach(function (c) { var s = el('span', { class: 'sqb-card__cat' }); s.textContent = c; meta.appendChild(s); });
+      body.appendChild(meta);
+    }
+    if (item.title) {
+      var tt = el('div', { class: 'sqb-card__title', role: 'heading', 'aria-level': '3' });
+      tt.textContent = item.title;
+      body.appendChild(tt);
+    }
+    (Array.isArray(disp.tagPrefixFields) ? disp.tagPrefixFields : []).forEach(function (f) {
+      var node = buildChild({ type: 'tagPrefix', prefix: f.prefix, label: f.label, labelIcon: f.labelIcon, joinWith: f.joinWith }, item);
+      if (node) body.appendChild(node);
+    });
+    if (disp.excerpt !== false && item.excerpt) { var ep = el('p', { class: 'sqb-card__excerpt' }); ep.textContent = item.excerpt; body.appendChild(ep); }
+    if (disp.location && item.location)         { var lp = el('p', { class: 'sqb-card__location' }); lp.textContent = item.location; body.appendChild(lp); }
+    card.appendChild(body);
+    return card;
+  }
+
+  /* ════════════════════════════════════
+   * 7b. HEADING
+   * ════════════════════════════════════ */
+
+  function buildHeading(headingCfg) {
+    if (!headingCfg) return { headingEl: null, ctaBelowEl: null };
+    var wrap = el('div', { class: 'sqb-heading' });
+    if (headingCfg.text) {
+      var h = el(headingCfg.tag || 'h3', { class: 'sqb-heading__text' });
+      h.textContent = headingCfg.text;
+      wrap.appendChild(h);
+    }
+    var cta = headingCfg.cta, ctaBelow = null, ctaPos = (cta && cta.position) || 'inline';
+    if (cta && cta.text && cta.href) {
+      var a = el('a', { href: cta.href });
+      if (cta.newTab) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+      a.textContent = cta.text;
+      if (ctaPos === 'below') {
+        a.className = 'sqb-heading__cta-below sqb-load-more';
+        var ctaBelowWrapper = el('div', { class: 'sqb-footer--cta' });
+        ctaBelowWrapper.appendChild(a);
+        ctaBelow = ctaBelowWrapper;
+      } else {
+        a.className = 'sqb-heading__cta';
+        wrap.appendChild(a);
+      }
+    }
+    return { headingEl: wrap, ctaBelowEl: ctaBelow };
+  }
+
+  /* ════════════════════════════════════
+   * DATE UTILITIES
+   * ════════════════════════════════════ */
+
+  function parseISO(str) {
+    var m = String(str || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+    if (!m) return null;
+    return {
+      year: parseInt(m[1], 10), month: parseInt(m[2], 10) - 1, day: parseInt(m[3], 10),
+      hour: m[4] ? parseInt(m[4], 10) : null, min: m[5] ? parseInt(m[5], 10) : null,
+      ts: new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), m[4] ? parseInt(m[4], 10) : 0, m[5] ? parseInt(m[5], 10) : 0).getTime(),
+    };
+  }
+
+  var SQB_TZ = (function () {
+    try { var ctx = window.Static && window.Static.SQUARESPACE_CONTEXT; return (ctx && ctx.websiteTimeZone) ? ctx.websiteTimeZone : null; }
+    catch (_) { return null; }
+  })();
+
+  function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+  function formatISOTag(str, format, locale) {
+    if (String(str || '').indexOf('/') !== -1) {
+      var parts = str.split('/'), d1 = parseISO(parts[0]), d2 = parseISO(parts[1]);
+      if (d1 && d2) {
+        var loc = locale || document.documentElement.lang || 'fr-CH';
+        try {
+          var dt1 = new Date(d1.year, d1.month, d1.day), dt2 = new Date(d2.year, d2.month, d2.day);
+          if (d1.month === d2.month && d1.year === d2.year) {
+            return d1.day + '\u2013' + d2.day + '\u00a0' + dt1.toLocaleDateString(loc, { month: 'long' }) + '\u00a0' + d1.year;
+          }
+          return dt1.toLocaleDateString(loc, { day: 'numeric', month: 'long' }) + '\u00a0\u2013\u00a0' + dt2.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
+        } catch (_) { return str; }
+      }
+    }
+    var d = parseISO(str);
+    if (!d) return str;
+    var dt = new Date(d.year, d.month, d.day, d.hour || 0, d.min || 0);
+    var loc2 = locale || document.documentElement.lang || 'fr-CH';
+    try {
+      if (format && typeof format === 'object') return capitalize(dt.toLocaleDateString(loc2, format));
+      var tzOpt = SQB_TZ ? { timeZone: SQB_TZ } : {};
+      if (format === 'time' && d.hour !== null) return dt.toLocaleTimeString(loc2, Object.assign({ hour: '2-digit', minute: '2-digit', hour12: false }, tzOpt));
+      if (format === 'day')     return capitalize(dt.toLocaleDateString(loc2, { weekday: 'long', day: 'numeric', month: 'long' }));
+      if (format === 'short')   return capitalize(dt.toLocaleDateString(loc2, { weekday: 'short', day: 'numeric', month: 'short' }));
+      if (format === 'numeric') return dt.toLocaleDateString(loc2, Object.assign({ day: '2-digit', month: '2-digit', year: 'numeric' }, tzOpt));
+      if (format === 'date')    return capitalize(dt.toLocaleDateString(loc2, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+      var dayStr = dt.toLocaleDateString(loc2, Object.assign({ weekday: 'long', day: 'numeric', month: 'long' }, tzOpt));
+      if (d.hour !== null) return capitalize(dayStr) + ', ' + dt.toLocaleTimeString(loc2, { hour: '2-digit', minute: '2-digit', hour12: false });
+      return capitalize(dayStr);
+    } catch (_) { return str; }
+  }
+
+  function getISODatePart(str) { var m = String(str || '').match(/^(\d{4}-\d{2}-\d{2})/); return m ? m[1] : null; }
+
+  function formatGroupDate(dateStr, locale, groupLabelFormat) {
+    var m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return dateStr;
+    var dt  = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+    var loc = locale || document.documentElement.lang || 'fr-CH';
+    var fmt = groupLabelFormat || 'day';
+    try {
+      if (fmt && typeof fmt === 'object') return capitalize(dt.toLocaleDateString(loc, fmt));
+      if (fmt === 'date')  return capitalize(dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+      if (fmt === 'short') return capitalize(dt.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' }));
+      return capitalize(dt.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' }));
+    } catch (_) { return dateStr; }
+  }
+
+  function sanitizeHTML(html) {
+    var allowed = /^(br|p|h[1-6]|strong|em|b|i|u|a|ul|ol|li|span|div)$/i;
+    var d = document.createElement('div');
+    d.innerHTML = String(html || '');
+    (function clean(node) {
+      var toRemove = [];
+      node.childNodes.forEach(function (child) {
+        if (child.nodeType === 1) {
+          if (!allowed.test(child.tagName)) { toRemove.push(child); }
+          else { ['onclick', 'onerror', 'onload', 'src'].forEach(function (a) { child.removeAttribute(a); }); clean(child); }
+        }
+      });
+      toRemove.forEach(function (n) { n.parentNode.replaceChild(document.createTextNode(n.textContent), n); });
+    })(d);
+    return d.innerHTML;
+  }
+
+  /* ════════════════════════════════════
+   * 8. GROUPBY VISUEL
+   * ════════════════════════════════════ */
+
+  function getGroupKey(item, groupBy) {
+    if (!groupBy) return null;
+    if (groupBy === 'category') return item.categories[0] || '\u2014';
+    if (typeof groupBy === 'object' && groupBy.tagPrefix) {
+      var val = getTagValuesByPrefix(item, groupBy.tagPrefix)[0] || '\u2014';
+      if (groupBy.groupByDay && val !== '\u2014') { var datePart = getISODatePart(val); return datePart || val; }
+      return val;
+    }
+    return null;
+  }
+
+  function sortGroupKeys(keys, groupOrder) {
+    if (Array.isArray(groupOrder)) {
+      var om = new Map(groupOrder.map(function (v, i) { return [norm(v), i]; }));
+      return keys.slice().sort(function (a, b) {
+        var ai = om.has(norm(a)) ? om.get(norm(a)) : 9999;
+        var bi = om.has(norm(b)) ? om.get(norm(b)) : 9999;
+        return ai !== bi ? ai - bi : norm(a).localeCompare(norm(b));
+      });
+    }
+    if (groupOrder === 'alpha') return keys.slice().sort(function (a, b) { return norm(a).localeCompare(norm(b)); });
+    return keys;
+  }
+
+  function renderGrouped(items, cfg, grid, activeGroupFilter) {
+    var groupBy    = (cfg.display && cfg.display.groupBy)    || null;
+    var groupOrder = (cfg.display && cfg.display.groupOrder) || 'collection';
+    var idx = 0;
+    if (!groupBy) { items.forEach(function (item) { grid.appendChild(buildCard(item, cfg, idx++)); }); return; }
+    var orderedKeys = [], groups = new Map();
+    items.forEach(function (item) {
+      var keys = [];
+      if (groupBy.groupByDay && groupBy.tagPrefix) {
+        getTagValuesByPrefix(item, groupBy.tagPrefix).forEach(function (v) { var part = getISODatePart(v) || v; if (keys.indexOf(part) === -1) keys.push(part); });
+      }
+      if (!keys.length) keys = [getGroupKey(item, groupBy)];
+      keys.forEach(function (key) {
+        if (activeGroupFilter && norm(key) !== norm(activeGroupFilter)) return;
+        if (!groups.has(key)) { groups.set(key, []); orderedKeys.push(key); }
+        groups.get(key).push(item);
+      });
+    });
+    var isDateKey = function (k) { return /^\d{4}-\d{2}-\d{2}$/.test(k); };
+    var todayStr = (function () {
+      var dbg = cfg.debug;
+      var d   = (dbg && typeof dbg === 'object' && dbg.mockDate) ? new Date(dbg.mockDate + 'T00:00:00') : new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    })();
+    var gbCfg = cfg.display && cfg.display.groupBy;
+    var useSmartDate = gbCfg && gbCfg.groupByDay && gbCfg.highlightToday !== false && isDateKey(orderedKeys[0] || '');
+    var sortedKeys;
+    if (useSmartDate) {
+      sortedKeys = orderedKeys.filter(function (k) { return k >= todayStr; }).sort()
+        .concat(orderedKeys.filter(function (k) { return k < todayStr; }).sort().reverse());
+    } else {
+      sortedKeys = sortGroupKeys(orderedKeys, groupOrder);
+    }
+    var labelFmt = (gbCfg && gbCfg.groupLabelFormat) || 'date';
+    sortedKeys.forEach(function (key) {
+      var gi = groups.get(key) || [];
+      if (!gi.length) return;
+      var h = el('div', { class: 'sqb-group-heading', 'data-group': key, style: 'grid-column:1 / -1' });
+      var headingLabel;
+      if (isDateKey(key)) {
+        if (useSmartDate && key === todayStr)  headingLabel = 'Aujourd\u2019hui';
+        else { headingLabel = formatGroupDate(key, null, labelFmt); if (useSmartDate && key < todayStr) h.classList.add('sqb-group-heading--past'); }
+      } else { headingLabel = key; }
+      setText(h, headingLabel);
+      grid.appendChild(h);
+      gi.forEach(function (item) { grid.appendChild(buildCard(item, cfg, idx++)); });
+    });
+  }
+
+  function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, done) {
+    var index = 0, size = Math.max(1, Number(batchSize || 8));
+    function appendBatch() {
+      var frag = document.createDocumentFragment(), end = Math.min(index + size, items.length);
+      for (; index < end; index++) frag.appendChild(buildCard(items[index], cfg, startIndex + index));
+      grid.appendChild(frag);
+      if (index < items.length) requestAnimationFrame(appendBatch);
+      else if (typeof done === 'function') done();
+    }
+    appendBatch();
+  }
+
+  /* ════════════════════════════════════
+   * 9. TRI CHRONOLOGIQUE DATES
+   * ════════════════════════════════════ */
+
+  var MONTH_MAP = {
+    january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12,
+    janvier:1,fevrier:2,mars:3,avril:4,mai:5,juin:6,juillet:7,aout:8,septembre:9,octobre:10,novembre:11,decembre:12,
+  };
+
+  function parseTagDate(str) {
+    var s = String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    var m = s.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})/);
+    if (!m || !MONTH_MAP[m[2]]) return null;
+    return new Date(parseInt(m[3], 10), MONTH_MAP[m[2]] - 1, parseInt(m[1], 10)).getTime();
+  }
+
+  function sortTagValues(vals, prefix, datePrefix) {
+    var isDate = datePrefix && norm(prefix) === norm(datePrefix);
+    if (!isDate) return vals.slice().sort(function (a, b) { return norm(a).localeCompare(norm(b)); });
+    return vals.slice().sort(function (a, b) {
+      var ap = parseISO(a), bp = parseISO(b);
+      if (ap && bp) return ap.ts - bp.ts;
+      var at = parseTagDate(a), bt = parseTagDate(b);
+      if (at !== null && bt !== null) return at - bt;
+      return at !== null ? -1 : bt !== null ? 1 : norm(a).localeCompare(norm(b));
+    });
+  }
+
+  /* ════════════════════════════════════
+   * 10. STICKY
+   * ════════════════════════════════════ */
+
+  function setupSticky(sentinel, wrapper, stickyTop) {
+    if (!('IntersectionObserver' in window)) return;
+    wrapper.classList.add('sqb-filters-wrapper--sticky');
+    if (stickyTop && stickyTop !== '0px') wrapper.style.setProperty('--sqb-sticky-top', stickyTop);
+    new IntersectionObserver(function (entries) {
+      wrapper.classList.toggle('sqb-filters-wrapper--is-sticky', !entries[0].isIntersecting);
+    }, { threshold: 0 }).observe(sentinel);
+  }
+
+  /* ════════════════════════════════════
+   * 11. PANNEAU MOBILE
+   * ════════════════════════════════════ */
+
+  function buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock) {
+    var panel = el('div', { class: 'sqb-mobile-panel', 'aria-hidden': 'true', role: 'dialog', 'aria-modal': 'true' });
+    var inner = el('div', { class: 'sqb-mobile-panel-inner' });
+    var header = el('div', { class: 'sqb-mobile-panel-header' });
+    var panelClearBtn = null;
+    if (i18n._hasClearAll) {
+      panelClearBtn = el('button', { class: 'sqb-clear-all sqb-clear-all--panel', type: 'button' });
+      var pci = el('span', { class: 'sqb-icon' }); pci.textContent = 'refresh'; panelClearBtn.appendChild(pci);
+      panelClearBtn.appendChild(document.createTextNode(' ' + (i18n._clearAllText || 'Réinitialiser')));
+      panelClearBtn.style.display = 'none';
+      header.appendChild(panelClearBtn);
+    }
+    var closeBtn = el('button', { class: 'sqb-mobile-panel-close sqb-icon-btn', type: 'button', 'aria-label': 'Fermer' });
+    var closeIcon = el('span', { class: 'sqb-icon' }); closeIcon.textContent = i18n.filterClose || 'close'; closeBtn.appendChild(closeIcon);
+    header.appendChild(closeBtn);
+    inner.appendChild(header);
+    var filtersZone = el('div', { class: 'sqb-mobile-filters-zone' });
+    inner.appendChild(filtersZone);
+    panel.appendChild(inner);
+    var backdrop = el('div', { class: 'sqb-backdrop' });
+    backdrop.addEventListener('click', close);
+
+    function syncContext() {
+      if (!ownerBlock) return;
+      Array.from(panel.classList).forEach(function (c) {
+        if (c.indexOf('sqb--') === 0 || c.indexOf('sqb-tab--') === 0 || c.indexOf('sqb-block--') === 0) panel.classList.remove(c);
+      });
+      ['data-sqb-key', 'data-sqb-label', 'data-sqb-tab'].forEach(function (attr) {
+        if (ownerBlock.hasAttribute(attr)) panel.setAttribute(attr, ownerBlock.getAttribute(attr));
+        else panel.removeAttribute(attr);
+      });
+      Array.from(ownerBlock.classList).forEach(function (c) {
+        if (c.indexOf('sqb--') === 0 || c.indexOf('sqb-tab--') === 0 || c.indexOf('sqb-block--') === 0) panel.classList.add(c);
+      });
+      var section = ownerBlock.closest('[data-section-theme]');
+      if (section) panel.setAttribute('data-section-theme', section.getAttribute('data-section-theme'));
+      else panel.removeAttribute('data-section-theme');
+    }
+
+    function open() {
+      if (!panel.parentNode || panel.parentNode !== document.body) document.body.appendChild(panel);
+      if (!backdrop.parentNode || backdrop.parentNode !== document.body) document.body.insertBefore(backdrop, panel);
+      backdrop.classList.add('sqb-backdrop--visible');
+      syncContext();
+      filtersZone.innerHTML = '';
+      appendSecondary(tabPool(), filtersZone);
+      panel.setAttribute('aria-hidden', 'false');
+      panel.classList.add('sqb-mobile-panel--open');
+      document.body.classList.add('sqb-panel-open');
+      closeBtn.focus();
+    }
+
+    function close() {
+      panel.setAttribute('aria-hidden', 'true');
+      panel.classList.remove('sqb-mobile-panel--open');
+      backdrop.classList.remove('sqb-backdrop--visible');
+      document.body.classList.remove('sqb-panel-open');
+    }
+
+    closeBtn.addEventListener('click', close);
+    panel.addEventListener('click', function (e) { if (e.target === panel) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && panel.classList.contains('sqb-mobile-panel--open')) close(); });
+
+    return { panel, open, close, panelClearBtn, syncContext };
+  }
+
+  /* ════════════════════════════════════
+   * 12. FILTRES UI
+   * ════════════════════════════════════ */
+
+  function buildFilterBar(baseItems, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock) {
+    if (cfg.filters === false) return null;
+    var fc = cfg.filters || {};
+    var globalLayout = fc.layout || 'pills';
+    var datePrefix   = fc.datePrefix || null;
+    var i18n = Object.assign({
+      all: 'Tout', searchPlaceholder: 'Rechercher\u2026', filterToggle: 'Filtrer', filterClose: 'close',
+    }, cfg.i18n || {});
+    if (fc.clearAll) { i18n._hasClearAll = true; i18n._clearAllText = typeof fc.clearAll === 'string' ? fc.clearAll : 'R\u00e9initialiser'; }
+
+    var prefixDefs    = normalizePrefixes(fc.tagPrefixes, globalLayout);
+    var useMobilePanel = fc.mobilePanel === true;
+    var mobilePanelBp  = fc.mobilePanelBreakpoint === 'always' ? Infinity : Number(fc.mobilePanelBreakpoint || 768);
+
+    var wrapper = el('div', { class: 'sqb-filters-wrapper' });
+    var bar     = el('div', { class: 'sqb-filters' });
+    wrapper.appendChild(bar);
+
+    var state = { tab: null, category: null, tags: {}, search: '' };
+    var secondaryEl = null, mobileObj = null, toggleBtn = null, panelClearBtn = null, clearAllBtn = null;
+
+    function emit() {
+      var t = {}; Object.keys(state.tags).forEach(function (k) { t[k] = state.tags[k]; });
+      onFilter({ tab: state.tab, category: state.category, tags: t, search: state.search });
+      updateToggleBadge();
+      var hasActive = countActive() > 0, alwaysPanel = mobilePanelBp === Infinity;
+      if (clearAllBtn) clearAllBtn.style.display = (hasActive && !alwaysPanel) ? '' : 'none';
+      if (panelClearBtn) panelClearBtn.style.display = hasActive ? '' : 'none';
+      if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
+    }
+
+    function resetOtherFilters(exceptType, exceptKey) {
+      if (!fc.resetOthers) return;
+      if (exceptType !== 'category') state.category = null;
+      var activePrefixDefs = (getTabPrefixes && getTabPrefixes()) ? normalizePrefixes(getTabPrefixes(), globalLayout) : prefixDefs;
+      activePrefixDefs.forEach(function (pd) { if (exceptType !== 'tag' || exceptKey !== pd.prefix) state.tags[pd.prefix] = null; });
+      if (exceptType !== 'search') state.search = '';
+      if (secondaryEl) { secondaryEl.innerHTML = ''; appendSecondary(tabPool(), secondaryEl); }
+    }
+
+    function countActive() {
+      var n = 0;
+      if (state.category) n++;
+      Object.keys(state.tags).forEach(function (k) { if (state.tags[k]) n++; });
+      if (state.search) n++;
+      return n;
+    }
+
+    function updateToggleBadge() {
+      if (!toggleBtn) return;
+      var n = countActive(), badge = toggleBtn.querySelector('.sqb-mobile-toggle-badge');
+      if (n > 0) {
+        if (!badge) { badge = el('span', { class: 'sqb-mobile-toggle-badge' }); toggleBtn.appendChild(badge); }
+        badge.textContent = String(n);
+      } else { if (badge) badge.remove(); }
+    }
+
+    function tabPool() { return state.tab ? applyTabFilter(baseItems, state.tab) : baseItems; }
+    function resetSec() { state.category = null; state.tags = {}; state.search = ''; }
+
+    function buildPillGroup(vals, displayVals, label, showLabel, getCurrent, onSelect) {
+      var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--pills' });
+      if (showLabel && label) { var lbl = el('span', { class: 'sqb-filter-label' }); lbl.textContent = label; wrap.appendChild(lbl); }
+      vals.forEach(function (v, vi) {
+        var dv = (displayVals && displayVals[vi]) ? displayVals[vi] : v;
+        var active = getCurrent() !== null && norm(String(v)) === norm(String(getCurrent()));
+        var btn = el('button', { class: 'sqb-filter-btn' + (active ? ' sqb-filter-btn--active' : ''), type: 'button' });
+        setText(btn, dv);
+        btn.addEventListener('click', function () {
+          var isCurrent = norm(String(v)) === norm(String(getCurrent() || ''));
+          onSelect(isCurrent ? null : v);
+          wrap.querySelectorAll('.sqb-filter-btn').forEach(function (b) { b.classList.remove('sqb-filter-btn--active'); });
+          if (!isCurrent) btn.classList.add('sqb-filter-btn--active');
+          emit();
+        });
+        wrap.appendChild(btn);
+      });
+      return wrap;
+    }
+
+    function buildDropdown(vals, displayVals, label, getCurrent, onSelect) {
+      var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--dropdown' });
+      var sel  = el('select', { class: 'sqb-filter-select', 'aria-label': label });
+      var o0   = el('option', { value: '' }); o0.textContent = label + ': ' + i18n.all; sel.appendChild(o0);
+      vals.forEach(function (v, vi) {
+        var dv = (displayVals && displayVals[vi]) ? displayVals[vi] : v;
+        var o  = el('option', { value: v }); o.textContent = dv;
+        if (getCurrent() && norm(v) === norm(getCurrent())) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', function () { onSelect(sel.value || null); emit(); });
+      wrap.appendChild(sel);
+      return wrap;
+    }
+
+    function appendSecondary(pool, container) {
+      if (fc.categories !== false) {
+        var catsCfg   = (fc.categories && typeof fc.categories === 'object') ? fc.categories : {};
+        var catsOrder = catsCfg.order || null, catsShowLbl = catsCfg.showLabel !== false, catsLabel = catsCfg.label || 'Cat\u00e9gorie';
+        var cats = uniqBy(pool.reduce(function (a, i) { return a.concat(i.categories); }, []).filter(Boolean), norm)
+          .sort(function (a, b) { return norm(a).localeCompare(norm(b)); });
+        if (catsOrder) cats = applyCustomOrder(cats, catsOrder);
+        if (cats.length > 1) {
+          if (fc.defaultCategory && state.category == null) state.category = fc.defaultCategory;
+          var grp = buildPillGroup(cats, null, catsLabel, catsShowLbl, function () { return state.category; }, function (v) { state.category = v; resetOtherFilters('category', null); });
+          grp.classList.add('sqb-filter-group--cats');
+          container.appendChild(grp);
+        }
+      }
+      var activePrefixDefs = (getTabPrefixes && getTabPrefixes()) ? normalizePrefixes(getTabPrefixes(), globalLayout) : prefixDefs;
+      activePrefixDefs.forEach(function (pd) {
+        var raw = uniqBy(pool.reduce(function (a, i) { return a.concat(getTagValuesByPrefix(i, pd.prefix)); }, []).filter(Boolean), norm);
+        var vals = sortTagValues(raw, pd.prefix, datePrefix);
+        if (pd.order) vals = applyCustomOrder(vals, pd.order);
+        var fmt = pd.filterFormat || (datePrefix && norm(pd.prefix) === norm(datePrefix) ? 'day' : null);
+        var displayVals = fmt ? vals.map(function (v) { return formatISOTag(v, fmt) || v; }) : vals;
+        if (!vals.length) return;
+        var defVal = fc.defaultTags && fc.defaultTags[pd.prefix];
+        if (defVal === 'first' && vals.length) defVal = vals[0];
+        if (defVal === 'last'  && vals.length) defVal = vals[vals.length - 1];
+        if (defVal && !state.tags[pd.prefix]) state.tags[pd.prefix] = defVal;
+        var grp;
+        (function (prefix) {
+          if (pd.layout === 'dropdown') {
+            grp = buildDropdown(vals, displayVals, prefix, function () { return state.tags[prefix] || null; }, function (v) { state.tags[prefix] = v; resetOtherFilters('tag', prefix); });
+          } else {
+            grp = buildPillGroup(vals, displayVals, prefix, pd.showLabel, function () { return state.tags[prefix] || null; }, function (v) { state.tags[prefix] = v; resetOtherFilters('tag', prefix); });
+          }
+        })(pd.prefix);
+        grp.classList.add('sqb-filter-group--tag');
+        grp.setAttribute('data-prefix', pd.prefix);
+        container.appendChild(grp);
+      });
+      if (fc.search !== false) {
+        var sg  = el('div', { class: 'sqb-filter-group sqb-filter-group--search' });
+        var inp = el('input', { class: 'sqb-filter-search', type: 'search', placeholder: i18n.searchPlaceholder, 'aria-label': i18n.searchPlaceholder });
+        var timer;
+        inp.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { state.search = inp.value.trim(); emit(); }, 200); });
+        sg.appendChild(inp);
+        container.appendChild(sg);
+      }
+    }
+
+    function rebuildSecondary() { if (secondaryEl) { secondaryEl.innerHTML = ''; appendSecondary(tabPool(), secondaryEl); } }
+
+    var tabs = Array.isArray(fc.tabs) ? fc.tabs : [];
+    if (tabs.length) {
+      var tabGroup = el('div', { class: 'sqb-filter-group sqb-filter-group--tabs' });
+      var defIdx   = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      tabs.forEach(function (tab, idx) {
+        var active = idx === defIdx;
+        var btn = el('button', { class: 'sqb-tab-btn' + (active ? ' sqb-tab-btn--active' : ''), type: 'button' });
+        if (tab.labelIcon) { var ic = el('span', { class: 'sqb-icon' }); ic.textContent = tab.labelIcon; btn.appendChild(ic); } else setText(btn, tab.label || 'Tab');
+        if (active) { state.tab = tab.filter || null; if (onTabChange) onTabChange(tab); }
+        btn.addEventListener('click', function () {
+          if (btn.classList.contains('sqb-tab-btn--active')) return;
+          tabGroup.querySelectorAll('.sqb-tab-btn').forEach(function (b) { b.classList.remove('sqb-tab-btn--active'); });
+          btn.classList.add('sqb-tab-btn--active');
+          state.tab = tab.filter || null; resetSec();
+          if (onTabChange) onTabChange(tab);
+          if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
+          rebuildSecondary(); emit();
+        });
+        tabGroup.appendChild(btn);
+      });
+      bar.appendChild(tabGroup);
+    }
+
+    secondaryEl = el('div', { class: 'sqb-filters-secondary' });
+    appendSecondary(tabPool(), secondaryEl);
+    bar.appendChild(secondaryEl);
+
+    if (fc.clearAll) {
+      clearAllBtn = el('button', { class: 'sqb-clear-all', type: 'button' });
+      var _cai = el('span', { class: 'sqb-icon' }); _cai.textContent = 'refresh'; clearAllBtn.appendChild(_cai);
+      clearAllBtn.appendChild(document.createTextNode(' ' + (typeof fc.clearAll === 'string' ? fc.clearAll : 'R\u00e9initialiser')));
+      clearAllBtn.style.display = 'none';
+      clearAllBtn.addEventListener('click', function () { state.category = null; state.tags = {}; state.search = ''; secondaryEl.innerHTML = ''; appendSecondary(tabPool(), secondaryEl); emit(); });
+      bar.appendChild(clearAllBtn);
+    }
+
+    if (useMobilePanel) {
+      toggleBtn = el('button', { class: 'sqb-mobile-toggle', type: 'button' });
+      toggleBtn.textContent = i18n.filterToggle;
+      toggleBtn.style.display = 'none';
+      var tabsGroupEl = bar.querySelector('.sqb-filter-group--tabs');
+      if (tabsGroupEl) {
+        var tabsRow = el('div', { class: 'sqb-tabs-row' }); bar.replaceChild(tabsRow, tabsGroupEl); tabsRow.appendChild(tabsGroupEl); tabsRow.appendChild(toggleBtn);
+      } else {
+        var mobileRow = el('div', { class: 'sqb-mobile-filter-row' }); mobileRow.appendChild(toggleBtn); bar.appendChild(mobileRow);
+      }
+      mobileObj = buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock);
+      mobileObj.syncContext();
+      toggleBtn.addEventListener('click', function () { mobileObj.open(); });
+      panelClearBtn = mobileObj.panelClearBtn || null;
+      if (panelClearBtn) {
+        panelClearBtn.addEventListener('click', function () {
+          state.category = null; state.tags = {}; state.search = '';
+          if (secondaryEl) { secondaryEl.innerHTML = ''; appendSecondary(tabPool(), secondaryEl); }
+          emit();
+        });
+      }
+      var isMobileMode = false;
+      function checkBreakpoint() {
+        var shouldBeMobile = window.innerWidth < mobilePanelBp;
+        if (shouldBeMobile === isMobileMode) return;
+        isMobileMode = shouldBeMobile;
+        wrapper.classList.toggle('sqb-filters--mobile-mode', isMobileMode);
+        if (toggleBtn) toggleBtn.style.display = isMobileMode ? '' : 'none';
+        if (clearAllBtn) clearAllBtn.style.display = isMobileMode ? 'none' : (countActive() > 0 ? '' : 'none');
+        if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
+      }
+      checkBreakpoint();
+      if ('ResizeObserver' in window) new ResizeObserver(checkBreakpoint).observe(document.body);
+      else window.addEventListener('resize', checkBreakpoint);
+    }
+
+    return wrapper;
+  }
+
+  /* ════════════════════════════════════
+   * 13. RUNNER
+   * ════════════════════════════════════ */
+
+  async function runConfig(cfg) {
+    if (!cfg || cfg.enabled === false) return;
+
+    var target = document.querySelector(cfg.target || '');
+    if (!target) return;
+    if (target.dataset.sqbInitialized === 'true') return;
+    target.dataset.sqbInitialized = 'true';
+
+    var perf = cfg.performance || {};
+    var pag  = cfg.pagination  || {};
+    var disp = cfg.display     || {};
+    var fc   = (cfg.filters && cfg.filters !== false) ? cfg.filters : {};
+
+    var i18n = Object.assign({
+      loading: false, all: 'Tout', noResults: 'Aucun r\u00e9sultat',
+      loadMoreLabel: 'Voir plus', endLabel: '', filterToggle: 'Filtrer', filterClose: 'close',
+    }, cfg.i18n || {});
+    if (pag.loadMoreLabel)          i18n.loadMoreLabel = pag.loadMoreLabel;
+    if (pag.endLabel !== undefined) i18n.endLabel      = pag.endLabel;
+
+    var perPage    = Number(pag.perPage || 12);
+    var mode       = pag.mode || 'load-more';
+    var dispLayout = disp.layout || 'grid';
+
+    target.classList.add('sqb-block');
+    target.setAttribute('data-sqb-key', cfg.key || 'sqb');
+    if (cfg.key && !target.id)  target.id = 'sqb-' + cfg.key;
+    if (cfg.label)              target.setAttribute('data-sqb-label', cfg.label);
+    if (cfg.key)                target.classList.add('sqb--' + cfg.key);
+    if (cfg.classes)            cfg.classes.trim().split(/\s+/).forEach(function (c) { if (c) target.classList.add(c); });
+    if (dispLayout === 'list')  target.classList.add('sqb-block--list');
+
+    target.classList.add('sqb-block--loading');
+    injectLoaderStyles();
+    target.appendChild(buildLoader(i18n.loading));
+
+    /* — Sources & état de pagination progressive — */
+    var sourceList        = Array.isArray(cfg.sources) ? cfg.sources : [];
+    var initialMaxPages   = perf.maxPages           || 1;
+    var progressiveMax    = perf.progressiveMaxPages !== undefined ? perf.progressiveMaxPages : 'all';
+    var loadedMaxPages    = initialMaxPages;
+    var allRemoteLoaded   = false;
+    var isFetchingMore    = false;
+    var rawItems          = [];
+
+    function canFetchMore() {
+      if (allRemoteLoaded) return false;
+      if (progressiveMax === 'all') return true;
+      return Number(loadedMaxPages) < Number(progressiveMax);
+    }
+
+    function nextMaxPages() {
+      if (progressiveMax === 'all') return Number(loadedMaxPages) + 1;
+      return Math.min(Number(loadedMaxPages) + 1, Number(progressiveMax));
+    }
+
+    async function loadSources(maxPagesValue) {
+      var results = await Promise.all(sourceList.map(function (src) {
+        return fetchAllItems(src.path, maxPagesValue, perf.sessionCache === true, perf.sessionCacheTTL || 300)
+          .then(function (items) { return items.map(function (raw) { return mapItem(raw, src.path); }); });
+      }));
+      var merged = [];
+      results.forEach(function (r) { merged.push.apply(merged, r); });
+      merged = uniqBy(merged, function (i) { return i.fullUrl || i.id; });
+      merged = applyPreFilter(merged, cfg.preFilter || null);
+      merged = sortItems(merged, cfg.sort);
+      return merged;
+    }
+
+    try {
+      rawItems = await loadSources(loadedMaxPages);
+    } catch (err) {
+      if (cfg.debug) console.warn('[SQB]', cfg.key, err);
+      var loaderErrEl = target.querySelector('.sqb-loader, .sqb-loader--text');
+      if (loaderErrEl) loaderErrEl.remove();
+      setText(target.appendChild(el('p', { class: 'sqb-error' })), '\u26A0 Erreur de chargement');
+      return;
+    }
+
+    if (cfg.debug) console.log('[SQB]', cfg.key, rawItems.length, 'items');
+
+    var loaderEl = target.querySelector('.sqb-loader, .sqb-loader--text');
+    if (loaderEl) loaderEl.remove();
+    target.classList.remove('sqb-block--loading');
+    target.classList.add('sqb-block--ready');
+
+    /* — Filtres actifs initiaux — */
+    var activeFilters = { tab: null, category: null, tags: {}, search: '' };
+    var currentPage   = 1;
+    var ioInfinite    = null;
+
+    if (Array.isArray(fc.tabs) && fc.tabs.length) {
+      var di = Number(fc.defaultTab != null ? fc.defaultTab : 0);
+      if (fc.tabs[di]) activeFilters.tab = fc.tabs[di].filter || null;
+    }
+    if (fc.defaultCategory) activeFilters.category = fc.defaultCategory;
+    if (fc.defaultTags)     Object.assign(activeFilters.tags, fc.defaultTags);
+
+    /* — Structure DOM — */
+    var root          = el('div', { class: 'sqb-root' });
+    var headingResult = buildHeading(cfg.heading || null);
+    if (headingResult.headingEl) root.appendChild(headingResult.headingEl);
+
+    var scrollOnFilter = fc.scrollOnFilter !== false;
+    function scrollToGrid() {
+      if (!scrollOnFilter || !filterWrapper || !fc.sticky) return;
+      requestAnimationFrame(function () {
+        var wrapperBottom = filterWrapper.getBoundingClientRect().bottom;
+        var gridTop       = grid.getBoundingClientRect().top;
+        if (gridTop >= wrapperBottom - 8 && gridTop <= wrapperBottom + window.innerHeight * 0.5) return;
+        window.scrollTo({ top: window.scrollY + gridTop - wrapperBottom, behavior: 'smooth' });
+      });
+    }
+
+    var currentSort      = cfg.sort || null;
+    var currentLayout    = dispLayout;
+    var currentGroups    = (disp.groups && disp.groups.length) ? disp.groups : null;
+    var currentGroupBy   = disp.groupBy   || null;
+    var currentGroupOrder = disp.groupOrder || 'collection';
+    var currentTagPrefixes = null;
+
+    function updateTabClass(tabLabel) {
+      Array.from(target.classList).forEach(function (c) { if (c.indexOf('sqb-tab--') === 0) target.classList.remove(c); });
+      if (tabLabel) { target.classList.add('sqb-tab--' + slugify(tabLabel)); target.setAttribute('data-sqb-tab', slugify(tabLabel)); }
+      else          target.removeAttribute('data-sqb-tab');
+    }
+
+    function onTabChange(tab) {
+      updateTabClass(tab.labelIcon ? (tab.label || '') : (tab.label || ''));
+      currentSort       = tab.sort      !== undefined ? tab.sort      : cfg.sort    || null;
+      currentLayout     = tab.layout    !== undefined ? tab.layout    : dispLayout;
+      currentGroups     = tab.groups    !== undefined ? tab.groups    : (disp.groups && disp.groups.length) ? disp.groups : null;
+      currentGroupBy    = tab.groupBy   !== undefined ? tab.groupBy   : disp.groupBy   || null;
+      currentGroupOrder = tab.groupOrder !== undefined ? tab.groupOrder : disp.groupOrder || 'collection';
+      currentTagPrefixes = tab.tagPrefixes !== undefined ? tab.tagPrefixes : null;
+    }
+
+    var filterWrapper = buildFilterBar(rawItems, cfg,
+      function (f) { if (ioInfinite) { ioInfinite.disconnect(); ioInfinite = null; } activeFilters = f; currentPage = 1; render(true); },
+      onTabChange, function () { return currentTagPrefixes; }, target
+    );
+
+    var grid    = el('div', { class: dispLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid' });
+    var counter = el('p',   { class: 'sqb-counter', 'aria-live': 'polite' });
+    var footer  = el('div', { class: 'sqb-footer' });
+
+    if (filterWrapper) root.appendChild(filterWrapper);
+    root.appendChild(grid);
+    if (disp.counter === true) root.appendChild(counter);
+    root.appendChild(footer);
+    target.appendChild(root);
+
+    if (filterWrapper && fc.sticky) {
+      var sentinel = el('div', { style: 'height:1px;pointer-events:none;visibility:hidden' });
+      filterWrapper.parentNode.insertBefore(sentinel, filterWrapper);
+      setupSticky(sentinel, filterWrapper, fc.stickyTop || '0px');
+    }
+
+    if (Array.isArray(fc.tabs) && fc.tabs.length) {
+      var initTab = fc.tabs[Number(fc.defaultTab != null ? fc.defaultTab : 0)];
+      if (initTab) {
+        updateTabClass(initTab.label || '');
+        if (initTab.sort      !== undefined) currentSort       = initTab.sort;
+        if (initTab.layout    !== undefined) currentLayout     = initTab.layout;
+        if (initTab.groups    !== undefined) currentGroups     = initTab.groups;
+        if (initTab.groupBy   !== undefined) currentGroupBy    = initTab.groupBy;
+        if (initTab.groupOrder !== undefined) currentGroupOrder = initTab.groupOrder;
+        if (initTab.tagPrefixes !== undefined) currentTagPrefixes = initTab.tagPrefixes;
+      }
+    }
+
+    var hook = window.SQB_HOOKS && window.SQB_HOOKS[cfg.key];
+
+    /* ═══════════════════════
+     * RENDER
+     * ═══════════════════════ */
+    function render(fromFilter, fromPagination) {
+      if (ioInfinite) { ioInfinite.disconnect(); ioInfinite = null; }
+
+      grid.className = currentLayout === 'list' ? 'sqb-grid sqb-grid--list' : 'sqb-grid';
+      target.classList.toggle('sqb-block--list', currentLayout === 'list');
+      if (fromFilter) scrollToGrid();
+
+      var pool         = activeFilters.tab ? applyTabFilter(rawItems, activeFilters.tab) : rawItems;
+      var poolSorted   = currentSort ? sortItems(pool, currentSort) : pool;
+      var filtered     = poolSorted.filter(function (item) { return matchesUIFilters(item, activeFilters); });
+      var total        = filtered.length;
+      var shown        = filtered.slice(0, currentPage * perPage);
+      var prevCardCount = fromPagination ? grid.querySelectorAll('.sqb-card').length : 0;
+
+      var canAppendIncrementally = fromPagination && !fromFilter && !currentGroupBy && currentLayout !== 'list';
+      if (!canAppendIncrementally) grid.innerHTML = '';
+      footer.innerHTML = '';
+
+      if (!shown.length) {
+        setText(grid.appendChild(el('p', { class: 'sqb-empty' })), i18n.noResults);
+        if (disp.counter !== false) counter.textContent = '';
+        if (hook) hook(grid, [], cfg);
+        return;
+      }
+
+      var cfgForRender = (currentGroups || currentGroupBy !== (disp.groupBy || null))
+        ? Object.assign({}, cfg, { display: Object.assign({}, disp, { groups: currentGroups || disp.groups, groupBy: currentGroupBy, groupOrder: currentGroupOrder }) })
+        : cfg;
+
+      var activeGroupFilter = null;
+      if (currentGroupBy && currentGroupBy.tagPrefix && activeFilters.tags) {
+        activeGroupFilter = activeFilters.tags[currentGroupBy.tagPrefix] || null;
+        if (activeGroupFilter && currentGroupBy.groupByDay) activeGroupFilter = getISODatePart(activeGroupFilter) || activeGroupFilter;
+      }
+
+      if (canAppendIncrementally) {
+        appendPlainItemsProgressive(shown.slice(prevCardCount), cfgForRender, grid, prevCardCount, perf.domBatchSize || 8);
+      } else {
+        SQB_RENDER_IMAGE_INDEX = 0;
+        if (!currentGroupBy && currentLayout !== 'list') {
+          appendPlainItemsProgressive(shown, cfgForRender, grid, 0, perf.domBatchSize || 8);
+        } else {
+          renderGrouped(shown, cfgForRender, grid, activeGroupFilter);
+        }
+      }
+
+      if ((cfgForRender.display || disp).fadeIn !== false) {
+        Array.from(grid.querySelectorAll('.sqb-card')).forEach(function (c, i) {
+          if (i < prevCardCount) return;
+          c.style.animationDelay = ((i - prevCardCount) * 0.04) + 's';
+          c.classList.add('sqb-card--fade-in');
+        });
+      }
+
+      if (disp.counter === true) counter.textContent = shown.length + '\u00a0/\u00a0' + total;
+      if (hook) hook(grid, shown, cfg, { fromPagination, prevCount: prevCardCount });
+      if (headingResult.ctaBelowEl) { var existing = root.querySelector('.sqb-heading__cta-below'); if (!existing) root.appendChild(headingResult.ctaBelowEl); }
+
+      /* — Détermine s'il reste des éléments à afficher —
+       * FIX v27 : canFetchMore() tient compte de l'état réel dans CollectionData
+       * (complete + sans fetchError) plutôt que d'une comparaison de compteurs.
+       */
+      var collectionDone = sourceList.every(function (src) { return isCollectionComplete(src.path); });
+      var hasMore = shown.length < total || (!collectionDone && canFetchMore());
+
+      if (!hasMore) {
+        if (i18n.endLabel !== false && i18n.endLabel) setText(footer.appendChild(el('p', { class: 'sqb-end-label' })), i18n.endLabel);
+        return;
+      }
+
+      if (mode === 'load-more') {
+        var btn = setText(el('button', { class: 'sqb-load-more', type: 'button' }), i18n.loadMoreLabel);
+        btn.addEventListener('click', async function () {
+          if (isFetchingMore) return;
+          isFetchingMore = true;
+          btn.style.display = 'none';
+          footer.appendChild(buildLoader(false));
+          currentPage++;
+          if (canFetchMore()) {
+            loadedMaxPages = nextMaxPages();
+            try {
+              rawItems = await loadSources(loadedMaxPages);
+            } catch (err) {
+              if (cfg.debug) console.warn('[SQB]', cfg.key, err);
+            }
+          }
+          isFetchingMore = false;
+          render(false, true);
+        });
+        footer.appendChild(btn);
+
+      } else if (mode === 'infinite' && 'IntersectionObserver' in window) {
+        var infS = el('div', { class: 'sqb-sentinel', 'aria-hidden': 'true' });
+        footer.appendChild(infS);
+        ioInfinite = new IntersectionObserver(function (entries) {
+          if (!entries[0].isIntersecting) return;
+          ioInfinite.disconnect(); ioInfinite = null;
+          if (isFetchingMore) return;
+          isFetchingMore = true;
+          currentPage++;
+          if (canFetchMore()) {
+            loadedMaxPages = nextMaxPages();
+            loadSources(loadedMaxPages).then(function (items) {
+              rawItems = items; isFetchingMore = false; render(false, true);
+            }).catch(function (err) {
+              if (cfg.debug) console.warn('[SQB]', cfg.key, err);
+              isFetchingMore = false; render(false, true);
+            });
+          } else {
+            isFetchingMore = false; render(false, true);
+          }
+        }, { rootMargin: '400px' });
+        ioInfinite.observe(infS);
+      }
+    }
+
+    render(false);
+  }
+
+  /* ════════════════════════════════════
+   * scheduleConfig — lazy init
+   * ════════════════════════════════════ */
+  function scheduleConfig(cfg) {
+    if (!cfg || cfg.enabled === false) return;
+    var target = document.querySelector(cfg.target || '');
+    if (!target) return;
+    if (target.dataset.sqbInitialized === 'true') return;
+    if (target.dataset.sqbScheduled   === 'true') return;
+
+    var perf     = cfg.performance || {};
+    var lazyInit = perf.lazyInit !== false;
+
+    if (!lazyInit || !('IntersectionObserver' in window)) {
+      runConfig(cfg).catch(function (err) { if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err); });
+      return;
+    }
+
+    target.dataset.sqbScheduled = 'true';
+    var observer = new IntersectionObserver(function (entries) {
+      if (!entries[0].isIntersecting) return;
+      observer.disconnect();
+      target.dataset.sqbScheduled = 'false';
+      runConfig(cfg).catch(function (err) { if (cfg && cfg.debug) console.warn('[SQB]', cfg.key, err); });
+    }, { rootMargin: '1200px 0px' });
+    observer.observe(target);
+  }
+
+  /* ════════════════════════════════════
+   * 14. POINT D'ENTRÉE
+   * ════════════════════════════════════ */
+  function init() {
+    var configs = Array.isArray(window.SQB_CONFIGS) ? window.SQB_CONFIGS : [];
+    if (!configs.length) return;
+    configs = configs
+      .filter(function (cfg) { return cfg && cfg.enabled !== false && cfg.target && !!document.querySelector(cfg.target); })
+      .sort(function (a, b) {
+        var ta = document.querySelector(a.target || ''), tb = document.querySelector(b.target || '');
+        var ya = ta ? ta.getBoundingClientRect().top + window.scrollY : Infinity;
+        var yb = tb ? tb.getBoundingClientRect().top + window.scrollY : Infinity;
+        return ya - yb;
+      });
+    if (!configs.length) return;
+    configs.forEach(scheduleConfig);
+    document.addEventListener('turbolinks:load', function () { configs.forEach(scheduleConfig); });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+  else init();
+
+})();
