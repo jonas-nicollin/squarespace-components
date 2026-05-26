@@ -1384,6 +1384,32 @@ const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems
 if (limit > 0 && finalItems.length < limit && progressiveMaxPages !== (CFG.performance?.maxPages || 1)) {
   try {
     items = await fetchCollectionItems(CFG, progressiveMaxPages);
+
+    const progressiveCandidates = [];
+
+    items.forEach(item => {
+      if (!item) return;
+      if (!passesConstraints(item, currentItem, CFG.selection)) return;
+      if (!evaluateMatchGroups(item, currentItem, CFG.selection, {
+        allItems: items
+      })) return;
+
+      const score = computeCandidateScore(item, currentItem, CFG.selection);
+
+      if (
+        CFG.selection?.score?.enabled &&
+        score < Number(CFG.selection.score.minScore || 0)
+      ) return;
+
+      progressiveCandidates.push({
+        ...mapItemForRender(item, CFG),
+        _score: score
+      });
+    });
+
+    finalItems = sortItemsByRules(progressiveCandidates, CFG.selection?.sort || []);
+    finalItems = uniqBy(finalItems, i => String(i.fullUrl || i.title || ""));
+
   } catch (e) {
     if (CFG.debug) console.warn("[RB]", CFG.key, "progressive fetch failed", e);
   }
