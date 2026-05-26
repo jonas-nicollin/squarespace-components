@@ -1380,7 +1380,6 @@ if (!currentItem) {
 finalItems = uniqBy(finalItems, i => String(i.fullUrl || i.title || ""));
 
 const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems.length);
-const progressiveMaxPages = getProgressiveMaxPages(CFG);
 
 if (limit > 0 && finalItems.length < limit && progressiveMaxPages !== (CFG.performance?.maxPages || 1)) {
   try {
