@@ -150,57 +150,43 @@ function cacheWrite(d){if(cfg.noCache)return;try{localStorage.setItem(CK,JSON.st
 function stripLocatorItemsFields(items){
   return Array.isArray(items) ? items.map(stripLocatorItemFields) : items;
 }
-async function fetchItems(){
+async function fetchItems(maxPages){
   if(!cfg.collectionUrl) throw new Error('collectionUrl manquant');
 
+  if(!window.CollectionData || typeof window.CollectionData.get !== 'function'){
+    throw new Error('CollectionData requis pour Locator Block');
+  }
+
   var all;
+  maxPages = maxPages || cfg.performance.maxPages || 1;
 
   if(window.CollectionData && typeof window.CollectionData.get === 'function'){
-    all = await window.CollectionData.get(cfg.collectionUrl, {
-      maxPages: 'all',
-      ttl: Math.round((cfg.cacheTTL || 600000) / 1000),
-      memoryCache: true,
-      sessionCache: !cfg.noCache,
-      credentials: 'same-origin',
-stripFields: ['body']
-    });
-  } else {
-    var cached = cacheRead();
-    if(cached){
-      log('Cache:', cached.length);
-      return cached;
-    }
+      all = await window.CollectionData.get(cfg.collectionUrl, {
+    maxPages: maxPages,
+    ttl: Math.round((cfg.cacheTTL || 600000) / 1000),
+    memoryCache: true,
+    sessionCache: !cfg.noCache,
+    credentials: 'same-origin',
+    keepFields: cfg.performance.keepFields || [
+      'id',
+      'title',
+      'fullUrl',
+      'assetUrl',
+      'mediaFocalPoint',
+      'categories',
+      'tags',
+      'excerpt',
+      'location',
+      'displayIndex',
+      'workflowState',
+      'startDate',
+      'publishOn',
+      'addedOn',
+      'updatedOn'
+    ],
+    stripFields: []
+  });
 
-    all = [];
-    var nextOffset = null;
-    var pc = 0;
-
-    while(pc < 10){
-      var url = cfg.collectionUrl + '?format=json' + (nextOffset !== null ? '&offset=' + nextOffset : '');
-      log('GET', url);
-
-      var res = await fetch(url, { cache: 'no-store' });
-      if(!res.ok) throw new Error('Collection inaccessible (' + res.status + ')');
-
-      var data = await res.json();
-      var page = data.items || (data.collection && data.collection.items) || [];
-      page.forEach(function(item) {
-  if (item && Object.prototype.hasOwnProperty.call(item, 'body')) {
-    delete item.body;
-  }
-});
-
-all = all.concat(page);
-      pc++;
-
-      var pag = data.pagination || {};
-      if(pag.nextPage && pag.nextPageOffset){
-        nextOffset = pag.nextPageOffset;
-      } else {
-        break;
-      }
-    }
-  }
 
   log('Brut:', all.length);
 
