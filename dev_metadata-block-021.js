@@ -232,18 +232,34 @@ async function fetchPageJson(settings) {
    * On retourne un objet { items: [...] } pour garder le reste du script
    * compatible avec resolveCurrentItemData().
    */
-  if (
-    settings.jsonUrl &&
-    window.CollectionData &&
-    typeof window.CollectionData.get === 'function'
-  ) {
+  if (settings.jsonUrl) {
+  if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
+    throw new Error('CollectionData requis pour Metadata Blocks avec jsonUrl');
+  }
     const items = await window.CollectionData.get(settings.jsonUrl, {
-      maxPages: settings.maxPages || settings.performance?.maxPages || 'all',
+      maxPages: settings.maxPages || settings.performance?.maxPages || 1,
       ttl: settings.cacheTTL || 900,
       memoryCache: true,
       sessionCache: settings.sessionCache !== false,
       credentials: 'same-origin',
-      stripFields: ['body'],
+      keepFields: settings.performance?.keepFields || [
+  'id',
+  'title',
+  'fullUrl',
+  'urlId',
+  'assetUrl',
+  'mediaFocalPoint',
+  'categories',
+  'tags',
+  'excerpt',
+  'location',
+  'displayIndex',
+  'workflowState',
+  'publishOn',
+  'addedOn',
+  'updatedOn'
+],
+stripFields: []
     });
 
     return { items: Array.isArray(items) ? items : [] };
