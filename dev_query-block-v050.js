@@ -7,7 +7,37 @@
 
   function noop() {}
 
+  function getCollectionBlocks() {
+    return window.CollectionBlocks || null;
+  }
+
+  function getCollectionUtils() {
+    var cb = getCollectionBlocks();
+    return cb && (cb.utils || cb);
+  }
+
+  function getCollectionDataAPI() {
+    var cb = getCollectionBlocks();
+
+    if (cb && cb.data && typeof cb.data.get === 'function') {
+      return cb.data;
+    }
+
+    if (cb && typeof cb.get === 'function') {
+      return cb;
+    }
+
+    if (window.CollectionData && typeof window.CollectionData.get === 'function') {
+      return window.CollectionData;
+    }
+
+    return null;
+  }
+
   function norm(str) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.norm === 'function') return utils.norm(str);
+
     return String(str || '')
       .replace(/\u00A0/g, ' ').trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -16,16 +46,25 @@
   }
 
   function slugify(str) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.slugify === 'function') return utils.slugify(str);
+
     return norm(str).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
   function cleanHTML(str) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.cleanHTML === 'function') return utils.cleanHTML(str);
+
     var d = document.createElement('div');
     d.innerHTML = String(str || '');
     return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
   }
 
   function truncate(str, max) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.truncate === 'function') return utils.truncate(str, max);
+
     var s = cleanHTML(str);
     if (!s || s.length <= max) return s;
     var cut = s.slice(0, max), sp = cut.lastIndexOf(' ');
@@ -67,6 +106,11 @@
   }
 
   function getTagValuesByPrefix(item, prefix) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.getTagValuesByPrefix === 'function') {
+      return utils.getTagValuesByPrefix(item, prefix);
+    }
+
     var pn = norm(String(prefix).replace(/:$/, ''));
     return (item.tags || []).reduce(function(acc, tag) {
       var p = parseTag(tag);
@@ -202,17 +246,19 @@ function buildCollectionOptions(maxPages, useSession, ttl, stripFields) {
 }
 
 async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields) {
-  if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
-    throw new Error('CollectionData requis pour Query Block');
+  var dataApi = getCollectionDataAPI();
+
+  if (!dataApi || typeof dataApi.get !== 'function') {
+    throw new Error('CollectionBlocks ou CollectionData requis pour Query Block');
   }
 
   var options = buildCollectionOptions(maxPages, useSession, ttl, stripFields);
 
-  if (typeof window.CollectionData.getState === 'function') {
-    return window.CollectionData.getState(path, options);
+  if (typeof dataApi.getState === 'function') {
+    return dataApi.getState(path, options);
   }
 
-  return window.CollectionData.get(path, options).then(function(items) {
+  return dataApi.get(path, options).then(function(items) {
     return {
       items: items,
       pagesLoaded: Number(maxPages || 1),
@@ -749,6 +795,9 @@ var isPriority = priority === true || imgIndex < 3;
    * ════════════════════════════════════ */
 
   function parseISO(str) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.parseISO === 'function') return utils.parseISO(str);
+
     var m = String(str || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
     if (!m) return null;
 
@@ -782,6 +831,11 @@ var isPriority = priority === true || imgIndex < 3;
   }
 
   function formatISOTag(str, format, locale) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.formatISOTag === 'function') {
+      return utils.formatISOTag(str, format, locale);
+    }
+
     if (String(str || '').indexOf('/') !== -1) {
       var parts = str.split('/');
       var d1 = parseISO(parts[0]);
@@ -1124,6 +1178,18 @@ var isPriority = priority === true || imgIndex < 3;
 
 
 function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, done) {
+  var utils = getCollectionUtils();
+
+  if (utils && typeof utils.appendProgressiveDOM === 'function') {
+    return utils.appendProgressiveDOM(items, grid, function(item, cardIndex) {
+      return buildCard(item, cfg, cardIndex);
+    }, {
+      startIndex: startIndex,
+      batchSize: batchSize,
+      done: done,
+    });
+  }
+
   var index = 0;
   var size = Math.max(1, Number(batchSize || 8));
 
