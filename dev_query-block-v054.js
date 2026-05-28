@@ -1981,8 +1981,6 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var perPage = mode === 'none' ? Infinity : Number(pag.perPage || 12);
     var dispLayout = disp.layout || 'grid';
 
-    target.classList.add('cb-block');
-    target.classList.add('qb-block');
     target.classList.add('sqb-block');
     target.setAttribute('data-sqb-key', cfg.key || 'sqb');
 
@@ -1996,7 +1994,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       });
     }
 
-    if (dispLayout === 'list') target.classList.add('cb-block--list', 'qb-block--list', 'sqb-block--list');
+    if (dispLayout === 'list') target.classList.add('sqb-block--list');
     target.classList.add('sqb-block--loading');
 
 injectLoaderStyles();
@@ -2157,7 +2155,7 @@ requestAnimationFrame(function() {
     if (fc.defaultCategory) activeFilters.category = fc.defaultCategory;
     if (fc.defaultTags) Object.assign(activeFilters.tags, fc.defaultTags);
 
-    var root = el('div', { class: 'cb-block__inner qb-block__inner sqb-root' });
+    var root = el('div', { class: 'sqb-root' });
 
     var headingResult = buildHeading(cfg.heading || null);
     if (headingResult.headingEl) root.appendChild(headingResult.headingEl);
@@ -2248,8 +2246,8 @@ requestAnimationFrame(function() {
     );
 
     var gridClass = dispLayout === 'list'
-      ? 'cb-grid qb-grid sqb-grid cb-grid--list qb-grid--list sqb-grid--list'
-      : 'cb-grid qb-grid sqb-grid';
+      ? 'sqb-grid sqb-grid--list'
+      : 'sqb-grid';
 
     var grid = el('div', { class: gridClass });
 
@@ -2302,11 +2300,9 @@ requestAnimationFrame(function() {
       }
 
       grid.className = currentLayout === 'list'
-        ? 'cb-grid qb-grid sqb-grid cb-grid--list qb-grid--list sqb-grid--list'
-        : 'cb-grid qb-grid sqb-grid';
+        ? 'sqb-grid sqb-grid--list'
+        : 'sqb-grid';
 
-      target.classList.toggle('cb-block--list', currentLayout === 'list');
-      target.classList.toggle('qb-block--list', currentLayout === 'list');
       target.classList.toggle('sqb-block--list', currentLayout === 'list');
 
       if (fromFilter) scrollToGrid();
