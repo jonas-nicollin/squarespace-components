@@ -1030,7 +1030,7 @@
     }
     function buildCard(item, CFG, extraClasses, currentItem) {
         const card = document.createElement("a");
-        card.className = "rb-card related-block__item";
+        card.className = "cb-card rb-card related-block__item";
         card.href = item.fullUrl || CFG.sourceCollection.path + "/" + item.urlId;
         extraClasses.forEach(cls => card.classList.add(cls + "__item"));
         // Marquer l'item courant (ex: pour la bande parcours avec excludeCurrentItem: false)
