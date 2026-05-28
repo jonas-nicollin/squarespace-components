@@ -820,6 +820,8 @@
         const el = document.createElement("div");
         el.className = fieldConfig.className || "related-block__tag-prefix";
         addClasses(el, "cb-card__tag-field rb-card__tag-field");
+        const prefixSlug = slugifyToken(String(fieldConfig.prefix || "").replace(/:$/, ""));
+        if (prefixSlug) addClasses(el, `cb-card__tag-field--${prefixSlug} rb-card__tag-field--${prefixSlug}`);
         const label = cleanText(fieldConfig.label || "");
         const joinWith = fieldConfig.joinWith || ", ";
         const displayFormat = overrideDisplayFormat ?? fieldConfig.displayFormat ?? null;
@@ -831,7 +833,7 @@
         const icon = String(fieldConfig.icon || "").trim();
         if (icon) {
             const iconEl = document.createElement("span");
-            iconEl.className = "related-block__tag-prefix-icon";
+            iconEl.className = "cb-card__tag-icon rb-card__tag-icon related-block__tag-prefix-icon";
             iconEl.setAttribute("aria-hidden", "true");
             if (String(fieldConfig.iconType || "text").toLowerCase() === "html") {
                 iconEl.innerHTML = icon;
