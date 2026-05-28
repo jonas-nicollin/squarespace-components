@@ -9,20 +9,6 @@
     if (!CONFIGS.length && !SHARED_CONFIG) return;
     // Mode développement : désactive tous les caches quand _shared.devMode === true
     const DEV_MODE = SHARED_CONFIG?.devMode === true;
-    function getCollectionBlocks() {
-        return window.CollectionBlocks || null;
-    }
-    function getCollectionUtils() {
-        const cb = getCollectionBlocks();
-        return cb && (cb.utils || cb);
-    }
-    function getCollectionDataAPI() {
-        const cb = getCollectionBlocks();
-        if (cb?.data && typeof cb.data.get === "function") return cb.data;
-        if (typeof cb?.get === "function") return cb;
-        if (window.CollectionData && typeof window.CollectionData.get === "function") return window.CollectionData;
-        return null;
-    }
     // ── Constantes ────────────────────────────────────────────────────
     const DEFAULT_JSON_FORMAT_SUFFIX = "?format=json";
     const DEFAULT_SRCSET_WIDTHS = [ 100, 300, 500, 750, 1e3, 1500, 2500 ];
@@ -46,11 +32,8 @@
     /**
    * Parse une chaîne ISO partielle : YYYY-MM-DD, YYYY-MM-DDThh:mm, etc.
    * Retourne { year, month (0-based), day, hour, min, ts } ou null.
-    */
+   */
     function parseISO(str) {
-        const utils = getCollectionUtils();
-        if (typeof utils?.parseISO === "function") return utils.parseISO(str);
-
         const s = String(str || "").trim();
         // Ignorer les intervalles ici (gérés dans formatISOTag)
         if (s.indexOf("/") !== -1) return null;
@@ -80,11 +63,8 @@
    * @param {string} str         - valeur brute du tag
    * @param {string|object} fmt  - 'datetime'|'date'|'day'|'short'|'numeric'|'time'|objet Intl
    * @param {string} locale      - locale BCP 47 (ex: 'fr-CH')
-    */
+   */
     function formatISOTag(str, fmt, locale) {
-        const utils = getCollectionUtils();
-        if (typeof utils?.formatISOTag === "function") return utils.formatISOTag(str, fmt, locale);
-
         const s = String(str || "").trim();
         const loc = locale || document.documentElement.lang || "fr-CH";
         const tzOpt = SITE_TZ ? {
@@ -215,9 +195,6 @@
     // UTILITAIRES TEXTE
     // ════════════════════════════════════════════════════════════════
     function normalize(str) {
-        const utils = getCollectionUtils();
-        if (typeof utils?.norm === "function") return utils.norm(str);
-
         return String(str || "").replace(/\u00A0/g, " ").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\u2019']/g, "'").replace(/&/g, "and").replace(/\s+/g, " ").trim();
     }
     function uniq(arr) {
@@ -229,15 +206,9 @@
         return txt.value;
     }
     function cleanText(str) {
-        const utils = getCollectionUtils();
-        if (typeof utils?.cleanHTML === "function") return utils.cleanHTML(str);
-
         return decodeHtmlEntities(str).replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ").replace(/\u00A0/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     }
     function truncateText(str, maxLength) {
-        const utils = getCollectionUtils();
-        if (typeof utils?.truncate === "function") return utils.truncate(str, maxLength);
-
         const text = cleanText(str);
         if (!text || text.length <= maxLength) return text;
         const sliced = text.slice(0, maxLength);
@@ -267,9 +238,6 @@
         return idx === -1 ? raw.trim() : raw.slice(idx + 1).trim();
     }
     function slugifyToken(str) {
-        const utils = getCollectionUtils();
-        if (typeof utils?.slugify === "function") return utils.slugify(str);
-
         return String(str || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     }
     function buildTagObjects(tags) {
@@ -287,11 +255,6 @@
         }).filter(t => t.rawNorm);
     }
     function getTagValuesByPrefix(item, prefix) {
-        const utils = getCollectionUtils();
-        if (typeof utils?.getTagValuesByPrefix === "function") {
-            return utils.getTagValuesByPrefix(item, prefix);
-        }
-
         if (!prefix) return [];
         const normalizedPrefix = normalize(String(prefix).replace(/:$/, ""));
         return (Array.isArray(item?.tags) ? item.tags : []).map(tag => {
@@ -765,16 +728,14 @@
     }
 
     async function fetchCollectionStateFromPath(path, maxPages, jsonFormatSuffix, cacheOptions, keepFields) {
-        const dataApi = getCollectionDataAPI();
-
-        if (dataApi && typeof dataApi.get === 'function') {
+        if (window.CollectionData && typeof window.CollectionData.get === 'function') {
             const options = buildCollectionRequestOptions(maxPages, cacheOptions, keepFields);
 
-            if (typeof dataApi.getState === 'function') {
-                return dataApi.getState(path, options);
+            if (typeof window.CollectionData.getState === 'function') {
+                return window.CollectionData.getState(path, options);
             }
 
-            const items = await dataApi.get(path, options);
+            const items = await window.CollectionData.get(path, options);
             return {
                 items: items,
                 pagesLoaded: Number(maxPages || 1),
@@ -784,7 +745,7 @@
             };
         }
 
-        throw new Error('CollectionBlocks ou CollectionData unavailable');
+        throw new Error('CollectionData unavailable');
     }
 
     async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions, keepFields) {
