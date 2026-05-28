@@ -16,6 +16,9 @@ var clean=[
   {featureType:'administrative.land_parcel',stylers:[{visibility:'off'}]},
 ];
 
+var mapsApiPromise=null;
+var clustererPromise=null;
+
 /* ── Auto-détection de la langue depuis Squarespace ── */
 function detectLocale(){
   try{var l=(window.Static&&window.Static.SQUARESPACE_CONTEXT&&window.Static.SQUARESPACE_CONTEXT.website&&window.Static.SQUARESPACE_CONTEXT.website.language)||'fr';return l.slice(0,2).toLowerCase();}catch(_){return'fr';}
@@ -31,6 +34,7 @@ function getI18n(cfg){
   return Object.assign({},base,cfg.i18n||{});
 }
 
+function setupLocatorBlock(rawConfig){
 var cfg=Object.assign({
   collectionUrl:'',category:'',tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
@@ -47,7 +51,7 @@ var cfg=Object.assign({
   cacheTTL:600000,
   performance:{},
   debug:false,
-},window.LOCATOR_BLOCK_CONFIG||{});
+},rawConfig||{});
 
 cfg.performance=Object.assign({
   lazyInit:true,
@@ -62,7 +66,8 @@ cfg.performance=Object.assign({
    groups définit la construction des cards (media + body).
    Chaque group a une className et des children.
    Par défaut : media avec image seule, body avec tous les champs texte.
-   Surcharger dans window.LOCATOR_BLOCK_CONFIG.display. */
+   Surcharger dans window.LOCATOR_BLOCK_CONFIGS[n].display
+   ou window.LOCATOR_BLOCK_CONFIG.display en rétrocompatibilité. */
 cfg.display=Object.assign({
   /* Éléments à afficher (utilisés par les groups par défaut) */
   showImage:   true,
@@ -138,17 +143,8 @@ function imgTag(base,alt,cls,sizes,fp,priority){
 /* ── Coordonnées ── */
 function getCoords(loc){loc=loc||{};return{lat:parseFloat(loc.mapLat||loc.markerLat||''),lng:parseFloat(loc.mapLng||loc.markerLng||'')};}
 
-/* ── Fetch SQS + pagination timestamp ── */
-   async function fetchItems(maxPages){
-  if(!cfg.collectionUrl) throw new Error('collectionUrl manquant');
-
-  if(!window.CollectionData || typeof window.CollectionData.get !== 'function'){
-    throw new Error('CollectionData requis pour Locator Block');
-  }
-
-  maxPages = maxPages || cfg.performance.maxPages || 1;
-
-  var all = await window.CollectionData.get(cfg.collectionUrl, {
+function getCollectionOptions(maxPages){
+  return {
     maxPages: maxPages,
     ttl: Math.round((cfg.cacheTTL || 600000) / 1000),
     memoryCache: true,
@@ -173,7 +169,34 @@ function getCoords(loc){loc=loc||{};return{lat:parseFloat(loc.mapLat||loc.marker
       'updatedOn'
     ],
     stripFields: []
-  });
+  };
+}
+
+/* ── Fetch SQS + pagination timestamp ── */
+   async function fetchItemsState(maxPages){
+  if(!cfg.collectionUrl) throw new Error('collectionUrl manquant');
+
+  if(!window.CollectionData || typeof window.CollectionData.get !== 'function'){
+    throw new Error('CollectionData requis pour Locator Block');
+  }
+
+  maxPages = maxPages || cfg.performance.maxPages || 1;
+
+  var options = getCollectionOptions(maxPages);
+  var state;
+
+  if(typeof window.CollectionData.getState === 'function'){
+    state = await window.CollectionData.getState(cfg.collectionUrl, options);
+  }else{
+    state = {
+      items: await window.CollectionData.get(cfg.collectionUrl, options),
+      complete: maxPages === 'all',
+      fetchError: null,
+      pagesLoaded: Number(maxPages || 1)
+    };
+  }
+
+  var all = state.items || [];
 
   log('Brut:', all.length);
 
@@ -228,7 +251,12 @@ function getCoords(loc){loc=loc||{};return{lat:parseFloat(loc.mapLat||loc.marker
     });
   }
 
-  return items;
+  return {
+    items: items,
+    complete: !!state.complete,
+    fetchError: state.fetchError || null,
+    pagesLoaded: state.pagesLoaded || Number(maxPages || 1)
+  };
 }
 /* ── Rendu d'un child dans un group ── */
 function renderChild(child,item){
@@ -373,8 +401,8 @@ function markerIcon(label,active){
 }
 
 /* ── API Maps + clusterer ── */
-function loadMapsAPI(){return new Promise(function(resolve,reject){if(window.google&&window.google.maps){resolve();return;}var cb='__locatorReady_'+Date.now();window[cb]=function(){delete window[cb];resolve();};var s=document.createElement('script');s.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(cfg.apiKey)+'&callback='+cb+'&loading=async';s.async=true;s.onerror=function(){reject(new Error('Google Maps inaccessible'));};document.head.appendChild(s);});}
-function loadClusterer(){return new Promise(function(resolve){if(window.markerClusterer){resolve();return;}var s=document.createElement('script');s.src='https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';s.onload=function(){resolve();};s.onerror=function(){resolve();};document.head.appendChild(s);});}
+function loadMapsAPI(){if(window.google&&window.google.maps)return Promise.resolve();if(mapsApiPromise)return mapsApiPromise;mapsApiPromise=new Promise(function(resolve,reject){var cb='__locatorReady_'+Date.now();window[cb]=function(){delete window[cb];resolve();};var s=document.createElement('script');s.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(cfg.apiKey)+'&callback='+cb+'&loading=async';s.async=true;s.onerror=function(){mapsApiPromise=null;reject(new Error('Google Maps inaccessible'));};document.head.appendChild(s);});return mapsApiPromise;}
+function loadClusterer(){if(window.markerClusterer)return Promise.resolve();if(clustererPromise)return clustererPromise;clustererPromise=new Promise(function(resolve){var s=document.createElement('script');s.src='https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js';s.onload=function(){resolve();};s.onerror=function(){clustererPromise=null;resolve();};document.head.appendChild(s);});return clustererPromise;}
 
 /* ── Contrôles + skeleton ── */
 function buildControls(zones,total){
@@ -429,12 +457,8 @@ function buildControls(zones,total){
 function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="locator-block__card locator-block__card--skeleton"><div class="locator-block__media"></div><div class="locator-block__body"><div class="locator-block__skeleton-line" style="width:20%"></div><div class="locator-block__skeleton-line" style="width:70%"></div><div class="locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
 
 /* ── Instance ── */
-function createInstance(root,allItems,fetchMoreItems,previousCount){
-  /* previousCount : si fourni depuis completeInIdle, seuls les items
-     au-dela de cet index sont de nouveaux items a ajouter.
-     Si absent ou 0, reconstruction complete normale. */
-  var isIncremental = typeof previousCount === 'number' && previousCount > 0;
-  var map,markers={},clusterer=null,activeId=null,activePopup=null;
+function createInstance(root,allItems,fetchMoreItems){
+  var map,markers={},clusterer=null,activeId=null,activePopup=null,activeZone='';
   var currentItems=allItems,visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:allItems.length;
 
   function buildMap(c){
@@ -461,8 +485,16 @@ function createInstance(root,allItems,fetchMoreItems,previousCount){
   }
   function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.lat,item.lng),item);activePopup.setMap(map);}
   function closePopup(){if(activePopup){activePopup.setMap(null);activePopup=null;}}
-  function createMarker(item){var icon=markerIcon(item.numero,false);var o={position:{lat:item.lat,lng:item.lng},map:cfg.map.clustering?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){activate(item.id,true);showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
+  function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:{lat:item.lat,lng:item.lng},map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){activate(item.id,true);showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
   function addAllMarkers(){var ml=allItems.map(function(i){return createMarker(i);});if(cfg.map.clustering&&window.markerClusterer)clusterer=new markerClusterer.MarkerClusterer({map:map,markers:ml,algorithm:new markerClusterer.GridAlgorithm({maxDistance:40})});}
+  function addMissingMarkers(items){
+    var ml=[];
+    items.forEach(function(i){if(!markers[i.id])ml.push(createMarker(i));});
+    if(cfg.map.clustering&&ml.length){
+      if(clusterer&&typeof clusterer.addMarkers==='function')clusterer.addMarkers(ml);
+      else ml.forEach(function(m){m.setMap(map);});
+    }
+  }
   function updateMarker(id,a){if(!markers[id])return;var icon=markerIcon(markers[id].item.numero,a);if(icon!==null)markers[id].marker.setIcon(icon);markers[id].marker.setZIndex(a?999:0);}
   function activate(id,pan){
     if(activeId===id)return;
@@ -507,9 +539,15 @@ function createInstance(root,allItems,fetchMoreItems,previousCount){
 
   if(typeof fetchMoreItems === 'function' && visibleCount >= items.length){
     try{
-      allItems = await fetchMoreItems();
-      currentItems = allItems;
-      items = allItems;
+      var result = await fetchMoreItems();
+      var nextItems = Array.isArray(result) ? result : (result && result.items);
+
+      if(Array.isArray(nextItems)&&nextItems.length>allItems.length){
+        allItems = nextItems;
+        addMissingMarkers(allItems);
+        currentItems = activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
+        items = currentItems;
+      }
     }catch(err){
       log('Fetch more failed:', err);
     }
@@ -518,7 +556,7 @@ function createInstance(root,allItems,fetchMoreItems,previousCount){
   renderList(items, visibleCount);
 });}}
   }
-  function applyFilter(zone){closePopup();currentItems=zone?allItems.filter(function(i){return i.zones.indexOf(zone)!==-1;}):allItems;visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:currentItems.length;renderList(currentItems,visibleCount);allItems.forEach(function(i){if(!markers[i.id])return;markers[i.id].marker.setVisible(currentItems.some(function(ci){return ci.id===i.id;}));});if(currentItems.length&&zone){var b=new google.maps.LatLngBounds();currentItems.forEach(function(i){b.extend({lat:i.lat,lng:i.lng});});map.fitBounds(b,{padding:60});}}
+  function applyFilter(zone){closePopup();activeZone=zone||'';currentItems=activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:currentItems.length;renderList(currentItems,visibleCount);allItems.forEach(function(i){if(!markers[i.id])return;markers[i.id].marker.setVisible(currentItems.some(function(ci){return ci.id===i.id;}));});if(currentItems.length&&activeZone){var b=new google.maps.LatLngBounds();currentItems.forEach(function(i){b.extend({lat:i.lat,lng:i.lng});});map.fitBounds(b,{padding:60});}}
 
   var zones=[];allItems.forEach(function(i){i.zones.forEach(function(z){if(zones.indexOf(z)===-1)zones.push(z);});});zones.sort();
   /* En mode grid, la structure HTML est identique au mode list.
@@ -526,21 +564,9 @@ function createInstance(root,allItems,fetchMoreItems,previousCount){
      --locator-grid-list-width contrôle la proportion (défaut: 50%). */
   var lc=cfg.layout==='grid'?' locator-block__inner--grid':' locator-block__inner--list';
   var cc=cfg.customClass?' '+escHtml(cfg.customClass):'';
-  /* En mode incremental, le DOM existe deja — on ne reconstruit pas */
-  if (!isIncremental) {
-    root.innerHTML='<div class="locator-block__inner'+lc+cc+'"><div class="locator-block__sidebar">'+buildControls(zones,allItems.length)+'<div class="locator-block__list"></div></div><div class="locator-block__map-wrap"><div class="locator-block__map"></div></div></div>';
-  }
-  buildMap(root.querySelector('.locator-block__map'));
-  /* En mode incremental, on n'ajoute que les nouveaux marqueurs —
-     le DOM de la carte et les marqueurs existants sont deja en place. */
-  if (isIncremental) {
-    allItems.slice(previousCount).forEach(function(i){ createMarker(i); });
-  } else {
-    addAllMarkers();
-  }
-  if (!isIncremental) {
-    if(allItems.length){var bounds=new google.maps.LatLngBounds();allItems.forEach(function(i){bounds.extend({lat:i.lat,lng:i.lng});});if(cfg.mapCenter&&cfg.mapZoom){map.setCenter(cfg.mapCenter);map.setZoom(cfg.mapZoom);}else map.fitBounds(bounds,{padding:60});}
-  }
+  root.innerHTML='<div class="locator-block__inner'+lc+cc+'"><div class="locator-block__sidebar">'+buildControls(zones,allItems.length)+'<div class="locator-block__list"></div></div><div class="locator-block__map-wrap"><div class="locator-block__map"></div></div></div>';
+  buildMap(root.querySelector('.locator-block__map'));addAllMarkers();
+  if(allItems.length){var bounds=new google.maps.LatLngBounds();allItems.forEach(function(i){bounds.extend({lat:i.lat,lng:i.lng});});if(cfg.mapCenter&&cfg.mapZoom){map.setCenter(cfg.mapCenter);map.setZoom(cfg.mapZoom);}else map.fitBounds(bounds,{padding:60});}
   renderList(allItems,visibleCount);
   var sel=root.querySelector('.locator-block__filter-zone');if(sel)sel.addEventListener('change',function(){applyFilter(sel.value);});
   root.querySelectorAll('.locator-block__filter-btn').forEach(function(btn){
@@ -564,28 +590,37 @@ async function init(){
   roots.forEach(function(r){r.innerHTML='<div class="locator-block__inner locator-block__inner--list"><div class="locator-block__sidebar"><div class="locator-block__list">'+buildSkeleton()+'</div></div><div class="locator-block__map-wrap"><div class="locator-block__map locator-block__map--loading"></div></div></div>';});
   try{
     var initialMaxPages = cfg.performance.maxPages || 1;
-    var loaders=[fetchItems(initialMaxPages),loadMapsAPI()];if(cfg.map.clustering)loaders.push(loadClusterer());
-    var results=await Promise.all(loaders);var items=results[0];log('Items:',items.length);
-        var loadedMaxPages = initialMaxPages;
+    var loaders=[fetchItemsState(initialMaxPages),loadMapsAPI()];if(cfg.map.clustering)loaders.push(loadClusterer());
+    var results=await Promise.all(loaders);var itemState=results[0];var items=itemState.items||[];log('Items:',items.length);
+    var loadedMaxPages = initialMaxPages;
     var progressiveMaxPages = cfg.performance.progressiveMaxPages || 'all';
+    var sourceComplete = !!(itemState.complete || itemState.fetchError);
     if(!items.length){roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">'+getI18n(cfg).noResults+'</p>';});return;}
 
 async function fetchMoreItems(){
+  if(sourceComplete){
+    return {items:items, changed:false, complete:sourceComplete};
+  }
+
   if(progressiveMaxPages !== 'all' && Number(loadedMaxPages) >= Number(progressiveMaxPages)){
-    return items;
+    sourceComplete = true;
+    return {items:items, changed:false, complete:sourceComplete};
   }
 
   loadedMaxPages = progressiveMaxPages === 'all'
     ? Number(loadedMaxPages || 1) + 1
     : Math.min(Number(loadedMaxPages || 1) + 1, Number(progressiveMaxPages));
 
-  var more = await fetchItems(loadedMaxPages);
+  var nextState = await fetchItemsState(loadedMaxPages);
+  var more = nextState.items || [];
+  var changed = more.length > items.length;
+  sourceComplete = !!(nextState.complete || nextState.fetchError);
 
-  if(more.length > items.length){
+  if(changed){
     items = more;
   }
 
-  return items;
+  return {items:items, changed:changed, complete:sourceComplete};
 }
 
 roots.forEach(function(r){createInstance(r,items,fetchMoreItems);});
@@ -593,34 +628,19 @@ roots.forEach(function(r){createInstance(r,items,fetchMoreItems);});
 function completeInIdle(){
   if (typeof fetchMoreItems !== 'function') return;
 
-  fetchMoreItems().then(function(moreItems){
-    /* Guard : si aucun item supplémentaire, on n'a rien à faire */
-    if (!Array.isArray(moreItems) || moreItems.length <= items.length) {
-      log('Idle: aucun nouvel item, reconstruction evitee');
-      return;
+  fetchMoreItems().then(function(result){
+    if (!result) return;
+
+    if (result.changed) {
+      items = result.items || items;
+
+      roots.forEach(function(r){
+        createInstance(r,items,fetchMoreItems);
+      });
     }
 
-    var previousCount = items.length;
-    items = moreItems;
-
-    /* Reconstruction de l'instance uniquement si de nouveaux items existent.
-       On passe le nombre d'items precedents pour que createInstance puisse
-       ajouter seulement les nouveaux markers sans tout reconstruire. */
-    roots.forEach(function(r){
-      createInstance(r, items, fetchMoreItems, previousCount);
-    });
-
-    /* Reschedule seulement si la collection n'est pas encore complete */
-    var collectionDone = window.CollectionData && typeof window.CollectionData.stats === 'function'
-      ? (window.CollectionData.stats().collections || []).some(function(c){
-          return c.key && c.key.indexOf(cfg.collectionUrl) !== -1 && c.complete && !c.fetchError;
-        })
-      : false;
-
-    if (!collectionDone && cfg.performance.progressiveMaxPages === 'all') {
+    if (!result.complete && cfg.performance.progressiveMaxPages === 'all') {
       scheduleIdleCompletion();
-    } else {
-      log('Idle: collection complete, fin du chargement progressif');
     }
   }).catch(function(err){
     log('Idle fetch failed:', err);
@@ -669,5 +689,25 @@ if(document.readyState==='loading'){
 }else{
   scheduleInit();
 }
+
+}
+
+function getLocatorConfigs(){
+  if(Array.isArray(window.LOCATOR_BLOCK_CONFIGS)){
+    return window.LOCATOR_BLOCK_CONFIGS;
+  }
+
+  if(window.LOCATOR_BLOCK_CONFIG){
+    return [window.LOCATOR_BLOCK_CONFIG];
+  }
+
+  return [];
+}
+
+getLocatorConfigs().forEach(function(locatorConfig){
+  if(locatorConfig && locatorConfig.enabled !== false){
+    setupLocatorBlock(locatorConfig);
+  }
+});
 
 })();
