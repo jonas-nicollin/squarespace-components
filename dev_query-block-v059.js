@@ -565,7 +565,7 @@ var isPriority = priority === true || imgIndex < 3;
 
   function buildLabelNode(label, labelIcon) {
     if (labelIcon) {
-      var ic = el('span', { class: 'sqb-icon sqb-tag-icon' });
+      var ic = el('span', { class: 'cb-icon qb-icon sqb-icon cb-tag-icon qb-tag-icon sqb-tag-icon' });
       ic.textContent = labelIcon;
       return ic;
     }
@@ -744,7 +744,7 @@ var isPriority = priority === true || imgIndex < 3;
             wrapper.appendChild(node);
 
             if (ni < built.length - 1 && sep) {
-              var sepNode = el('span', { class: 'sqb-inline-sep' });
+              var sepNode = el('span', { class: 'cb-inline-sep qb-inline-sep sqb-inline-sep' });
               sepNode.textContent = sep;
               wrapper.appendChild(sepNode);
             }
@@ -1218,7 +1218,7 @@ var isPriority = priority === true || imgIndex < 3;
       if (!gi.length) return;
 
       var h = el('div', {
-        class: 'sqb-group-heading',
+        class: 'cb-group-heading qb-group-heading sqb-group-heading',
         'data-group': key,
         style: 'grid-column:1 / -1',
       });
@@ -1230,7 +1230,7 @@ var isPriority = priority === true || imgIndex < 3;
           headingLabel = 'Aujourd\u2019hui';
         } else if (useSmartDate && key < todayStr) {
           headingLabel = formatGroupDate(key, null, labelFmt);
-          h.classList.add('sqb-group-heading--past');
+          h.classList.add('cb-group-heading--past', 'qb-group-heading--past', 'sqb-group-heading--past');
         } else {
           headingLabel = formatGroupDate(key, null, labelFmt);
         }
@@ -1406,8 +1406,14 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
       Array.from(panel.classList).forEach(function(c) {
         if (
+          c.indexOf('cb--') === 0 ||
+          c.indexOf('qb--') === 0 ||
           c.indexOf('sqb--') === 0 ||
+          c.indexOf('cb-tab--') === 0 ||
+          c.indexOf('qb-tab--') === 0 ||
           c.indexOf('sqb-tab--') === 0 ||
+          c.indexOf('cb-block--') === 0 ||
+          c.indexOf('qb-block--') === 0 ||
           c.indexOf('sqb-block--') === 0
         ) {
           panel.classList.remove(c);
@@ -1424,8 +1430,14 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
       Array.from(ownerBlock.classList).forEach(function(c) {
         if (
+          c.indexOf('cb--') === 0 ||
+          c.indexOf('qb--') === 0 ||
           c.indexOf('sqb--') === 0 ||
+          c.indexOf('cb-tab--') === 0 ||
+          c.indexOf('qb-tab--') === 0 ||
           c.indexOf('sqb-tab--') === 0 ||
+          c.indexOf('cb-block--') === 0 ||
+          c.indexOf('qb-block--') === 0 ||
           c.indexOf('sqb-block--') === 0
         ) {
           panel.classList.add(c);
@@ -2051,7 +2063,11 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     if (cfg.key && !target.id) target.id = 'sqb-' + cfg.key;
     if (cfg.label) target.setAttribute('data-sqb-label', cfg.label);
-    if (cfg.key) target.classList.add('sqb--' + cfg.key);
+    if (cfg.key) {
+      target.classList.add('cb--' + cfg.key);
+      target.classList.add('qb--' + cfg.key);
+      target.classList.add('sqb--' + cfg.key);
+    }
 
     if (cfg.classes) {
       cfg.classes.trim().split(/\s+/).forEach(function(c) {
