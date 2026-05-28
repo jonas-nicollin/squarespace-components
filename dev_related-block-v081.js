@@ -9,6 +9,10 @@
     if (!CONFIGS.length && !SHARED_CONFIG) return;
     // Mode développement : désactive tous les caches quand _shared.devMode === true
     const DEV_MODE = SHARED_CONFIG?.devMode === true;
+    function addClasses(el, classes) {
+        String(classes || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => el.classList.add(cls));
+        return el;
+    }
     // ── Constantes ────────────────────────────────────────────────────
     const DEFAULT_JSON_FORMAT_SUFFIX = "?format=json";
     const DEFAULT_SRCSET_WIDTHS = [ 100, 300, 500, 750, 1e3, 1500, 2500 ];
@@ -815,6 +819,7 @@
         if (fieldConfig.maxItems) values = values.slice(0, Number(fieldConfig.maxItems));
         const el = document.createElement("div");
         el.className = fieldConfig.className || "related-block__tag-prefix";
+        addClasses(el, "cb-card__tag-field rb-card__tag-field");
         const label = cleanText(fieldConfig.label || "");
         const joinWith = fieldConfig.joinWith || ", ";
         const displayFormat = overrideDisplayFormat ?? fieldConfig.displayFormat ?? null;
@@ -835,7 +840,7 @@
             }
             el.appendChild(iconEl);
             const textEl = document.createElement("span");
-            textEl.className = "related-block__tag-prefix-text";
+            textEl.className = "cb-card__tag-value rb-card__tag-value related-block__tag-prefix-text";
             textEl.textContent = fullText;
             el.appendChild(textEl);
         } else {
@@ -847,10 +852,10 @@
         const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
         if (!cats.length) return null;
         const meta = document.createElement("div");
-        meta.className = "related-block__meta";
+        meta.className = "cb-card__meta rb-card__meta cb-card__categories rb-card__categories related-block__meta";
         cats.forEach(cat => {
             const span = document.createElement("span");
-            span.className = "related-block__category";
+            span.className = "cb-card__category rb-card__category related-block__category";
             span.textContent = cleanText(cat);
             meta.appendChild(span);
         });
