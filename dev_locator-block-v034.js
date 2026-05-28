@@ -123,6 +123,25 @@ var CLS_TAG_VALUE='cb-card__tag-value lb-card__tag-value';
 var CLS_LOCATION='cb-card__location lb-card__location';
 var CLS_LINK='cb-card__link lb-card__link locator-block__card-link';
 var CLS_GROUP='cb-card__group lb-card__group';
+var CLS_BLOCK='cb-block lb-block locator-block';
+var CLS_INNER='cb-block__inner lb-block__inner locator-block__inner';
+var CLS_INNER_GRID='cb-block__inner--grid lb-block__inner--grid locator-block__inner--grid';
+var CLS_INNER_LIST='cb-block__inner--list lb-block__inner--list locator-block__inner--list';
+var CLS_SIDEBAR='cb-sidebar lb-sidebar locator-block__sidebar';
+var CLS_LIST='cb-list lb-list locator-block__list';
+var CLS_MAP_WRAP='lb-map-wrap locator-block__map-wrap';
+var CLS_MAP='lb-map locator-block__map';
+var CLS_CONTROLS='cb-controls lb-controls locator-block__controls';
+var CLS_FILTER_BUTTONS='cb-filter-buttons lb-filter-buttons locator-block__filter-buttons';
+var CLS_FILTER_BTN='cb-filter-btn lb-filter-btn locator-block__filter-btn';
+var CLS_FILTER_BTN_ACTIVE='cb-filter-btn--active lb-filter-btn--active locator-block__filter-btn--active';
+var CLS_FILTER_WRAP='cb-filter-wrap lb-filter-wrap locator-block__filter-wrap';
+var CLS_FILTER_SELECT='cb-filter-select lb-filter-select locator-block__filter-zone';
+var CLS_FILTER_ICON='cb-filter-icon lb-filter-icon locator-block__filter-icon ui-icon';
+var CLS_COUNT='cb-count lb-count locator-block__count';
+var CLS_LOAD_MORE_WRAP='cb-load-more-wrap lb-load-more-wrap locator-block__load-more-wrap';
+var CLS_LOAD_MORE='cb-load-more lb-load-more locator-block__load-more';
+var CLS_ERROR='cb-error lb-error locator-block__error';
 function addClassNames(base, extra){var map={};String(base||'').split(/\s+/).concat(String(extra||'').split(/\s+/)).forEach(function(c){if(c)map[c]=true;});return Object.keys(map).join(' ');}
 
 /* ── Utilitaires ── */
@@ -345,7 +364,7 @@ function buildCardHTML(item){
         var cls=group.className||'locator-block__body';
         /* Si le group contient une image, c'est un media group */
         var isMedia=group.children&&group.children.indexOf('image')!==-1;
-        var finalCls=isMedia?CLS_MEDIA:addClassNames(cls,CLS_GROUP+(String(cls).indexOf('locator-block__body')!==-1?' cb-card__body lb-card__body':''));
+        var finalCls=isMedia?addClassNames(cls,CLS_MEDIA):addClassNames(cls,CLS_GROUP+(String(cls).indexOf('locator-block__body')!==-1?' cb-card__body lb-card__body':''));
         html+='<div class="'+escHtml(finalCls)+'">'+inner+'</div>';
       }
     });
@@ -452,21 +471,21 @@ function buildControls(zones,total){
     if(cfg.filterMode==='buttons'){
       /* Boutons pill — même apparence que Query Block (sqb-filter-btn) */
       var btns='';
-      zones.forEach(function(z){btns+='<button class="locator-block__filter-btn" data-zone="'+escHtml(z)+'" type="button">'+escHtml(z)+'</button>';});
-      f='<div class="locator-block__filter-buttons">'+btns+'</div>';
+      zones.forEach(function(z){btns+='<button class="'+escHtml(CLS_FILTER_BTN)+'" data-zone="'+escHtml(z)+'" type="button">'+escHtml(z)+'</button>';});
+      f='<div class="'+escHtml(CLS_FILTER_BUTTONS)+'">'+btns+'</div>';
     }else{
       /* Dropdown (défaut) */
       var opts=['<option value="">Toutes les zones</option>']
         .concat(zones.map(function(z){return'<option value="'+escHtml(z)+'">'+escHtml(z)+'</option>';})).join('');
-      f='<div class="locator-block__filter-wrap">'
-        +'<select class="locator-block__filter-zone" aria-label="Filtrer par zone">'+opts+'</select>'
-        +'<span class="locator-block__filter-icon ui-icon" aria-hidden="true">expand_more</span>'
+      f='<div class="'+escHtml(CLS_FILTER_WRAP)+'">'
+        +'<select class="'+escHtml(CLS_FILTER_SELECT)+'" aria-label="Filtrer par zone">'+opts+'</select>'
+        +'<span class="'+escHtml(CLS_FILTER_ICON)+'" aria-hidden="true">expand_more</span>'
         +'</div>';
     }
   }
   var countHtml=cfg.display.showCount!==false
-    ?'<span class="locator-block__count">'+getI18n(cfg).itemCount(total)+'</span>':'';
-  return'<div class="locator-block__controls">'+countHtml+f+'</div>';
+    ?'<span class="'+escHtml(CLS_COUNT)+'">'+getI18n(cfg).itemCount(total)+'</span>':'';
+  return'<div class="'+escHtml(CLS_CONTROLS)+'">'+countHtml+f+'</div>';
 }
    function renderCardsProgressive(list, items, count, done){
   var n = cfg.display.pageSize > 0 ? Math.min(count, items.length) : items.length;
@@ -495,7 +514,7 @@ function buildControls(zones,total){
 
   appendBatch();
 }
-function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="'+escHtml(CLS_CARD)+' locator-block__card--skeleton"><div class="'+escHtml(CLS_MEDIA)+'"></div><div class="'+escHtml(CLS_BODY)+'"><div class="locator-block__skeleton-line" style="width:20%"></div><div class="locator-block__skeleton-line" style="width:70%"></div><div class="locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
+function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="'+escHtml(CLS_CARD)+' cb-card--skeleton lb-card--skeleton locator-block__card--skeleton"><div class="'+escHtml(CLS_MEDIA)+'"></div><div class="'+escHtml(CLS_BODY)+'"><div class="cb-skeleton-line lb-skeleton-line locator-block__skeleton-line" style="width:20%"></div><div class="cb-skeleton-line lb-skeleton-line locator-block__skeleton-line" style="width:70%"></div><div class="cb-skeleton-line lb-skeleton-line locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
 
 /* ── Instance ── */
 function createInstance(root,allItems,fetchMoreItems){
@@ -575,7 +594,7 @@ function createInstance(root,allItems,fetchMoreItems){
   bindCards();
 });
     var lw=root.querySelector('.locator-block__load-more-wrap');if(lw)lw.remove();
-    if(cfg.display.pageSize>0&&items.length>n){var sb=root.querySelector('.locator-block__sidebar');if(sb){sb.insertAdjacentHTML('beforeend','<div class="locator-block__load-more-wrap"><button class="locator-block__load-more" type="button">Voir plus</button></div>');var btn=sb.querySelector('.locator-block__load-more');if(btn)btn.addEventListener('click',async function(){
+    if(cfg.display.pageSize>0&&items.length>n){var sb=root.querySelector('.locator-block__sidebar');if(sb){sb.insertAdjacentHTML('beforeend','<div class="'+escHtml(CLS_LOAD_MORE_WRAP)+'"><button class="'+escHtml(CLS_LOAD_MORE)+'" type="button">Voir plus</button></div>');var btn=sb.querySelector('.locator-block__load-more');if(btn)btn.addEventListener('click',async function(){
   visibleCount = Math.min(visibleCount + cfg.display.pageSize, items.length);
 
   if(typeof fetchMoreItems === 'function' && visibleCount >= items.length){
@@ -603,9 +622,9 @@ function createInstance(root,allItems,fetchMoreItems){
   /* En mode grid, la structure HTML est identique au mode list.
      Le CSS gère l'affichage : liste=grille multi-colonnes, carte=côté droit.
      --locator-grid-list-width contrôle la proportion (défaut: 50%). */
-  var lc=cfg.layout==='grid'?' locator-block__inner--grid':' locator-block__inner--list';
+  var lc=cfg.layout==='grid'?CLS_INNER_GRID:CLS_INNER_LIST;
   var cc=cfg.customClass?' '+escHtml(cfg.customClass):'';
-  root.innerHTML='<div class="locator-block__inner'+lc+cc+'"><div class="locator-block__sidebar">'+buildControls(zones,allItems.length)+'<div class="locator-block__list"></div></div><div class="locator-block__map-wrap"><div class="locator-block__map"></div></div></div>';
+  root.innerHTML='<div class="'+escHtml(addClassNames(CLS_INNER,lc))+cc+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length)+'<div class="'+escHtml(CLS_LIST)+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
   buildMap(root.querySelector('.locator-block__map'));addAllMarkers();
   if(allItems.length){var bounds=new google.maps.LatLngBounds();allItems.forEach(function(i){bounds.extend({lat:i.lat,lng:i.lng});});if(cfg.mapCenter&&cfg.mapZoom){map.setCenter(cfg.mapCenter);map.setZoom(cfg.mapZoom);}else map.fitBounds(bounds,{padding:60});}
   renderList(allItems,visibleCount);
@@ -615,8 +634,8 @@ function createInstance(root,allItems,fetchMoreItems){
       var zone=btn.dataset.zone||'';
       /* Toggle : clic sur bouton actif = désactiver (revenir à "tout") */
       var isAlreadyActive=btn.classList.contains('locator-block__filter-btn--active');
-      root.querySelectorAll('.locator-block__filter-btn').forEach(function(b){b.classList.remove('locator-block__filter-btn--active');});
-      if(!isAlreadyActive){btn.classList.add('locator-block__filter-btn--active');}else{zone='';}
+      root.querySelectorAll('.locator-block__filter-btn').forEach(function(b){b.classList.remove('cb-filter-btn--active','lb-filter-btn--active','locator-block__filter-btn--active');});
+      if(!isAlreadyActive){btn.classList.add('cb-filter-btn--active','lb-filter-btn--active','locator-block__filter-btn--active');}else{zone='';}
       applyFilter(zone);
     });
   });
@@ -627,8 +646,9 @@ function createInstance(root,allItems,fetchMoreItems){
 async function init(){
   var roots=Array.from(document.querySelectorAll(cfg.rootSelector));
   log('Init —',roots.length,'conteneur(s)');if(!roots.length)return;
-  if(!cfg.apiKey){roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">apiKey manquant</p>';});return;}
-  roots.forEach(function(r){r.innerHTML='<div class="locator-block__inner locator-block__inner--list"><div class="locator-block__sidebar"><div class="locator-block__list">'+buildSkeleton()+'</div></div><div class="locator-block__map-wrap"><div class="locator-block__map locator-block__map--loading"></div></div></div>';});
+  roots.forEach(function(r){String(CLS_BLOCK).split(/\s+/).forEach(function(c){if(c)r.classList.add(c);});});
+  if(!cfg.apiKey){roots.forEach(function(r){r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">apiKey manquant</p>';});return;}
+  roots.forEach(function(r){r.innerHTML='<div class="'+escHtml(addClassNames(CLS_INNER,CLS_INNER_LIST))+'"><div class="'+escHtml(CLS_SIDEBAR)+'"><div class="'+escHtml(CLS_LIST)+'">'+buildSkeleton()+'</div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(addClassNames(CLS_MAP,'lb-map--loading locator-block__map--loading'))+'"></div></div></div>';});
   try{
     var initialMaxPages = cfg.performance.maxPages || 1;
     var loaders=[fetchItemsState(initialMaxPages),loadMapsAPI()];if(cfg.map.clustering)loaders.push(loadClusterer());
@@ -636,7 +656,7 @@ async function init(){
     var loadedMaxPages = initialMaxPages;
     var progressiveMaxPages = cfg.performance.progressiveMaxPages || 'all';
     var sourceComplete = !!(itemState.complete || itemState.fetchError);
-    if(!items.length){roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">'+getI18n(cfg).noResults+'</p>';});return;}
+    if(!items.length){roots.forEach(function(r){r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">'+getI18n(cfg).noResults+'</p>';});return;}
 
 async function fetchMoreItems(){
   if(sourceComplete){
@@ -699,7 +719,7 @@ function scheduleIdleCompletion(){
 if (cfg.performance.idleComplete !== false) {
   scheduleIdleCompletion();
 }
-  }catch(err){console.error('Locator Block:',err);roots.forEach(function(r){r.innerHTML='<p class="locator-block__error">Erreur: '+escHtml(err.message)+'</p>';});}
+  }catch(err){console.error('Locator Block:',err);roots.forEach(function(r){r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">Erreur: '+escHtml(err.message)+'</p>';});}
 }
 
 function scheduleInit(){
