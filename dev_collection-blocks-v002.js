@@ -1,8 +1,8 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.1';
-  var STORE_KEY_PREFIX = 'collection-blocks::v0.1::';
+  var VERSION = '0.2';
+  var STORE_KEY_PREFIX = 'collection-blocks::v0.2::';
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
@@ -639,6 +639,26 @@
           day: 'numeric',
           month: 'short'
         }, tzOpt)));
+      }
+
+      if (format === 'short-time') {
+        var shortDay = capitalize(dt.toLocaleDateString(loc, Object.assign({
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short'
+        }, tzOpt)));
+
+        if (d.hour !== null) {
+          var shortTime = dt.toLocaleTimeString(loc, Object.assign({
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          }, tzOpt));
+
+          return shortDay + ', ' + shortTime;
+        }
+
+        return shortDay;
       }
 
       if (format === 'day') {
