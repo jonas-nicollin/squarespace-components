@@ -429,7 +429,11 @@ function buildControls(zones,total){
 function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="locator-block__card locator-block__card--skeleton"><div class="locator-block__media"></div><div class="locator-block__body"><div class="locator-block__skeleton-line" style="width:20%"></div><div class="locator-block__skeleton-line" style="width:70%"></div><div class="locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
 
 /* ── Instance ── */
-function createInstance(root,allItems,fetchMoreItems){
+function createInstance(root,allItems,fetchMoreItems,previousCount){
+  /* previousCount : si fourni depuis completeInIdle, seuls les items
+     au-dela de cet index sont de nouveaux items a ajouter.
+     Si absent ou 0, reconstruction complete normale. */
+  var isIncremental = typeof previousCount === 'number' && previousCount > 0;
   var map,markers={},clusterer=null,activeId=null,activePopup=null;
   var currentItems=allItems,visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:allItems.length;
 
@@ -522,9 +526,21 @@ function createInstance(root,allItems,fetchMoreItems){
      --locator-grid-list-width contrôle la proportion (défaut: 50%). */
   var lc=cfg.layout==='grid'?' locator-block__inner--grid':' locator-block__inner--list';
   var cc=cfg.customClass?' '+escHtml(cfg.customClass):'';
-  root.innerHTML='<div class="locator-block__inner'+lc+cc+'"><div class="locator-block__sidebar">'+buildControls(zones,allItems.length)+'<div class="locator-block__list"></div></div><div class="locator-block__map-wrap"><div class="locator-block__map"></div></div></div>';
-  buildMap(root.querySelector('.locator-block__map'));addAllMarkers();
-  if(allItems.length){var bounds=new google.maps.LatLngBounds();allItems.forEach(function(i){bounds.extend({lat:i.lat,lng:i.lng});});if(cfg.mapCenter&&cfg.mapZoom){map.setCenter(cfg.mapCenter);map.setZoom(cfg.mapZoom);}else map.fitBounds(bounds,{padding:60});}
+  /* En mode incremental, le DOM existe deja — on ne reconstruit pas */
+  if (!isIncremental) {
+    root.innerHTML='<div class="locator-block__inner'+lc+cc+'"><div class="locator-block__sidebar">'+buildControls(zones,allItems.length)+'<div class="locator-block__list"></div></div><div class="locator-block__map-wrap"><div class="locator-block__map"></div></div></div>';
+  }
+  buildMap(root.querySelector('.locator-block__map'));
+  /* En mode incremental, on n'ajoute que les nouveaux marqueurs —
+     le DOM de la carte et les marqueurs existants sont deja en place. */
+  if (isIncremental) {
+    allItems.slice(previousCount).forEach(function(i){ createMarker(i); });
+  } else {
+    addAllMarkers();
+  }
+  if (!isIncremental) {
+    if(allItems.length){var bounds=new google.maps.LatLngBounds();allItems.forEach(function(i){bounds.extend({lat:i.lat,lng:i.lng});});if(cfg.mapCenter&&cfg.mapZoom){map.setCenter(cfg.mapCenter);map.setZoom(cfg.mapZoom);}else map.fitBounds(bounds,{padding:60});}
+  }
   renderList(allItems,visibleCount);
   var sel=root.querySelector('.locator-block__filter-zone');if(sel)sel.addEventListener('change',function(){applyFilter(sel.value);});
   root.querySelectorAll('.locator-block__filter-btn').forEach(function(btn){
@@ -578,16 +594,33 @@ function completeInIdle(){
   if (typeof fetchMoreItems !== 'function') return;
 
   fetchMoreItems().then(function(moreItems){
-    if (!Array.isArray(moreItems) || moreItems.length <= items.length) return;
+    /* Guard : si aucun item supplémentaire, on n'a rien à faire */
+    if (!Array.isArray(moreItems) || moreItems.length <= items.length) {
+      log('Idle: aucun nouvel item, reconstruction evitee');
+      return;
+    }
 
+    var previousCount = items.length;
     items = moreItems;
 
+    /* Reconstruction de l'instance uniquement si de nouveaux items existent.
+       On passe le nombre d'items precedents pour que createInstance puisse
+       ajouter seulement les nouveaux markers sans tout reconstruire. */
     roots.forEach(function(r){
-      createInstance(r,items,fetchMoreItems);
+      createInstance(r, items, fetchMoreItems, previousCount);
     });
 
-    if (cfg.performance.progressiveMaxPages === 'all') {
+    /* Reschedule seulement si la collection n'est pas encore complete */
+    var collectionDone = window.CollectionData && typeof window.CollectionData.stats === 'function'
+      ? (window.CollectionData.stats().collections || []).some(function(c){
+          return c.key && c.key.indexOf(cfg.collectionUrl) !== -1 && c.complete && !c.fetchError;
+        })
+      : false;
+
+    if (!collectionDone && cfg.performance.progressiveMaxPages === 'all') {
       scheduleIdleCompletion();
+    } else {
+      log('Idle: collection complete, fin du chargement progressif');
     }
   }).catch(function(err){
     log('Idle fetch failed:', err);
