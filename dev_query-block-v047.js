@@ -1,3 +1,10 @@
+/*!
+ * Squarespace Collection Block (Query Block) v47
+ * Fetch JSON paginé · filtres · tabs · groupBy · sticky · hooks · cache partagé
+ * https://github.com/jonas-nicollin/squarespace-components
+ *
+ * Dépendance : collection-data.js doit être chargé avant ce script.
+ */
 (function () {
   'use strict';
 
@@ -192,16 +199,30 @@
 
 async function fetchAllItems(path, maxPages, useSession, ttl, stripFields) {
   if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
-    throw new Error('CollectionData requis pour Query Block');
+    throw new Error('[SQB] CollectionData requis — charger collection-data.js avant query-block.js');
   }
 
   return window.CollectionData.get(path, {
-    maxPages: maxPages || 1,
-    ttl: ttl || 300,
-    memoryCache: true,
+    maxPages:     maxPages || 1,
+    ttl:          ttl      || 300,
+    memoryCache:  true,
     sessionCache: useSession !== false,
-    credentials: 'same-origin',
-    stripFields: stripFields || [],
+    credentials:  'same-origin',
+    stripFields:  stripFields || [],
+  });
+}
+
+/* Vérifie si toutes les sources d'une liste sont marquées complètes
+   dans CollectionData (sans erreur réseau).
+   Utilisé pour distinguer "fin de collection" de "erreur transitoire". */
+function isCollectionComplete(sources) {
+  if (!window.CollectionData || typeof window.CollectionData.stats !== 'function') return false;
+  var st = window.CollectionData.stats();
+  var entries = st.collections || [];
+  return (Array.isArray(sources) ? sources : []).every(function(src) {
+    var path = src.path || src;
+    var entry = entries.find(function(e) { return e.key && e.key.indexOf(path) !== -1; });
+    return entry ? (entry.complete && !entry.fetchError) : false;
   });
 }
 
@@ -1923,10 +1944,6 @@ requestAnimationFrame(function() {
     var allRemoteLoaded = false;
     var isFetchingMore = false;
 
-    function normalizeMaxPagesValue(value) {
-      return value === 'all' ? 'all' : Number(value || 1);
-    }
-
     function canFetchMorePages() {
       if (allRemoteLoaded) return false;
       if (progressiveMaxPages === 'all') return true;
@@ -2300,9 +2317,13 @@ if (canAppendIncrementally) {
     loadedMaxPages = nextMaxPagesValue();
 
     try {
-      rawItems = await loadSources(loadedMaxPages);
-
-      if (rawItems.length <= previousCount) {
+      var newRaw = await loadSources(loadedMaxPages);
+      /* On marque terminé seulement si CollectionData confirme que la
+         collection est complète (pas d'erreur réseau, pas de page suivante).
+         Un batch identique peut être dû à une erreur réseau transitoire — on
+         laisse la possibilité de réessayer au prochain clic. */
+      rawItems = newRaw;
+      if (isCollectionComplete(sourceList)) {
         allRemoteLoaded = true;
       }
     } catch (err) {
@@ -2338,13 +2359,11 @@ if (canFetchMorePages()) {
   var previousCount = rawItems.length;
   loadedMaxPages = nextMaxPagesValue();
 
-  loadSources(loadedMaxPages).then(function(items) {
-    rawItems = items;
-
-    if (rawItems.length <= previousCount) {
+  loadSources(loadedMaxPages).then(function(newRaw) {
+    rawItems = newRaw;
+    if (isCollectionComplete(sourceList)) {
       allRemoteLoaded = true;
     }
-
     isFetchingMore = false;
     render(false, true);
   }).catch(function(err) {
