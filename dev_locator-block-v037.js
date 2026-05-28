@@ -154,6 +154,8 @@ var CLS_SKELETON_CARD='cb-card--skeleton lb-card--skeleton locator-block__card--
 
 /* ── Utilitaires ── */
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
+function slugifyToken(s){return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
+function tagFieldModifier(name){var slug=slugifyToken(name);return slug?' cb-card__tag-field--'+slug+' lb-card__tag-field--'+slug:'';}
 function tagRe(p){return new RegExp('^'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\s*','i');}
 function getTag(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function'){var vals=utils.getTagValuesByPrefix({tags:tags||[]},p);return vals[0]||'';}if(!Array.isArray(tags))return'';var re=tagRe(p),t=tags.find(function(x){return re.test(String(x));});return t?String(t).replace(re,'').trim():'';}
 function getTags(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function')return utils.getTagValuesByPrefix({tags:tags||[]},p);if(!Array.isArray(tags))return[];var re=tagRe(p);return tags.filter(function(x){return re.test(String(x));}).map(function(x){return String(x).replace(re,'').trim();});}
@@ -338,12 +340,12 @@ function renderChild(child,item){
   }
   if(child==='numero'){
     if(!d.showNumero||!item.numero)return'';
-    return'<div class="'+escHtml(CLS_TAG_FIELD+' locator-block__tag-prefix--numero')+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
+    return'<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('numero')+' locator-block__tag-prefix--numero')+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
   }
   if(child==='lieu'){
     if(!d.showLieu||!item.lieu)return'';
     var icon=d.lieuIcon?'<span class="ui-icon" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';
-    return'<div class="'+escHtml(CLS_TAG_FIELD+' '+CLS_LOCATION+' locator-block__tag-prefix--lieu')+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';
+    return'<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('lieu')+' '+CLS_LOCATION+' locator-block__tag-prefix--lieu')+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';
   }
   if(child==='zones'){
     if(!d.showZones||!item.zones.length)return'';
@@ -397,9 +399,9 @@ function buildCardHTML(item){
   if(d.showImage&&item.imageBase)mediaHtml='<div class="'+escHtml(CLS_MEDIA)+'">'+imgTag(item.imageBase,item.title,CLS_IMAGE,'(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos)+'</div>';
 
   var bodyHtml='';
-  if(d.showNumero&&item.numero)bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+' locator-block__tag-prefix--numero')+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
+  if(d.showNumero&&item.numero)bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('numero')+' locator-block__tag-prefix--numero')+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
   if(d.showTitle&&item.title)bodyHtml+='<div class="'+escHtml(CLS_TITLE)+'">'+escHtml(item.title)+'</div>';
-  if(d.showLieu&&item.lieu){var icon=d.lieuIcon?'<span class="ui-icon" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+' '+CLS_LOCATION+' locator-block__tag-prefix--lieu')+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';}
+  if(d.showLieu&&item.lieu){var icon=d.lieuIcon?'<span class="ui-icon" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('lieu')+' '+CLS_LOCATION+' locator-block__tag-prefix--lieu')+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';}
   if(d.showZones&&item.zones.length)bodyHtml+='<div class="cb-card__categories lb-card__categories locator-block__zones">'+item.zones.map(function(z){return'<span class="cb-card__category lb-card__category locator-block__zone">'+escHtml(z)+'</span>';}).join('')+'</div>';
 
   var clHtml='';
