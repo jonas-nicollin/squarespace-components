@@ -27,6 +27,23 @@
         String(classes || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => el.classList.add(cls));
         return el;
     }
+    const RB_CLASS = {
+        block: "cb-block rb-block related-block",
+        blockLoading: "cb-block--loading rb-block--loading related-block--is-loading",
+        blockEmpty: "cb-block--empty rb-block--empty related-block--is-empty",
+        inner: "cb-block__inner rb-block__inner related-block__inner",
+        loader: "cb-loader rb-loader related-block__loader",
+        loaderDot: "cb-loader__dot rb-loader__dot related-block__loader-dot",
+        heading: "cb-heading rb-heading related-block__heading",
+        headingText: "cb-heading__text rb-heading__text related-block__heading-text",
+        headingCta: "cb-heading__cta rb-heading__cta related-block__heading-cta",
+        headingCtaText: "cb-heading__cta-text rb-heading__cta-text related-block__heading-cta-text",
+        headingCtaIcon: "cb-heading__cta-icon rb-heading__cta-icon related-block__heading-cta-icon",
+        list: "cb-list rb-list related-block__list",
+        listSingle: "cb-list--single rb-list--single related-block__list--single",
+        listMultiple: "cb-list--multiple rb-list--multiple related-block__list--multiple",
+        empty: "cb-empty rb-empty related-block__empty"
+    };
     // ── Constantes ────────────────────────────────────────────────────
     const DEFAULT_JSON_FORMAT_SUFFIX = "?format=json";
     const DEFAULT_SRCSET_WIDTHS = [ 100, 300, 500, 750, 1e3, 1500, 2500 ];
@@ -1014,11 +1031,11 @@
     // ════════════════════════════════════════════════════════════════
     function createLoader() {
         const loader = document.createElement("div");
-        loader.className = "related-block__loader";
+        loader.className = RB_CLASS.loader;
         loader.setAttribute("aria-hidden", "true");
         for (let i = 0; i < 3; i++) {
             const dot = document.createElement("span");
-            dot.className = "related-block__loader-dot";
+            dot.className = RB_CLASS.loaderDot;
             loader.appendChild(dot);
         }
         return loader;
@@ -1029,20 +1046,20 @@
         const href = String(cta.href || "").trim();
         if (!text || !href) return null;
         const link = document.createElement("a");
-        link.className = "related-block__heading-cta";
+        link.className = RB_CLASS.headingCta;
         link.href = href;
         if (cta.newTab) {
             link.target = "_blank";
             link.rel = "noopener noreferrer";
         }
         const textEl = document.createElement("span");
-        textEl.className = "related-block__heading-cta-text";
+        textEl.className = RB_CLASS.headingCtaText;
         textEl.textContent = text;
         link.appendChild(textEl);
         const icon = String(cta.icon || "");
         if (icon) {
             const iconEl = document.createElement("span");
-            iconEl.className = "related-block__heading-cta-icon";
+            iconEl.className = RB_CLASS.headingCtaIcon;
             if (String(cta.iconType || "text").toLowerCase() === "html") {
                 iconEl.innerHTML = icon;
             } else {
@@ -1057,10 +1074,10 @@
         const headingCta = buildHeadingCta(CFG);
         if (!headingText && !headingCta) return null;
         const heading = document.createElement("div");
-        heading.className = "related-block__heading";
+        heading.className = RB_CLASS.heading;
         if (headingText) {
             const tag = document.createElement(CFG.headingTag || "h3");
-            tag.className = "related-block__heading-text";
+            tag.className = RB_CLASS.headingText;
             tag.textContent = headingText;
             heading.appendChild(tag);
         }
@@ -1068,15 +1085,20 @@
         return heading;
     }
     function applyStateClasses(section) {
-        const toRemove = [ "related-block--has-heading", "related-block--has-image", "related-block--has-title", "related-block--has-meta", "related-block--has-excerpt", "related-block--has-location", "related-block--has-tag-prefix", "related-block--has-heading-cta", "related-block--single-item", "related-block--multiple-items", "related-block--is-empty" ];
+        const toRemove = [
+            "related-block--has-heading", "related-block--has-image", "related-block--has-title", "related-block--has-meta", "related-block--has-excerpt", "related-block--has-location", "related-block--has-tag-prefix", "related-block--has-heading-cta", "related-block--single-item", "related-block--multiple-items", "related-block--is-empty",
+            "cb-block--has-heading", "cb-block--has-image", "cb-block--has-title", "cb-block--has-meta", "cb-block--has-excerpt", "cb-block--has-location", "cb-block--has-tag-prefix", "cb-block--has-heading-cta", "cb-block--single-item", "cb-block--multiple-items", "cb-block--empty",
+            "rb-block--has-heading", "rb-block--has-image", "rb-block--has-title", "rb-block--has-meta", "rb-block--has-excerpt", "rb-block--has-location", "rb-block--has-tag-prefix", "rb-block--has-heading-cta", "rb-block--single-item", "rb-block--multiple-items", "rb-block--empty"
+        ];
         toRemove.forEach(cls => section.classList.remove(cls));
-        const checks = [ [ ".related-block__heading", "related-block--has-heading" ], [ ".related-block__heading-cta", "related-block--has-heading-cta" ], [ ".related-block__image", "related-block--has-image" ], [ ".related-block__title", "related-block--has-title" ], [ ".related-block__meta", "related-block--has-meta" ], [ ".related-block__excerpt", "related-block--has-excerpt" ], [ ".related-block__location", "related-block--has-location" ], [ ".related-block__tag-prefix", "related-block--has-tag-prefix" ] ];
-        checks.forEach(([ sel, cls ]) => {
-            if (section.querySelector(sel)) section.classList.add(cls);
+        const checks = [ [ ".related-block__heading", "has-heading" ], [ ".related-block__heading-cta", "has-heading-cta" ], [ ".related-block__image", "has-image" ], [ ".related-block__title", "has-title" ], [ ".related-block__meta", "has-meta" ], [ ".related-block__excerpt", "has-excerpt" ], [ ".related-block__location", "has-location" ], [ ".related-block__tag-prefix", "has-tag-prefix" ] ];
+        checks.forEach(([ sel, suffix ]) => {
+            if (section.querySelector(sel)) section.classList.add("cb-block--" + suffix, "rb-block--" + suffix, "related-block--" + suffix);
         });
         const items = section.querySelectorAll(".related-block__item");
-        if (items.length === 1) section.classList.add("related-block--single-item");
-        if (items.length > 1) section.classList.add("related-block--multiple-items");
+        if (items.length === 1) section.classList.add("cb-block--single-item", "rb-block--single-item", "related-block--single-item");
+        if (items.length > 1) section.classList.add("cb-block--multiple-items", "rb-block--multiple-items", "related-block--multiple-items");
+        if (section.querySelector(".related-block__empty")) addClasses(section, RB_CLASS.blockEmpty);
     }
     function buildCard(item, CFG, extraClasses, currentItem) {
         const card = document.createElement("a");
@@ -1129,12 +1151,12 @@
     }
     function buildBlockShell(CFG) {
         const section = document.createElement("section");
-        section.className = "related-block related-block--is-loading";
+        section.className = RB_CLASS.block + " " + RB_CLASS.blockLoading;
         section.dataset.relatedKey = CFG.key;
         section.id = assignBlockId(CFG.key);
         String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => section.classList.add(cls));
         const inner = document.createElement("div");
-        inner.className = "related-block__inner";
+        inner.className = RB_CLASS.inner;
         if (!CFG.loading?.hideLoader) inner.appendChild(createLoader());
         section.appendChild(inner);
         applyStateClasses(section);
@@ -1149,10 +1171,10 @@
     function buildList(items, CFG, currentItem) {
         const list = document.createElement("div");
         const count = items.length;
-        list.className = "related-block__list";
+        list.className = RB_CLASS.list;
         list.dataset.count = count;
-        if (count === 1) list.classList.add("related-block__list--single");
-        if (count > 1) list.classList.add("related-block__list--multiple");
+        if (count === 1) addClasses(list, RB_CLASS.listSingle);
+        if (count > 1) addClasses(list, RB_CLASS.listMultiple);
         const extraClasses = String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean);
         items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses, currentItem)));
         return list;
@@ -1165,6 +1187,7 @@
         if (heading) inner.appendChild(heading);
         inner.appendChild(buildList(items, CFG, currentItem));
         section.classList.remove("related-block--is-loading");
+        section.classList.remove("cb-block--loading", "rb-block--loading");
         applyStateClasses(section);
     }
     function replaceBlockWithEmptyState(section, CFG) {
@@ -1176,22 +1199,23 @@
         const message = cleanText(CFG.emptyState?.message || "");
         if (message) {
             const empty = document.createElement("div");
-            empty.className = "related-block__empty";
+            empty.className = RB_CLASS.empty;
             empty.textContent = message;
             inner.appendChild(empty);
         }
         section.classList.remove("related-block--is-loading");
-        section.classList.add("related-block--is-empty");
+        section.classList.remove("cb-block--loading", "rb-block--loading");
         applyStateClasses(section);
+        addClasses(section, RB_CLASS.blockEmpty);
     }
     function buildBlock(items, CFG, currentItem) {
         const section = document.createElement("section");
-        section.className = "related-block";
+        section.className = RB_CLASS.block;
         section.dataset.relatedKey = CFG.key;
         section.id = assignBlockId(CFG.key);
         String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => section.classList.add(cls));
         const inner = document.createElement("div");
-        inner.className = "related-block__inner";
+        inner.className = RB_CLASS.inner;
         const heading = buildHeadingElement(items, CFG, false);
         if (heading) inner.appendChild(heading);
         inner.appendChild(buildList(items, CFG, currentItem));
