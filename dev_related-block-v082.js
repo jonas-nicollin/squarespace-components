@@ -892,8 +892,9 @@
     function buildImageElement(item, CFG) {
         if (!CFG.display?.showImage || !item.assetUrl) return null;
         const media = document.createElement("div");
-        media.className = "related-block__image";
+        media.className = "cb-card__media rb-card__media cb-card__img-wrap rb-card__img-wrap related-block__image";
         const img = document.createElement("img");
+        img.className = "cb-card__img rb-card__img related-block__img";
         const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths) ? CFG.display.srcsetWidths : [ 300, 500, 750, 1e3, 1500 ];
         const fallbackSrc = `${item.assetUrl}?format=750w`;
         img.src = fallbackSrc;
