@@ -695,41 +695,82 @@
             useSessionCache: sharedCache.useSessionCache ?? CFG?.performance?.useCollectionSessionCache === true
         };
     }
-    async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions) {
-  const opts = cacheOptions || {};
+    function buildCollectionRequestOptions(maxPages, cacheOptions, keepFields) {
+        const opts = cacheOptions || {};
+        const fields = Array.isArray(keepFields) ? keepFields : [
+            'id',
+            'title',
+            'fullUrl',
+            'urlId',
+            'assetUrl',
+            'mediaFocalPoint',
+            'categories',
+            'tags',
+            'excerpt',
+            'location',
+            'displayIndex',
+            'workflowState',
+            'startDate',
+            'publishOn',
+            'addedOn',
+            'updatedOn'
+        ];
 
-  if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
-    throw new Error('[RelatedBlock] CollectionData requis — charger collection-data.js en premier');
-  }
+        return {
+            maxPages: maxPages || 1,
+            ttl: 900,
+            memoryCache: opts.useMemoryCache !== false,
+            sessionCache: opts.useSessionCache === true,
+            credentials: 'same-origin',
+            keepFields: fields,
+            stripFields: []
+        };
+    }
 
-  return window.CollectionData.get(path, {
-    maxPages:     maxPages || 1,
-    ttl:          900,
-    memoryCache:  opts.useMemoryCache !== false,
-    sessionCache: opts.useSessionCache === true,
-    credentials:  'same-origin',
-    /* keepFields non déclaré : CollectionData utilise DEFAULT_KEEP_FIELDS automatiquement */
-  });
-}
-    async function fetchCollectionItems(CFG, maxPages) {
-        return fetchCollectionItemsFromPath(
+    async function fetchCollectionStateFromPath(path, maxPages, jsonFormatSuffix, cacheOptions, keepFields) {
+        if (window.CollectionData && typeof window.CollectionData.get === 'function') {
+            const options = buildCollectionRequestOptions(maxPages, cacheOptions, keepFields);
+
+            if (typeof window.CollectionData.getState === 'function') {
+                return window.CollectionData.getState(path, options);
+            }
+
+            const items = await window.CollectionData.get(path, options);
+            return {
+                items: items,
+                pagesLoaded: Number(maxPages || 1),
+                complete: maxPages === 'all',
+                fetchError: null,
+                hasNext: maxPages !== 'all'
+            };
+        }
+
+        throw new Error('CollectionData unavailable');
+    }
+
+    async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions, keepFields) {
+        const state = await fetchCollectionStateFromPath(path, maxPages, jsonFormatSuffix, cacheOptions, keepFields);
+        return state.items || [];
+    }
+    async function fetchCollectionState(CFG, maxPages) {
+        return fetchCollectionStateFromPath(
             CFG.sourceCollection.path,
             maxPages || CFG.performance?.maxPages || 1,
             CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
-            getCollectionCacheOptions(CFG)
+            getCollectionCacheOptions(CFG),
+            CFG.performance?.keepFields
         );
     }
-    async function fetchCurrentItemCollectionItems(CFG, maxPages) {
+    async function fetchCurrentItemCollectionState(CFG, maxPages) {
         const path = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
-        const suffix = CFG.currentItem?.sourceCollection?.jsonFormatSuffix
-            || CFG.sourceCollection?.jsonFormatSuffix
-            || DEFAULT_JSON_FORMAT_SUFFIX;
+        const suffix = CFG.currentItem?.sourceCollection?.jsonFormatSuffix || CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
 
-        return fetchCollectionItemsFromPath(
+        return fetchCollectionStateFromPath(
             path,
             maxPages || CFG.performance?.maxPages || 1,
             suffix,
-            getCollectionCacheOptions(CFG)
+            getCollectionCacheOptions(CFG),
+            CFG.performance?.keepFields
         );
     }
     // ════════════════════════════════════════════════════════════════
@@ -1239,11 +1280,11 @@
                 }
             },
             performance: {
-                lazyInit: true,
+                useSessionStorage: true,
                 maxPages: 1,
                 progressiveMaxPages: 'all',
                 useCollectionMemoryCache: true,
-                useCollectionSessionCache: true
+                useCollectionSessionCache: false
             }
         }, CFG || {});
         if (CFG.enabled === false) return null;
@@ -1275,12 +1316,13 @@ function getNextPagesValue(currentPages, maxPages) {
                 syncBodyRelatedBlockClasses();
                 return true;
             }
-
             const shell = buildBlockShell(CFG);
             insertInto(target, shell, CFG.insertion?.mode);
             let items;
+            let sourceState;
             try {
-                items = await fetchCollectionItems(CFG, CFG.performance?.maxPages || 1);
+                sourceState = await fetchCollectionState(CFG, CFG.performance?.maxPages || 1);
+                items = sourceState.items || [];
             } catch (e) {
                 if (CFG.debug) console.warn("[RB]", CFG.key, "fetchCollectionItems failed", e);
                 shell.remove();
@@ -1297,10 +1339,14 @@ let currentItemLoadedPages = getInitialMaxPages(CFG);
 const currentSourcePath = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
 const sourcePath = CFG.sourceCollection?.path || "";
 const progressiveMaxPages = getProgressiveMaxPages(CFG);
+let currentItemSourceState = currentSourcePath === sourcePath ? sourceState : null;
+let currentItemSourceComplete = !!(currentItemSourceState && (currentItemSourceState.complete || currentItemSourceState.fetchError));
 
 if (currentSourcePath !== sourcePath) {
     try {
-        currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG, currentItemLoadedPages);
+        currentItemSourceState = await fetchCurrentItemCollectionState(CFG, currentItemLoadedPages);
+        currentItemSourceItems = currentItemSourceState.items || [];
+        currentItemSourceComplete = !!(currentItemSourceState.complete || currentItemSourceState.fetchError);
     } catch (e) {
         if (CFG.debug) console.warn("[RB]", CFG.key, "fetchCurrentItemCollectionItems failed", e);
         shell.remove();
@@ -1311,11 +1357,13 @@ if (currentSourcePath !== sourcePath) {
 
 let currentItem = findCurrentItem(currentItemSourceItems, CFG);
 
-while (!currentItem && canLoadMorePages(currentItemLoadedPages, progressiveMaxPages)) {
+while (!currentItem && !currentItemSourceComplete && canLoadMorePages(currentItemLoadedPages, progressiveMaxPages)) {
     currentItemLoadedPages = getNextPagesValue(currentItemLoadedPages, progressiveMaxPages);
 
     try {
-        currentItemSourceItems = await fetchCurrentItemCollectionItems(CFG, currentItemLoadedPages);
+        currentItemSourceState = await fetchCurrentItemCollectionState(CFG, currentItemLoadedPages);
+        currentItemSourceItems = currentItemSourceState.items || [];
+        currentItemSourceComplete = !!(currentItemSourceState.complete || currentItemSourceState.fetchError);
     } catch (e) {
         if (CFG.debug) console.warn("[RB]", CFG.key, "progressive current item fetch failed", e);
         break;
@@ -1329,7 +1377,13 @@ if (!currentItem) {
     syncBodyRelatedBlockClasses();
     return false;
 }
-            let sourceLoadedPages = getInitialMaxPages(CFG);
+
+if (currentSourcePath === sourcePath && currentItemSourceState) {
+    items = currentItemSourceItems;
+    sourceState = currentItemSourceState;
+}
+            let sourceLoadedPages = currentSourcePath === sourcePath ? currentItemLoadedPages : getInitialMaxPages(CFG);
+            let sourceComplete = !!(sourceState && (sourceState.complete || sourceState.fetchError));
 
 function computeFinalItems(allItems) {
     const candidates = [];
@@ -1370,16 +1424,17 @@ const limit = Number(CFG.selection?.limit || CFG.display?.maxItems || finalItems
 while (
     limit > 0 &&
     finalItems.length < limit &&
+    !sourceComplete &&
     canLoadMorePages(sourceLoadedPages, progressiveMaxPages)
 ) {
-    const previousCount = items.length;
-
     sourceLoadedPages = getNextPagesValue(sourceLoadedPages, progressiveMaxPages);
 
     try {
-        const moreItems = await fetchCollectionItems(CFG, sourceLoadedPages);
+        sourceState = await fetchCollectionState(CFG, sourceLoadedPages);
+        const moreItems = sourceState.items || [];
+        sourceComplete = !!(sourceState.complete || sourceState.fetchError);
 
-        if (!Array.isArray(moreItems) || moreItems.length <= previousCount) {
+        if (!Array.isArray(moreItems)) {
             break;
         }
 
