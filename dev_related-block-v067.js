@@ -23,6 +23,10 @@
         if (window.CollectionData && typeof window.CollectionData.get === "function") return window.CollectionData;
         return null;
     }
+    function addClasses(el, classes) {
+        String(classes || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => el.classList.add(cls));
+        return el;
+    }
     // ── Constantes ────────────────────────────────────────────────────
     const DEFAULT_JSON_FORMAT_SUFFIX = "?format=json";
     const DEFAULT_SRCSET_WIDTHS = [ 100, 300, 500, 750, 1e3, 1500, 2500 ];
@@ -854,6 +858,7 @@
         if (fieldConfig.maxItems) values = values.slice(0, Number(fieldConfig.maxItems));
         const el = document.createElement("div");
         el.className = fieldConfig.className || "related-block__tag-prefix";
+        addClasses(el, "cb-card__tag-field rb-card__tag-field");
         const label = cleanText(fieldConfig.label || "");
         const joinWith = fieldConfig.joinWith || ", ";
         const displayFormat = overrideDisplayFormat ?? fieldConfig.displayFormat ?? null;
@@ -874,7 +879,7 @@
             }
             el.appendChild(iconEl);
             const textEl = document.createElement("span");
-            textEl.className = "related-block__tag-prefix-text";
+            textEl.className = "cb-card__tag-value rb-card__tag-value related-block__tag-prefix-text";
             textEl.textContent = fullText;
             el.appendChild(textEl);
         } else {
@@ -886,10 +891,10 @@
         const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
         if (!cats.length) return null;
         const meta = document.createElement("div");
-        meta.className = "related-block__meta";
+        meta.className = "cb-card__meta rb-card__meta cb-card__categories rb-card__categories related-block__meta";
         cats.forEach(cat => {
             const span = document.createElement("span");
-            span.className = "related-block__category";
+            span.className = "cb-card__category rb-card__category related-block__category";
             span.textContent = cleanText(cat);
             meta.appendChild(span);
         });
@@ -897,21 +902,21 @@
     }
     function buildTitleElement(item) {
         const el = document.createElement("div");
-        el.className = "related-block__title";
+        el.className = "cb-card__title rb-card__title related-block__title";
         el.textContent = cleanText(item.title || "");
         return el;
     }
     function buildExcerptElement(item) {
         if (!item.excerpt) return null;
         const el = document.createElement("div");
-        el.className = "related-block__excerpt";
+        el.className = "cb-card__excerpt rb-card__excerpt related-block__excerpt";
         el.textContent = cleanText(item.excerpt);
         return el;
     }
     function buildLocationElement(item) {
         if (!item.locationText) return null;
         const el = document.createElement("div");
-        el.className = "related-block__location";
+        el.className = "cb-card__location rb-card__location related-block__location";
         el.textContent = cleanText(item.locationText);
         return el;
     }
@@ -926,8 +931,9 @@
     function buildImageElement(item, CFG) {
         if (!CFG.display?.showImage || !item.assetUrl) return null;
         const media = document.createElement("div");
-        media.className = "related-block__image";
+        media.className = "cb-card__media rb-card__media cb-card__img-wrap rb-card__img-wrap related-block__image";
         const img = document.createElement("img");
+        img.className = "cb-card__img rb-card__img related-block__img";
         const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths) ? CFG.display.srcsetWidths : [ 300, 500, 750, 1e3, 1500 ];
         const fallbackSrc = `${item.assetUrl}?format=750w`;
         img.src = fallbackSrc;
@@ -988,6 +994,11 @@
             if (!children.length) return;
             const wrapper = document.createElement(group?.tag || "div");
             String(group?.className || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => wrapper.classList.add(cls));
+            addClasses(wrapper, "cb-card__group rb-card__group");
+            if (children.some(child => (typeof child === "string" ? child : child?.type) === "image")) {
+                addClasses(wrapper, "cb-card__media rb-card__media");
+            }
+            if (group?.inline === true) addClasses(wrapper, "cb-card__group--inline rb-card__group--inline");
             children.forEach(child => {
                 buildContentNodesByType(child, item, CFG).forEach(node => wrapper.appendChild(node));
             });
@@ -1069,7 +1080,7 @@
     }
     function buildCard(item, CFG, extraClasses, currentItem) {
         const card = document.createElement("a");
-        card.className = "related-block__item";
+        card.className = "cb-card rb-card related-block__item";
         card.href = item.fullUrl || CFG.sourceCollection.path + "/" + item.urlId;
         extraClasses.forEach(cls => card.classList.add(cls + "__item"));
         // Marquer l'item courant (ex: pour la bande parcours avec excludeCurrentItem: false)
@@ -1079,6 +1090,7 @@
             if (itemUrl && curUrl && itemUrl === curUrl) {
                 card.dataset.current = "true";
                 card.setAttribute("aria-current", "page");
+                card.classList.add("cb-card--current", "rb-card--current");
             }
         }
         if (Array.isArray(CFG.display?.groups) && CFG.display.groups.length) {
@@ -1091,7 +1103,7 @@
             if (media) card.appendChild(media);
         }
         const content = document.createElement("div");
-        content.className = "related-block__content";
+        content.className = "cb-card__body rb-card__body related-block__content";
         const order = Array.isArray(CFG.display?.order) ? CFG.display.order : [ "meta", "title", "excerpt", "location" ];
         order.forEach(type => {
             buildContentNodesByType(type, item, CFG).forEach(node => {
