@@ -2021,6 +2021,24 @@ requestAnimationFrame(function() {
       return merged;
     }
 
+    async function loadNextRemotePage() {
+      if (!canFetchMorePages() || isFetchingMore) return false;
+
+      isFetchingMore = true;
+      loadedMaxPages = nextMaxPagesValue();
+
+      try {
+        rawItems = await loadSources(loadedMaxPages);
+        return true;
+      } catch (err) {
+        if (cfg.debug) console.warn('[SQB]', cfg.key, err);
+        allRemoteLoaded = true;
+        return false;
+      } finally {
+        isFetchingMore = false;
+      }
+    }
+
     try {
       rawItems = await loadSources(loadedMaxPages);
     } catch (err) {
@@ -2245,6 +2263,19 @@ requestAnimationFrame(function() {
       footer.innerHTML = '';
 
       if (!shown.length) {
+        if (canFetchMorePages() && !isFetchingMore) {
+          grid.innerHTML = '';
+          grid.appendChild(buildLoader(false));
+
+          if (disp.counter !== false) counter.textContent = '';
+
+          loadNextRemotePage().then(function() {
+            render(false, false);
+          });
+
+          return;
+        }
+
         setText(grid.appendChild(el('p', { class: 'sqb-empty' })), i18n.noResults);
 
         if (disp.counter !== false) counter.textContent = '';
@@ -2331,24 +2362,13 @@ if (canAppendIncrementally) {
         btn.addEventListener('click', async function() {
   if (isFetchingMore) return;
 
-  isFetchingMore = true;
   btn.style.display = 'none';
   footer.appendChild(buildLoader(false));
 
   currentPage++;
 
-  if (canFetchMorePages()) {
-    loadedMaxPages = nextMaxPagesValue();
+  await loadNextRemotePage();
 
-    try {
-      rawItems = await loadSources(loadedMaxPages);
-    } catch (err) {
-      if (cfg.debug) console.warn('[SQB]', cfg.key, err);
-      allRemoteLoaded = true;
-    }
-  }
-
-  isFetchingMore = false;
   render(false, true);
 });
 
@@ -2369,25 +2389,13 @@ if (canAppendIncrementally) {
 
           if (isFetchingMore) return;
 
-isFetchingMore = true;
 currentPage++;
 
 if (canFetchMorePages()) {
-  loadedMaxPages = nextMaxPagesValue();
-
-  loadSources(loadedMaxPages).then(function(items) {
-    rawItems = items;
-
-    isFetchingMore = false;
-    render(false, true);
-  }).catch(function(err) {
-    if (cfg.debug) console.warn('[SQB]', cfg.key, err);
-    allRemoteLoaded = true;
-    isFetchingMore = false;
+  loadNextRemotePage().then(function() {
     render(false, true);
   });
 } else {
-  isFetchingMore = false;
   render(false, true);
 }
         }, { rootMargin: '400px' });
