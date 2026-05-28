@@ -112,6 +112,19 @@ cfg.showCardLink=cfg.showCardLink!==false;
 
 function log(){if(cfg.debug)console.log.apply(console,['[LocatorBlock]'].concat(Array.prototype.slice.call(arguments)));}
 
+var CLS_CARD='cb-card lb-card locator-block__card';
+var CLS_CARD_CLICKABLE='cb-card lb-card locator-block__card locator-block__card--clickable';
+var CLS_MEDIA='cb-card__media lb-card__media locator-block__media';
+var CLS_IMAGE='cb-card__img lb-card__img locator-block__image';
+var CLS_BODY='cb-card__body lb-card__body locator-block__body';
+var CLS_TITLE='cb-card__title lb-card__title locator-block__title';
+var CLS_TAG_FIELD='cb-card__tag-field lb-card__tag-field locator-block__tag-prefix';
+var CLS_TAG_VALUE='cb-card__tag-value lb-card__tag-value';
+var CLS_LOCATION='cb-card__location lb-card__location';
+var CLS_LINK='cb-card__link lb-card__link locator-block__card-link';
+var CLS_GROUP='cb-card__group lb-card__group';
+function addClassNames(base, extra){var map={};String(base||'').split(/\s+/).concat(String(extra||'').split(/\s+/)).forEach(function(c){if(c)map[c]=true;});return Object.keys(map).join(' ');}
+
 /* ── Utilitaires ── */
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
 function tagRe(p){return new RegExp('^'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\s*','i');}
@@ -290,29 +303,29 @@ function renderChild(child,item){
   var d=cfg.display;
   if(child==='image'){
     if(!d.showImage||!item.imageBase)return'';
-    return imgTag(item.imageBase,item.title,'locator-block__image','(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos);
+    return imgTag(item.imageBase,item.title,CLS_IMAGE,'(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos);
   }
   if(child==='title'){
     if(!d.showTitle||!item.title)return'';
-    return'<div class="locator-block__title">'+escHtml(item.title)+'</div>';
+    return'<div class="'+escHtml(CLS_TITLE)+'">'+escHtml(item.title)+'</div>';
   }
   if(child==='numero'){
     if(!d.showNumero||!item.numero)return'';
-    return'<div class="locator-block__tag-prefix locator-block__tag-prefix--numero">'+escHtml(item.numero)+'</div>';
+    return'<div class="'+escHtml(CLS_TAG_FIELD+' locator-block__tag-prefix--numero')+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
   }
   if(child==='lieu'){
     if(!d.showLieu||!item.lieu)return'';
     var icon=d.lieuIcon?'<span class="ui-icon" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';
-    return'<div class="locator-block__tag-prefix locator-block__tag-prefix--lieu">'+icon+escHtml(item.lieu)+'</div>';
+    return'<div class="'+escHtml(CLS_TAG_FIELD+' '+CLS_LOCATION+' locator-block__tag-prefix--lieu')+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';
   }
   if(child==='zones'){
     if(!d.showZones||!item.zones.length)return'';
-    return'<div class="locator-block__zones">'+item.zones.map(function(z){return'<span class="locator-block__zone">'+escHtml(z)+'</span>';}).join('')+'</div>';
+    return'<div class="cb-card__categories lb-card__categories locator-block__zones">'+item.zones.map(function(z){return'<span class="cb-card__category lb-card__category locator-block__zone">'+escHtml(z)+'</span>';}).join('')+'</div>';
   }
   if(child==='cardLink'){
     if(!cfg.showCardLink||!item.url)return'';
     var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
-    return'<a class="locator-block__card-link" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';
+    return'<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';
   }
   return'';
 }
@@ -332,39 +345,40 @@ function buildCardHTML(item){
         var cls=group.className||'locator-block__body';
         /* Si le group contient une image, c'est un media group */
         var isMedia=group.children&&group.children.indexOf('image')!==-1;
-        html+=(isMedia?'<div class="locator-block__media">'+inner+'</div>':'<div class="'+escHtml(cls)+'">'+inner+'</div>');
+        var finalCls=isMedia?CLS_MEDIA:addClassNames(cls,CLS_GROUP+(String(cls).indexOf('locator-block__body')!==-1?' cb-card__body lb-card__body':''));
+        html+='<div class="'+escHtml(finalCls)+'">'+inner+'</div>';
       }
     });
     /* cardLink toujours en dernier dans le dernier body group */
     var clHtml='';
-    if(cfg.showCardLink&&item.url){var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="locator-block__card-link" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
+    if(cfg.showCardLink&&item.url){var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
     if(cfg.cardClickable&&item.url){
       var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
-      return'<a class="locator-block__card locator-block__card--clickable" href="'+escHtml(item.url)+'"'+lt+' data-item-id="'+escHtml(item.id)+'">'+html+'</a>';
+      return'<a class="'+escHtml(CLS_CARD_CLICKABLE)+'" href="'+escHtml(item.url)+'"'+lt+' data-item-id="'+escHtml(item.id)+'">'+html+'</a>';
     }
     /* showCardLink : si true et cardClickable=false, ajouter la flèche
        même si 'cardLink' n'est pas dans les children des groups */
     if(cfg.showCardLink&&item.url&&!cfg.cardClickable){
       var lt2=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
-      html+='<a class="locator-block__card-link" href="'+escHtml(item.url)+'"'+lt2+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';
+      html+='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt2+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';
     }
-    return'<div class="locator-block__card" data-item-id="'+escHtml(item.id)+'">'+html+'</div>';
+    return'<div class="'+escHtml(CLS_CARD)+'" data-item-id="'+escHtml(item.id)+'">'+html+'</div>';
   }
 
   /* Comportement par défaut : media (image seule) + body (tous les champs texte) */
   var mediaHtml='';
-  if(d.showImage&&item.imageBase)mediaHtml='<div class="locator-block__media">'+imgTag(item.imageBase,item.title,'locator-block__image','(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos)+'</div>';
+  if(d.showImage&&item.imageBase)mediaHtml='<div class="'+escHtml(CLS_MEDIA)+'">'+imgTag(item.imageBase,item.title,CLS_IMAGE,'(max-width:768px) 100vw,'+(cfg.layout==='grid'?'33vw':'50vw'),item.focalPos)+'</div>';
 
   var bodyHtml='';
-  if(d.showNumero&&item.numero)bodyHtml+='<div class="locator-block__tag-prefix locator-block__tag-prefix--numero">'+escHtml(item.numero)+'</div>';
-  if(d.showTitle&&item.title)bodyHtml+='<div class="locator-block__title">'+escHtml(item.title)+'</div>';
-  if(d.showLieu&&item.lieu){var icon=d.lieuIcon?'<span class="ui-icon" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';bodyHtml+='<div class="locator-block__tag-prefix locator-block__tag-prefix--lieu">'+icon+escHtml(item.lieu)+'</div>';}
-  if(d.showZones&&item.zones.length)bodyHtml+='<div class="locator-block__zones">'+item.zones.map(function(z){return'<span class="locator-block__zone">'+escHtml(z)+'</span>';}).join('')+'</div>';
+  if(d.showNumero&&item.numero)bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+' locator-block__tag-prefix--numero')+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
+  if(d.showTitle&&item.title)bodyHtml+='<div class="'+escHtml(CLS_TITLE)+'">'+escHtml(item.title)+'</div>';
+  if(d.showLieu&&item.lieu){var icon=d.lieuIcon?'<span class="ui-icon" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+' '+CLS_LOCATION+' locator-block__tag-prefix--lieu')+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';}
+  if(d.showZones&&item.zones.length)bodyHtml+='<div class="cb-card__categories lb-card__categories locator-block__zones">'+item.zones.map(function(z){return'<span class="cb-card__category lb-card__category locator-block__zone">'+escHtml(z)+'</span>';}).join('')+'</div>';
 
   var clHtml='';
-  if(cfg.showCardLink&&item.url){var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="locator-block__card-link" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
+  if(cfg.showCardLink&&item.url){var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
 
-  return'<div class="locator-block__card" data-item-id="'+escHtml(item.id)+'">'+mediaHtml+(bodyHtml?'<div class="locator-block__body">'+bodyHtml+clHtml+'</div>':'')+'</div>';
+  return'<div class="'+escHtml(CLS_CARD)+'" data-item-id="'+escHtml(item.id)+'">'+mediaHtml+(bodyHtml?'<div class="'+escHtml(CLS_BODY)+'">'+bodyHtml+clHtml+'</div>':'')+'</div>';
 }
 
 /* ── Popup OverlayView ── */
@@ -481,7 +495,7 @@ function buildControls(zones,total){
 
   appendBatch();
 }
-function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="locator-block__card locator-block__card--skeleton"><div class="locator-block__media"></div><div class="locator-block__body"><div class="locator-block__skeleton-line" style="width:20%"></div><div class="locator-block__skeleton-line" style="width:70%"></div><div class="locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
+function buildSkeleton(){var s='';for(var i=0;i<4;i++)s+='<div class="'+escHtml(CLS_CARD)+' locator-block__card--skeleton"><div class="'+escHtml(CLS_MEDIA)+'"></div><div class="'+escHtml(CLS_BODY)+'"><div class="locator-block__skeleton-line" style="width:20%"></div><div class="locator-block__skeleton-line" style="width:70%"></div><div class="locator-block__skeleton-line" style="width:45%"></div></div></div>';return s;}
 
 /* ── Instance ── */
 function createInstance(root,allItems,fetchMoreItems){
@@ -525,10 +539,10 @@ function createInstance(root,allItems,fetchMoreItems){
   function updateMarker(id,a){if(!markers[id])return;var icon=markerIcon(markers[id].item.numero,a);if(icon!==null)markers[id].marker.setIcon(icon);markers[id].marker.setZIndex(a?999:0);}
   function activate(id,pan){
     if(activeId===id)return;
-    if(activeId){updateMarker(activeId,false);var prev=root.querySelector('.locator-block__card[data-item-id="'+activeId+'"]');if(prev)prev.classList.remove('is-active');}
+    if(activeId){updateMarker(activeId,false);var prev=root.querySelector('.locator-block__card[data-item-id="'+activeId+'"]');if(prev){prev.classList.remove('is-active');prev.classList.remove('cb-card--active');prev.classList.remove('lb-card--active');}}
     activeId=id;updateMarker(id,true);
     var card=root.querySelector('.locator-block__card[data-item-id="'+id+'"]');
-    if(card){card.classList.add('is-active');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
+    if(card){card.classList.add('is-active');card.classList.add('cb-card--active');card.classList.add('lb-card--active');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
     if(pan&&markers[id]){
       map.panTo({lat:markers[id].item.lat,lng:markers[id].item.lng});
       if(map.getZoom()<cfg.mapZoomOnSelect)map.setZoom(cfg.mapZoomOnSelect);
