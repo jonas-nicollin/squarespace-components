@@ -858,21 +858,21 @@
     }
     function buildTitleElement(item) {
         const el = document.createElement("div");
-        el.className = "related-block__title";
+        el.className = "cb-card__title rb-card__title related-block__title";
         el.textContent = cleanText(item.title || "");
         return el;
     }
     function buildExcerptElement(item) {
         if (!item.excerpt) return null;
         const el = document.createElement("div");
-        el.className = "related-block__excerpt";
+        el.className = "cb-card__excerpt rb-card__excerpt related-block__excerpt";
         el.textContent = cleanText(item.excerpt);
         return el;
     }
     function buildLocationElement(item) {
         if (!item.locationText) return null;
         const el = document.createElement("div");
-        el.className = "related-block__location";
+        el.className = "cb-card__location rb-card__location related-block__location";
         el.textContent = cleanText(item.locationText);
         return el;
     }
