@@ -955,6 +955,8 @@
             if (!children.length) return;
             const wrapper = document.createElement(group?.tag || "div");
             String(group?.className || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => wrapper.classList.add(cls));
+            addClasses(wrapper, "cb-card__group rb-card__group");
+            if (group?.inline === true) addClasses(wrapper, "cb-card__group--inline rb-card__group--inline");
             children.forEach(child => {
                 buildContentNodesByType(child, item, CFG).forEach(node => wrapper.appendChild(node));
             });
