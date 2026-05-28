@@ -695,61 +695,41 @@
             useSessionCache: sharedCache.useSessionCache ?? CFG?.performance?.useCollectionSessionCache === true
         };
     }
-    async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions, keepFields) {
+    async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions) {
   const opts = cacheOptions || {};
 
-  const fields = Array.isArray(keepFields) ? keepFields : [
-    'id',
-    'title',
-    'fullUrl',
-    'urlId',
-    'assetUrl',
-    'mediaFocalPoint',
-    'categories',
-    'tags',
-    'excerpt',
-    'location',
-    'displayIndex',
-    'workflowState',
-    'startDate',
-    'publishOn',
-    'addedOn',
-    'updatedOn'
-  ];
-
-  if (window.CollectionData && typeof window.CollectionData.get === 'function') {
-    return window.CollectionData.get(path, {
-      maxPages: maxPages || 1,
-      ttl: 900,
-      memoryCache: opts.useMemoryCache !== false,
-      sessionCache: opts.useSessionCache === true,
-      credentials: 'same-origin',
-      keepFields: fields,
-      stripFields: []
-    });
+  if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
+    throw new Error('[RelatedBlock] CollectionData requis — charger collection-data.js en premier');
   }
 
-  throw new Error('CollectionData unavailable');
+  return window.CollectionData.get(path, {
+    maxPages:     maxPages || 1,
+    ttl:          900,
+    memoryCache:  opts.useMemoryCache !== false,
+    sessionCache: opts.useSessionCache === true,
+    credentials:  'same-origin',
+    /* keepFields non déclaré : CollectionData utilise DEFAULT_KEEP_FIELDS automatiquement */
+  });
 }
     async function fetchCollectionItems(CFG, maxPages) {
         return fetchCollectionItemsFromPath(
             CFG.sourceCollection.path,
             maxPages || CFG.performance?.maxPages || 1,
             CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX,
-            getCollectionCacheOptions(CFG),
-            CFG.performance?.keepFields
+            getCollectionCacheOptions(CFG)
         );
     }
-   async function fetchCurrentItemCollectionItems(CFG, maxPages) {
+    async function fetchCurrentItemCollectionItems(CFG, maxPages) {
         const path = CFG.currentItem?.sourceCollection?.path || CFG.sourceCollection?.path;
-        const suffix = CFG.currentItem?.sourceCollection?.jsonFormatSuffix || CFG.sourceCollection?.jsonFormatSuffix || DEFAULT_JSON_FORMAT_SUFFIX;
+        const suffix = CFG.currentItem?.sourceCollection?.jsonFormatSuffix
+            || CFG.sourceCollection?.jsonFormatSuffix
+            || DEFAULT_JSON_FORMAT_SUFFIX;
 
         return fetchCollectionItemsFromPath(
             path,
             maxPages || CFG.performance?.maxPages || 1,
             suffix,
-            getCollectionCacheOptions(CFG),
-            CFG.performance?.keepFields
+            getCollectionCacheOptions(CFG)
         );
     }
     // ════════════════════════════════════════════════════════════════
@@ -1259,11 +1239,11 @@
                 }
             },
             performance: {
-                useSessionStorage: true,
+                lazyInit: true,
                 maxPages: 1,
                 progressiveMaxPages: 'all',
                 useCollectionMemoryCache: true,
-                useCollectionSessionCache: false
+                useCollectionSessionCache: true
             }
         }, CFG || {});
         if (CFG.enabled === false) return null;
@@ -1295,20 +1275,7 @@ function getNextPagesValue(currentPages, maxPages) {
                 syncBodyRelatedBlockClasses();
                 return true;
             }
-            const useRenderedCache = false;
-            if (useRenderedCache) {
-                try {
-                    const cached = sessionStorage.getItem(key);
-                    if (cached) {
-                        const parsed = JSON.parse(cached);
-                        if (Array.isArray(parsed) && parsed.length) {
-                            insertInto(target, buildBlock(parsed, CFG), CFG.insertion?.mode);
-                            syncBodyRelatedBlockClasses();
-                            return true;
-                        }
-                    }
-                } catch (_) {}
-            }
+
             const shell = buildBlockShell(CFG);
             insertInto(target, shell, CFG.insertion?.mode);
             let items;
@@ -1433,29 +1400,14 @@ finalItems = applyFallbackFill(finalItems, items, currentItem, {
                 if (CFG.emptyState?.message) {
                     replaceBlockWithEmptyState(shell, CFG);
                     syncBodyRelatedBlockClasses();
-                    if (useRenderedCache) {
-                        try {
-                            sessionStorage.setItem(key, JSON.stringify([]));
-                        } catch (_) {}
-                    }
                     return true;
                 }
                 shell.remove();
                 syncBodyRelatedBlockClasses();
-                if (useRenderedCache) {
-                    try {
-                        sessionStorage.setItem(key, JSON.stringify([]));
-                    } catch (_) {}
-                }
                 return false;
             }
             replaceBlockContent(shell, finalItems, CFG, currentItem);
             syncBodyRelatedBlockClasses();
-            if (useRenderedCache) {
-                try {
-                    sessionStorage.setItem(key, JSON.stringify(finalItems));
-                } catch (_) {}
-            }
             return true;
         }
         async function start() {
