@@ -1052,7 +1052,7 @@
             if (media) card.appendChild(media);
         }
         const content = document.createElement("div");
-        content.className = "related-block__content";
+        content.className = "cb-card__body rb-card__body related-block__content";
         const order = Array.isArray(CFG.display?.order) ? CFG.display.order : [ "meta", "title", "excerpt", "location" ];
         order.forEach(type => {
             buildContentNodesByType(type, item, CFG).forEach(node => {
