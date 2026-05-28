@@ -1,8 +1,8 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.3';
-var STORE_KEY_PREFIX = 'collection-data::v0.3::';
+  var VERSION = '0.4';
+  var STORE_KEY_PREFIX = 'collection-data::v0.4::';
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
@@ -42,9 +42,10 @@ var STORE_KEY_PREFIX = 'collection-data::v0.3::';
     return Date.now();
   }
 
-  function isPerfTest() {
+  function shouldBypassCache() {
     try {
-      return new URLSearchParams(window.location.search).has('perf-test');
+      var params = new URLSearchParams(window.location.search);
+      return params.has('perf-test') || params.has('preview');
     } catch (_) {
       return false;
     }
@@ -61,12 +62,15 @@ var STORE_KEY_PREFIX = 'collection-data::v0.3::';
   }
 
   function makeCacheKey(path, options) {
-  var keepKey = Array.isArray(options.keepFields)
-    ? '::keep=' + options.keepFields.join(',')
+  /* On trie les champs pour que l'ordre de déclaration n'impacte pas la clé.
+     Deux appels avec les mêmes champs dans des ordres différents partagent
+     ainsi le même cache. */
+  var keepKey = Array.isArray(options.keepFields) && options.keepFields.length
+    ? '::keep=' + options.keepFields.slice().sort().join(',')
     : '';
 
-  var stripKey = Array.isArray(options.stripFields)
-    ? '::strip=' + options.stripFields.join(',')
+  var stripKey = Array.isArray(options.stripFields) && options.stripFields.length
+    ? '::strip=' + options.stripFields.slice().sort().join(',')
     : '';
 
   return STORE_KEY_PREFIX + normalizePath(path) + keepKey + stripKey;
@@ -77,7 +81,7 @@ function normalizeMaxPages(value) {
 }
 
   function readSession(key) {
-  if (isPerfTest()) return null;
+  if (shouldBypassCache()) return null;
 
   try {
     var raw = sessionStorage.getItem(key);
@@ -99,7 +103,7 @@ function normalizeMaxPages(value) {
 }
 
   function writeSession(key, state, ttl) {
-  if (isPerfTest()) return;
+  if (shouldBypassCache()) return;
 
   try {
     sessionStorage.setItem(key, JSON.stringify(Object.assign({}, state, {
@@ -190,41 +194,71 @@ function normalizeMaxPages(value) {
   });
 }
 
-  async function fetchCollection(path, options, state, targetPages) {
+  async function fetchCollection(path, options, cachedState, targetPages) {
   options = Object.assign({}, DEFAULTS, options || {});
 
   var cleanPath = normalizePath(path);
-  var maxPages = normalizeMaxPages(targetPages);
-  var items = state.items || [];
-  var page = Number(state.pagesLoaded || 0);
-  var url = state.nextUrl || null;
+  var maxPages  = normalizeMaxPages(targetPages);
 
+  /* Copie défensive : on ne mute jamais l'objet reçu en paramètre.
+     Si plusieurs blocs partagent le même état en mémoire (même clé de cache),
+     un fetch progressif de Related n'altère pas ce que Query ou Locator lisent
+     en parallèle dans un état intermédiaire incohérent. */
+  var state = {
+    items:      (cachedState.items || []).slice(),
+    pagesLoaded: Number(cachedState.pagesLoaded || 0),
+    nextUrl:    cachedState.nextUrl    || null,
+    nextOffset: cachedState.nextOffset != null ? cachedState.nextOffset : null,
+    complete:   !!cachedState.complete,
+    fetchError: false,
+  };
+
+  var url = state.nextUrl;
   if (!url && state.nextOffset != null) {
     url = ensureJson(cleanPath) + '&offset=' + encodeURIComponent(state.nextOffset);
   }
-
-  if (!url && page === 0) {
+  if (!url && state.pagesLoaded === 0) {
     url = ensureJson(cleanPath);
   }
 
-  while (page < maxPages && url && !state.complete) {
-    var res = await fetch(url, {
-      credentials: options.credentials || DEFAULTS.credentials,
-    });
+  while (state.pagesLoaded < maxPages && url && !state.complete) {
+    var res;
+    try {
+      res = await fetch(url, { credentials: options.credentials || DEFAULTS.credentials });
+    } catch (_) {
+      /* Erreur réseau — on s'arrête sans marquer complete.
+         Le prochain "Voir plus" pourra réessayer. */
+      state.fetchError = true;
+      break;
+    }
 
-    if (!res.ok) break;
+    if (!res.ok) {
+      state.fetchError = true;
+      break;
+    }
 
-    var data = await res.json();
+    var data;
+    try {
+      data = await res.json();
+    } catch (_) {
+      state.fetchError = true;
+      break;
+    }
+
     var batch = cleanItems(extractItems(data), options);
+    state.items.push.apply(state.items, batch);
 
-    items.push.apply(items, batch);
-
-    var nextUrl = getNextUrl(data);
+    var nextUrl    = getNextUrl(data);
     var nextOffset = getNextOffset(data);
 
-    state.nextUrl = nextUrl || null;
+    state.nextUrl    = nextUrl    || null;
     state.nextOffset = nextOffset != null ? nextOffset : null;
-    state.complete = !(state.nextUrl || state.nextOffset != null);
+
+    /* On marque complete seulement si Squarespace confirme l'absence de page
+       suivante — pas sur un batch vide qui pourrait être une erreur réseau. */
+    if (!state.nextUrl && state.nextOffset == null) {
+      state.complete = true;
+    }
 
     if (state.nextUrl) {
       url = state.nextUrl;
@@ -234,9 +268,7 @@ function normalizeMaxPages(value) {
       url = null;
     }
 
-    page++;
-    state.pagesLoaded = page;
-    state.items = items;
+    state.pagesLoaded++;
   }
 
   return state;
@@ -288,8 +320,14 @@ function normalizeMaxPages(value) {
 
   var promise = fetchCollection(path, options, state, targetPages)
     .then(function(updatedState) {
-      if (options.memoryCache !== false) memoryCache.set(key, updatedState);
-      if (options.sessionCache !== false) writeSession(key, updatedState, options.ttl);
+      if (options.memoryCache !== false) {
+        memoryCache.set(key, updatedState);
+      }
+      /* N'écrire en session que si le fetch s'est terminé proprement —
+         évite de persister un état partiel dû à une erreur réseau. */
+      if (options.sessionCache !== false && !updatedState.fetchError) {
+        writeSession(key, updatedState, options.ttl);
+      }
       return updatedState.items;
     })
     .finally(function() {
@@ -326,11 +364,12 @@ function normalizeMaxPages(value) {
     var state = entry[1] || {};
 
     return {
-      key: entry[0],
-      items: Array.isArray(state.items) ? state.items.length : 0,
+      key:         entry[0],
+      items:       Array.isArray(state.items) ? state.items.length : 0,
       pagesLoaded: state.pagesLoaded || 0,
-      complete: !!state.complete,
-      hasNext: !!(state.nextUrl || state.nextOffset != null),
+      complete:    !!state.complete,
+      fetchError:  !!state.fetchError,
+      hasNext:     !!(state.nextUrl || state.nextOffset != null),
     };
   });
 
@@ -339,16 +378,17 @@ function normalizeMaxPages(value) {
     collections: collections,
     memoryKeys: Array.from(memoryCache.keys()),
     pendingKeys: Array.from(pendingFetches.keys()),
-    perfTest: isPerfTest(),
+    bypass: shouldBypassCache(),
   };
 }
 
   window.CollectionData = {
-    version: VERSION,
-    get: get,
-    getCurrentPage: getCurrentPage,
-    clear: clear,
-    stats: stats,
+    version:           VERSION,
+    DEFAULT_KEEP_FIELDS: DEFAULTS.keepFields,
+    get:               get,
+    getCurrentPage:    getCurrentPage,
+    clear:             clear,
+    stats:             stats,
   };
 
 })();
