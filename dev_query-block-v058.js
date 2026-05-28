@@ -103,6 +103,69 @@
     return [shared, specific, legacy].filter(Boolean).join(' ');
   }
 
+  function addUiClasses(node, classes) {
+    String(classes || '').split(/\s+/).forEach(function(cls) {
+      if (cls) node.classList.add(cls);
+    });
+  }
+
+  function removeUiClasses(node, classes) {
+    String(classes || '').split(/\s+/).forEach(function(cls) {
+      if (cls) node.classList.remove(cls);
+    });
+  }
+
+  function toggleUiClasses(node, classes, force) {
+    String(classes || '').split(/\s+/).forEach(function(cls) {
+      if (cls) node.classList.toggle(cls, force);
+    });
+  }
+
+  function withUiState(baseClasses, stateClasses, enabled) {
+    return baseClasses + (enabled ? ' ' + stateClasses : '');
+  }
+
+  var CLS_LOADER = 'cb-loader qb-loader sqb-loader';
+  var CLS_LOADER_TEXT = 'cb-loader--text qb-loader--text sqb-loader--text';
+  var CLS_LOADER_DOT = 'cb-loader__dot qb-loader__dot sqb-loader-dot';
+  var CLS_FILTERS_WRAPPER = 'cb-filters-wrapper qb-filters-wrapper sqb-filters-wrapper';
+  var CLS_FILTERS_WRAPPER_STICKY = 'cb-filters-wrapper--sticky qb-filters-wrapper--sticky sqb-filters-wrapper--sticky';
+  var CLS_FILTERS_WRAPPER_STUCK = 'cb-filters-wrapper--is-sticky qb-filters-wrapper--is-sticky sqb-filters-wrapper--is-sticky';
+  var CLS_FILTERS = 'cb-filters qb-filters sqb-filters';
+  var CLS_FILTERS_MOBILE_MODE = 'cb-filters--mobile-mode qb-filters--mobile-mode sqb-filters--mobile-mode';
+  var CLS_FILTERS_SECONDARY = 'cb-filters-secondary qb-filters-secondary sqb-filters-secondary';
+  var CLS_FILTER_GROUP = 'cb-filter-group qb-filter-group sqb-filter-group';
+  var CLS_FILTER_GROUP_PILLS = 'cb-filter-group--pills qb-filter-group--pills sqb-filter-group--pills';
+  var CLS_FILTER_GROUP_DROPDOWN = 'cb-filter-group--dropdown qb-filter-group--dropdown sqb-filter-group--dropdown';
+  var CLS_FILTER_GROUP_CATS = 'cb-filter-group--cats qb-filter-group--cats sqb-filter-group--cats';
+  var CLS_FILTER_GROUP_TAG = 'cb-filter-group--tag qb-filter-group--tag sqb-filter-group--tag';
+  var CLS_FILTER_GROUP_SEARCH = 'cb-filter-group--search qb-filter-group--search sqb-filter-group--search';
+  var CLS_FILTER_GROUP_TABS = 'cb-filter-group--tabs qb-filter-group--tabs sqb-filter-group--tabs';
+  var CLS_FILTER_LABEL = 'cb-filter-label qb-filter-label sqb-filter-label';
+  var CLS_FILTER_BTN = 'cb-filter-btn qb-filter-btn sqb-filter-btn';
+  var CLS_FILTER_BTN_ACTIVE = 'cb-filter-btn--active qb-filter-btn--active sqb-filter-btn--active';
+  var CLS_FILTER_SELECT = 'cb-filter-select qb-filter-select sqb-filter-select';
+  var CLS_FILTER_SEARCH = 'cb-filter-search qb-filter-search sqb-filter-search';
+  var CLS_TAB_BTN = 'cb-tab-btn qb-tab-btn sqb-tab-btn';
+  var CLS_TAB_BTN_ACTIVE = 'cb-tab-btn--active qb-tab-btn--active sqb-tab-btn--active';
+  var CLS_CLEAR_ALL = 'cb-clear-all qb-clear-all sqb-clear-all';
+  var CLS_CLEAR_ALL_PANEL = 'cb-clear-all--panel qb-clear-all--panel sqb-clear-all--panel';
+  var CLS_ICON = 'cb-icon qb-icon sqb-icon';
+  var CLS_ICON_BTN = 'cb-icon-btn qb-icon-btn sqb-icon-btn';
+  var CLS_MOBILE_PANEL = 'cb-mobile-panel qb-mobile-panel sqb-mobile-panel';
+  var CLS_MOBILE_PANEL_OPEN = 'cb-mobile-panel--open qb-mobile-panel--open sqb-mobile-panel--open';
+  var CLS_MOBILE_PANEL_INNER = 'cb-mobile-panel__inner qb-mobile-panel__inner sqb-mobile-panel-inner';
+  var CLS_MOBILE_PANEL_HEADER = 'cb-mobile-panel__header qb-mobile-panel__header sqb-mobile-panel-header';
+  var CLS_MOBILE_PANEL_CLOSE = 'cb-mobile-panel__close qb-mobile-panel__close sqb-mobile-panel-close';
+  var CLS_MOBILE_FILTERS_ZONE = 'cb-mobile-filters-zone qb-mobile-filters-zone sqb-mobile-filters-zone';
+  var CLS_BACKDROP = 'cb-backdrop qb-backdrop sqb-backdrop';
+  var CLS_BACKDROP_VISIBLE = 'cb-backdrop--visible qb-backdrop--visible sqb-backdrop--visible';
+  var CLS_PANEL_OPEN_BODY = 'cb-panel-open qb-panel-open sqb-panel-open';
+  var CLS_MOBILE_TOGGLE = 'cb-mobile-toggle qb-mobile-toggle sqb-mobile-toggle';
+  var CLS_MOBILE_TOGGLE_BADGE = 'cb-mobile-toggle__badge qb-mobile-toggle__badge sqb-mobile-toggle-badge';
+  var CLS_TABS_ROW = 'cb-tabs-row qb-tabs-row sqb-tabs-row';
+  var CLS_MOBILE_FILTER_ROW = 'cb-mobile-filter-row qb-mobile-filter-row sqb-mobile-filter-row';
+
   function parseTag(tag) {
     var raw = String(tag || ''), idx = raw.indexOf(':');
     if (idx === -1) return { prefix: null, value: raw.trim() };
@@ -190,19 +253,19 @@
 
   function buildLoader(loadingText) {
     if (loadingText) return setText(el('div', {
-      class: 'sqb-loader sqb-loader--text',
+      class: CLS_LOADER + ' ' + CLS_LOADER_TEXT,
       'aria-live': 'polite',
     }), loadingText);
 
     var w = el('div', {
-      class: 'sqb-loader',
+      class: CLS_LOADER,
       role: 'status',
       'aria-label': 'Chargement',
     });
 
     for (var i = 0; i < 3; i++) {
       w.appendChild(el('span', {
-        class: 'sqb-loader-dot',
+        class: CLS_LOADER_DOT,
         'aria-hidden': 'true',
       }));
     }
@@ -1273,14 +1336,14 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
   function setupSticky(sentinel, wrapper, stickyTop) {
     if (!('IntersectionObserver' in window)) return;
 
-    wrapper.classList.add('sqb-filters-wrapper--sticky');
+    addUiClasses(wrapper, CLS_FILTERS_WRAPPER_STICKY);
 
     if (stickyTop && stickyTop !== '0px') {
       wrapper.style.setProperty('--sqb-sticky-top', stickyTop);
     }
 
     new IntersectionObserver(function(entries) {
-      wrapper.classList.toggle('sqb-filters-wrapper--is-sticky', !entries[0].isIntersecting);
+      toggleUiClasses(wrapper, CLS_FILTERS_WRAPPER_STUCK, !entries[0].isIntersecting);
     }, { threshold: 0 }).observe(sentinel);
   }
 
@@ -1290,25 +1353,25 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
   function buildMobilePanel(appendSecondary, tabPool, i18n, ownerBlock) {
     var panel = el('div', {
-      class: 'sqb-mobile-panel',
+      class: CLS_MOBILE_PANEL,
       'aria-hidden': 'true',
       role: 'dialog',
       'aria-modal': 'true',
     });
 
-    var inner = el('div', { class: 'sqb-mobile-panel-inner' });
+    var inner = el('div', { class: CLS_MOBILE_PANEL_INNER });
 
-    var header = el('div', { class: 'sqb-mobile-panel-header' });
+    var header = el('div', { class: CLS_MOBILE_PANEL_HEADER });
 
     var panelClearBtn = null;
 
     if (i18n._hasClearAll) {
       panelClearBtn = el('button', {
-        class: 'sqb-clear-all sqb-clear-all--panel',
+        class: CLS_CLEAR_ALL + ' ' + CLS_CLEAR_ALL_PANEL,
         type: 'button',
       });
 
-      var panelClearIcon = el('span', { class: 'sqb-icon' });
+      var panelClearIcon = el('span', { class: CLS_ICON });
       panelClearIcon.textContent = 'refresh';
 
       panelClearBtn.appendChild(panelClearIcon);
@@ -1319,23 +1382,23 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     var closeBtn = el('button', {
-      class: 'sqb-mobile-panel-close sqb-icon-btn',
+      class: CLS_MOBILE_PANEL_CLOSE + ' ' + CLS_ICON_BTN,
       type: 'button',
       'aria-label': 'Fermer',
     });
 
-    var closeIcon = el('span', { class: 'sqb-icon' });
+    var closeIcon = el('span', { class: CLS_ICON });
     closeIcon.textContent = i18n.filterClose || 'close';
     closeBtn.appendChild(closeIcon);
     header.appendChild(closeBtn);
 
     inner.appendChild(header);
 
-    var filtersZone = el('div', { class: 'sqb-mobile-filters-zone' });
+    var filtersZone = el('div', { class: CLS_MOBILE_FILTERS_ZONE });
     inner.appendChild(filtersZone);
     panel.appendChild(inner);
 
-    var backdrop = el('div', { class: 'sqb-backdrop' });
+    var backdrop = el('div', { class: CLS_BACKDROP });
     backdrop.addEventListener('click', close);
 
     function syncContext() {
@@ -1386,7 +1449,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         document.body.insertBefore(backdrop, panel);
       }
 
-      backdrop.classList.add('sqb-backdrop--visible');
+      addUiClasses(backdrop, CLS_BACKDROP_VISIBLE);
 
       syncContext();
 
@@ -1394,18 +1457,18 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       appendSecondary(tabPool(), filtersZone);
 
       panel.setAttribute('aria-hidden', 'false');
-      panel.classList.add('sqb-mobile-panel--open');
+      addUiClasses(panel, CLS_MOBILE_PANEL_OPEN);
 
-      document.body.classList.add('sqb-panel-open');
+      addUiClasses(document.body, CLS_PANEL_OPEN_BODY);
 
       closeBtn.focus();
     }
 
     function close() {
       panel.setAttribute('aria-hidden', 'true');
-      panel.classList.remove('sqb-mobile-panel--open');
-      backdrop.classList.remove('sqb-backdrop--visible');
-      document.body.classList.remove('sqb-panel-open');
+      removeUiClasses(panel, CLS_MOBILE_PANEL_OPEN);
+      removeUiClasses(backdrop, CLS_BACKDROP_VISIBLE);
+      removeUiClasses(document.body, CLS_PANEL_OPEN_BODY);
     }
 
     closeBtn.addEventListener('click', close);
@@ -1458,8 +1521,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       ? Infinity
       : Number(fc.mobilePanelBreakpoint || 768);
 
-    var wrapper = el('div', { class: 'sqb-filters-wrapper' });
-    var bar = el('div', { class: 'sqb-filters' });
+    var wrapper = el('div', { class: CLS_FILTERS_WRAPPER });
+    var bar = el('div', { class: CLS_FILTERS });
     wrapper.appendChild(bar);
 
     var state = {
@@ -1552,7 +1615,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
       if (n > 0) {
         if (!badge) {
-          badge = el('span', { class: 'sqb-mobile-toggle-badge' });
+          badge = el('span', { class: CLS_MOBILE_TOGGLE_BADGE });
           toggleBtn.appendChild(badge);
         }
 
@@ -1573,10 +1636,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function buildPillGroup(vals, displayVals, label, showLabel, getCurrent, onSelect) {
-      var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--pills' });
+      var wrap = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_PILLS });
 
       if (showLabel && label) {
-        var lbl = el('span', { class: 'sqb-filter-label' });
+        var lbl = el('span', { class: CLS_FILTER_LABEL });
         lbl.textContent = label;
         wrap.appendChild(lbl);
       }
@@ -1586,7 +1649,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         var active = getCurrent() !== null && norm(String(v)) === norm(String(getCurrent()));
 
         var btn = el('button', {
-          class: 'sqb-filter-btn' + (active ? ' sqb-filter-btn--active' : ''),
+          class: withUiState(CLS_FILTER_BTN, CLS_FILTER_BTN_ACTIVE, active),
           type: 'button',
         });
 
@@ -1598,10 +1661,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           onSelect(isCurrent ? null : v);
 
           wrap.querySelectorAll('.sqb-filter-btn').forEach(function(b) {
-            b.classList.remove('sqb-filter-btn--active');
+            removeUiClasses(b, CLS_FILTER_BTN_ACTIVE);
           });
 
-          if (!isCurrent) btn.classList.add('sqb-filter-btn--active');
+          if (!isCurrent) addUiClasses(btn, CLS_FILTER_BTN_ACTIVE);
 
           emit();
         });
@@ -1613,10 +1676,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function buildDropdown(vals, displayVals, label, getCurrent, onSelect) {
-      var wrap = el('div', { class: 'sqb-filter-group sqb-filter-group--dropdown' });
+      var wrap = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_DROPDOWN });
 
       var sel = el('select', {
-        class: 'sqb-filter-select',
+        class: CLS_FILTER_SELECT,
         'aria-label': label,
       });
 
@@ -1677,7 +1740,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
             }
           );
 
-          grp.classList.add('sqb-filter-group--cats');
+          addUiClasses(grp, CLS_FILTER_GROUP_CATS);
           container.appendChild(grp);
         }
       }
@@ -1740,16 +1803,16 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           }
         })(pd.prefix);
 
-        grp.classList.add('sqb-filter-group--tag');
+        addUiClasses(grp, CLS_FILTER_GROUP_TAG);
         grp.setAttribute('data-prefix', pd.prefix);
         container.appendChild(grp);
       });
 
       if (fc.search !== false) {
-        var sg = el('div', { class: 'sqb-filter-group sqb-filter-group--search' });
+        var sg = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_SEARCH });
 
         var inp = el('input', {
-          class: 'sqb-filter-search',
+          class: CLS_FILTER_SEARCH,
           type: 'search',
           placeholder: i18n.searchPlaceholder,
           'aria-label': i18n.searchPlaceholder,
@@ -1781,19 +1844,19 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var tabs = Array.isArray(fc.tabs) ? fc.tabs : [];
 
     if (tabs.length) {
-      var tabGroup = el('div', { class: 'sqb-filter-group sqb-filter-group--tabs' });
+      var tabGroup = el('div', { class: CLS_FILTER_GROUP + ' ' + CLS_FILTER_GROUP_TABS });
       var defIdx = Number(fc.defaultTab != null ? fc.defaultTab : 0);
 
       tabs.forEach(function(tab, idx) {
         var active = idx === defIdx;
 
         var btn = el('button', {
-          class: 'sqb-tab-btn' + (active ? ' sqb-tab-btn--active' : ''),
+          class: withUiState(CLS_TAB_BTN, CLS_TAB_BTN_ACTIVE, active),
           type: 'button',
         });
 
         if (tab.labelIcon) {
-          var ic = el('span', { class: 'sqb-icon' });
+          var ic = el('span', { class: CLS_ICON });
           ic.textContent = tab.labelIcon;
           btn.appendChild(ic);
         } else {
@@ -1809,10 +1872,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           if (btn.classList.contains('sqb-tab-btn--active')) return;
 
           tabGroup.querySelectorAll('.sqb-tab-btn').forEach(function(b) {
-            b.classList.remove('sqb-tab-btn--active');
+            removeUiClasses(b, CLS_TAB_BTN_ACTIVE);
           });
 
-          btn.classList.add('sqb-tab-btn--active');
+          addUiClasses(btn, CLS_TAB_BTN_ACTIVE);
 
           state.tab = tab.filter || null;
           resetSec();
@@ -1830,17 +1893,17 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       bar.appendChild(tabGroup);
     }
 
-    secondaryEl = el('div', { class: 'sqb-filters-secondary' });
+    secondaryEl = el('div', { class: CLS_FILTERS_SECONDARY });
     appendSecondary(tabPool(), secondaryEl);
     bar.appendChild(secondaryEl);
 
     if (fc.clearAll) {
       clearAllBtn = el('button', {
-        class: 'sqb-clear-all',
+        class: CLS_CLEAR_ALL,
         type: 'button',
       });
 
-      var _cai = el('span', { class: 'sqb-icon' });
+      var _cai = el('span', { class: CLS_ICON });
       _cai.textContent = 'refresh';
 
       clearAllBtn.appendChild(_cai);
@@ -1866,7 +1929,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     if (useMobilePanel) {
       toggleBtn = el('button', {
-        class: 'sqb-mobile-toggle',
+        class: CLS_MOBILE_TOGGLE,
         type: 'button',
       });
 
@@ -1876,12 +1939,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       var tabsGroupEl = bar.querySelector('.sqb-filter-group--tabs');
 
       if (tabsGroupEl) {
-        var tabsRow = el('div', { class: 'sqb-tabs-row' });
+        var tabsRow = el('div', { class: CLS_TABS_ROW });
         bar.replaceChild(tabsRow, tabsGroupEl);
         tabsRow.appendChild(tabsGroupEl);
         tabsRow.appendChild(toggleBtn);
       } else {
-        var mobileRow = el('div', { class: 'sqb-mobile-filter-row' });
+        var mobileRow = el('div', { class: CLS_MOBILE_FILTER_ROW });
         mobileRow.appendChild(toggleBtn);
         bar.appendChild(mobileRow);
       }
@@ -1919,7 +1982,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
         isMobileMode = shouldBeMobile;
 
-        wrapper.classList.toggle('sqb-filters--mobile-mode', isMobileMode);
+        toggleUiClasses(wrapper, CLS_FILTERS_MOBILE_MODE, isMobileMode);
 
         if (toggleBtn) toggleBtn.style.display = isMobileMode ? '' : 'none';
 
@@ -1997,7 +2060,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     if (dispLayout === 'list') target.classList.add('cb-block--list', 'qb-block--list', 'sqb-block--list');
-    target.classList.add('sqb-block--loading');
+    target.classList.add('cb-block--loading', 'qb-block--loading', 'sqb-block--loading');
 
 injectLoaderStyles();
 
@@ -2005,7 +2068,7 @@ var initialLoader = buildLoader(i18n.loading);
 target.appendChild(initialLoader);
 
 requestAnimationFrame(function() {
-  target.classList.add('sqb-block--rendering');
+  target.classList.add('cb-block--rendering', 'qb-block--rendering', 'sqb-block--rendering');
 });
 
         var rawItems = [];
@@ -2123,7 +2186,7 @@ requestAnimationFrame(function() {
       target.querySelector('.sqb-loader, .sqb-loader--text') &&
         target.querySelector('.sqb-loader, .sqb-loader--text').remove();
 
-      setText(target.appendChild(el('p', { class: 'sqb-error' })), '\u26A0 Erreur de chargement');
+      setText(target.appendChild(el('p', { class: 'cb-error qb-error sqb-error' })), '\u26A0 Erreur de chargement');
       return;
     }
 
@@ -2134,9 +2197,9 @@ requestAnimationFrame(function() {
 requestAnimationFrame(function() {
   if (loaderEl) loaderEl.remove();
 
-  target.classList.remove('sqb-block--loading');
-  target.classList.remove('sqb-block--rendering');
-  target.classList.add('sqb-block--ready');
+  target.classList.remove('cb-block--loading', 'qb-block--loading', 'sqb-block--loading');
+  target.classList.remove('cb-block--rendering', 'qb-block--rendering', 'sqb-block--rendering');
+  target.classList.add('cb-block--ready', 'qb-block--ready', 'sqb-block--ready');
 });
 
     var activeFilters = {
@@ -2191,13 +2254,19 @@ requestAnimationFrame(function() {
 
     function updateTabClass(tabLabel) {
       Array.from(target.classList).forEach(function(c) {
-        if (c.indexOf('sqb-tab--') === 0) {
+        if (
+          c.indexOf('cb-tab--') === 0 ||
+          c.indexOf('qb-tab--') === 0 ||
+          c.indexOf('sqb-tab--') === 0
+        ) {
           target.classList.remove(c);
         }
       });
 
       if (tabLabel) {
         var tabSlug = slugify(tabLabel);
+        target.classList.add('cb-tab--' + tabSlug);
+        target.classList.add('qb-tab--' + tabSlug);
         target.classList.add('sqb-tab--' + tabSlug);
         target.setAttribute('data-sqb-tab', tabSlug);
       } else {
