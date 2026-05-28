@@ -19,6 +19,21 @@ var clean=[
 var mapsApiPromise=null;
 var clustererPromise=null;
 
+function getCollectionBlocks(){
+  return window.CollectionBlocks||null;
+}
+function getCollectionUtils(){
+  var cb=getCollectionBlocks();
+  return cb&&(cb.utils||cb);
+}
+function getCollectionDataAPI(){
+  var cb=getCollectionBlocks();
+  if(cb&&cb.data&&typeof cb.data.get==='function')return cb.data;
+  if(cb&&typeof cb.get==='function')return cb;
+  if(window.CollectionData&&typeof window.CollectionData.get==='function')return window.CollectionData;
+  return null;
+}
+
 /* ── Auto-détection de la langue depuis Squarespace ── */
 function detectLocale(){
   try{var l=(window.Static&&window.Static.SQUARESPACE_CONTEXT&&window.Static.SQUARESPACE_CONTEXT.website&&window.Static.SQUARESPACE_CONTEXT.website.language)||'fr';return l.slice(0,2).toLowerCase();}catch(_){return'fr';}
@@ -100,19 +115,30 @@ function log(){if(cfg.debug)console.log.apply(console,['[LocatorBlock]'].concat(
 /* ── Utilitaires ── */
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
 function tagRe(p){return new RegExp('^'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\s*','i');}
-function getTag(tags,p){if(!Array.isArray(tags))return'';var re=tagRe(p),t=tags.find(function(x){return re.test(String(x));});return t?String(t).replace(re,'').trim():'';}
-function getTags(tags,p){if(!Array.isArray(tags))return[];var re=tagRe(p);return tags.filter(function(x){return re.test(String(x));}).map(function(x){return String(x).replace(re,'').trim();});}
+function getTag(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function'){var vals=utils.getTagValuesByPrefix({tags:tags||[]},p);return vals[0]||'';}if(!Array.isArray(tags))return'';var re=tagRe(p),t=tags.find(function(x){return re.test(String(x));});return t?String(t).replace(re,'').trim():'';}
+function getTags(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function')return utils.getTagValuesByPrefix({tags:tags||[]},p);if(!Array.isArray(tags))return[];var re=tagRe(p);return tags.filter(function(x){return re.test(String(x));}).map(function(x){return String(x).replace(re,'').trim();});}
 
 /* ── Image srcset ── */
 var SW=[300,500,750,1000,1500];
 var LOCATOR_RENDER_IMAGE_INDEX=0;
 
 function buildSrcset(b){
+  var utils=getCollectionUtils();
+  if(utils&&typeof utils.buildSrcset==='function')return utils.buildSrcset(b,SW);
   return SW.map(function(w){return b+'?format='+w+'w '+w+'w';}).join(', ');
 }
 
 function getImgBase(item){
+  var utils=getCollectionUtils();
+  if(utils&&typeof utils.getImageBase==='function')return utils.getImageBase(item);
   return(item.assetUrl||item.thumbnailUrl||item.mainImageUrl||(item.media&&item.media[0]&&item.media[0].url)||'').split('?')[0];
+}
+
+function getFocalPos(point){
+  var utils=getCollectionUtils();
+  if(utils&&typeof utils.focalPoint==='function')return utils.focalPoint(point);
+  point=point||{x:0.5,y:0.5};
+  return Math.round(point.x*100)+'% '+Math.round(point.y*100)+'%';
 }
 
 function imgTag(base,alt,cls,sizes,fp,priority){
@@ -176,8 +202,10 @@ function getCollectionOptions(maxPages){
    async function fetchItemsState(maxPages){
   if(!cfg.collectionUrl) throw new Error('collectionUrl manquant');
 
-  if(!window.CollectionData || typeof window.CollectionData.get !== 'function'){
-    throw new Error('CollectionData requis pour Locator Block');
+  var dataApi=getCollectionDataAPI();
+
+  if(!dataApi || typeof dataApi.get !== 'function'){
+    throw new Error('CollectionBlocks ou CollectionData requis pour Locator Block');
   }
 
   maxPages = maxPages || cfg.performance.maxPages || 1;
@@ -185,11 +213,11 @@ function getCollectionOptions(maxPages){
   var options = getCollectionOptions(maxPages);
   var state;
 
-  if(typeof window.CollectionData.getState === 'function'){
-    state = await window.CollectionData.getState(cfg.collectionUrl, options);
+  if(typeof dataApi.getState === 'function'){
+    state = await dataApi.getState(cfg.collectionUrl, options);
   }else{
     state = {
-      items: await window.CollectionData.get(cfg.collectionUrl, options),
+      items: await dataApi.get(cfg.collectionUrl, options),
       complete: maxPages === 'all',
       fetchError: null,
       pagesLoaded: Number(maxPages || 1)
@@ -224,8 +252,7 @@ function getCollectionOptions(maxPages){
 
   var items = filtered.map(function(item){
     var c = getCoords(item.location);
-    var fp = item.mediaFocalPoint || { x: 0.5, y: 0.5 };
-    var focalPos = Math.round(fp.x * 100) + '% ' + Math.round(fp.y * 100) + '%';
+    var focalPos = getFocalPos(item.mediaFocalPoint);
 
     return {
       id: item.id || item.urlId || '',
