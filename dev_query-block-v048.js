@@ -1,10 +1,3 @@
-/*!
- * Squarespace Collection Block (Query Block) v47
- * Fetch JSON paginé · filtres · tabs · groupBy · sticky · hooks · cache partagé
- * https://github.com/jonas-nicollin/squarespace-components
- *
- * Dépendance : collection-data.js doit être chargé avant ce script.
- */
 (function () {
   'use strict';
 
@@ -197,32 +190,36 @@
       : (url.indexOf('?') !== -1 ? url + '&format=json' : url + '?format=json');
   }
 
-async function fetchAllItems(path, maxPages, useSession, ttl, stripFields) {
-  if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
-    throw new Error('[SQB] CollectionData requis — charger collection-data.js avant query-block.js');
-  }
-
-  return window.CollectionData.get(path, {
-    maxPages:     maxPages || 1,
-    ttl:          ttl      || 300,
-    memoryCache:  true,
+function buildCollectionOptions(maxPages, useSession, ttl, stripFields) {
+  return {
+    maxPages: maxPages || 1,
+    ttl: ttl || 300,
+    memoryCache: true,
     sessionCache: useSession !== false,
-    credentials:  'same-origin',
-    stripFields:  stripFields || [],
-  });
+    credentials: 'same-origin',
+    stripFields: stripFields || [],
+  };
 }
 
-/* Vérifie si toutes les sources d'une liste sont marquées complètes
-   dans CollectionData (sans erreur réseau).
-   Utilisé pour distinguer "fin de collection" de "erreur transitoire". */
-function isCollectionComplete(sources) {
-  if (!window.CollectionData || typeof window.CollectionData.stats !== 'function') return false;
-  var st = window.CollectionData.stats();
-  var entries = st.collections || [];
-  return (Array.isArray(sources) ? sources : []).every(function(src) {
-    var path = src.path || src;
-    var entry = entries.find(function(e) { return e.key && e.key.indexOf(path) !== -1; });
-    return entry ? (entry.complete && !entry.fetchError) : false;
+async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields) {
+  if (!window.CollectionData || typeof window.CollectionData.get !== 'function') {
+    throw new Error('CollectionData requis pour Query Block');
+  }
+
+  var options = buildCollectionOptions(maxPages, useSession, ttl, stripFields);
+
+  if (typeof window.CollectionData.getState === 'function') {
+    return window.CollectionData.getState(path, options);
+  }
+
+  return window.CollectionData.get(path, options).then(function(items) {
+    return {
+      items: items,
+      pagesLoaded: Number(maxPages || 1),
+      complete: maxPages === 'all',
+      fetchError: null,
+      hasNext: maxPages !== 'all',
+    };
   });
 }
 
@@ -1906,8 +1903,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     if (pag.loadMoreLabel) i18n.loadMoreLabel = pag.loadMoreLabel;
     if (pag.endLabel !== undefined) i18n.endLabel = pag.endLabel;
 
-    var perPage = Number(pag.perPage || 12);
     var mode = pag.mode || 'load-more';
+    var perPage = mode === 'none' ? Infinity : Number(pag.perPage || 12);
     var dispLayout = disp.layout || 'grid';
 
     target.classList.add('sqb-block');
@@ -1945,6 +1942,7 @@ requestAnimationFrame(function() {
     var isFetchingMore = false;
 
     function canFetchMorePages() {
+      if (mode === 'none') return false;
       if (allRemoteLoaded) return false;
       if (progressiveMaxPages === 'all') return true;
       return Number(loadedMaxPages || 1) < Number(progressiveMaxPages || 1);
@@ -1961,30 +1959,57 @@ requestAnimationFrame(function() {
       );
     }
 
+    function updateRemoteLoadedState(states, requestedPages) {
+      states = Array.isArray(states) ? states : [];
+
+      if (!states.length) {
+        allRemoteLoaded = true;
+        return;
+      }
+
+      allRemoteLoaded = states.every(function(state) {
+        return !!(state && (state.complete || state.fetchError));
+      });
+
+      if (
+        progressiveMaxPages !== 'all' &&
+        Number(requestedPages || 1) >= Number(progressiveMaxPages || 1)
+      ) {
+        allRemoteLoaded = true;
+      }
+    }
+
     async function loadSources(maxPagesValue) {
       var results = await Promise.all(sourceList.map(function(src) {
         var stripFields = src.stripFields;
         if (stripFields === undefined) stripFields = perf.stripFields;
         if (stripFields === undefined) stripFields = ['body'];
 
-        return fetchAllItems(
+        return fetchCollectionState(
           src.path,
           maxPagesValue,
           perf.sessionCache === true,
           perf.sessionCacheTTL || 300,
           stripFields
-        ).then(function(items) {
-          return items.map(function(raw) {
+        ).then(function(state) {
+          return {
+            state: state,
+            items: (state.items || []).map(function(raw) {
             return mapItem(raw, src.path);
-          });
+            }),
+          };
         });
       }));
 
       var merged = [];
+      var states = [];
 
       results.forEach(function(r) {
-        merged.push.apply(merged, r);
+        states.push(r.state || null);
+        merged.push.apply(merged, r.items || []);
       });
+
+      updateRemoteLoadedState(states, maxPagesValue);
 
       merged = uniqBy(merged, function(i) {
         return i.fullUrl || i.id;
@@ -2313,21 +2338,13 @@ if (canAppendIncrementally) {
   currentPage++;
 
   if (canFetchMorePages()) {
-    var previousCount = rawItems.length;
     loadedMaxPages = nextMaxPagesValue();
 
     try {
-      var newRaw = await loadSources(loadedMaxPages);
-      /* On marque terminé seulement si CollectionData confirme que la
-         collection est complète (pas d'erreur réseau, pas de page suivante).
-         Un batch identique peut être dû à une erreur réseau transitoire — on
-         laisse la possibilité de réessayer au prochain clic. */
-      rawItems = newRaw;
-      if (isCollectionComplete(sourceList)) {
-        allRemoteLoaded = true;
-      }
+      rawItems = await loadSources(loadedMaxPages);
     } catch (err) {
       if (cfg.debug) console.warn('[SQB]', cfg.key, err);
+      allRemoteLoaded = true;
     }
   }
 
@@ -2356,18 +2373,16 @@ isFetchingMore = true;
 currentPage++;
 
 if (canFetchMorePages()) {
-  var previousCount = rawItems.length;
   loadedMaxPages = nextMaxPagesValue();
 
-  loadSources(loadedMaxPages).then(function(newRaw) {
-    rawItems = newRaw;
-    if (isCollectionComplete(sourceList)) {
-      allRemoteLoaded = true;
-    }
+  loadSources(loadedMaxPages).then(function(items) {
+    rawItems = items;
+
     isFetchingMore = false;
     render(false, true);
   }).catch(function(err) {
     if (cfg.debug) console.warn('[SQB]', cfg.key, err);
+    allRemoteLoaded = true;
     isFetchingMore = false;
     render(false, true);
   });
@@ -2426,9 +2441,9 @@ function scheduleConfig(cfg) {
    * ════════════════════════════════════ */
 
  function init() {
-  var configs = Array.isArray(window.SQB_CONFIGS)
-    ? window.SQB_CONFIGS
-    : [];
+  var configs = Array.isArray(window.QUERY_BLOCK_CONFIGS)
+    ? window.QUERY_BLOCK_CONFIGS
+    : (Array.isArray(window.SQB_CONFIGS) ? window.SQB_CONFIGS : []);
 
   if (!configs.length) return;
 
