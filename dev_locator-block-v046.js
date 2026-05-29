@@ -129,6 +129,8 @@ cfg.map=Object.assign({
   markerShadow:true,      /* ombre portée sous les marqueurs */
   popup:true,popupShowImage:true,
   clustering:false,clusterMinCount:2,updateListOnMapMove:false,
+  overlapStrategy:'spread',
+  overlapRadiusMeters:18,
 },cfg.map||{});
 
 function log(){if(cfg.debug)console.log.apply(console,['[LocatorBlock]'].concat(Array.prototype.slice.call(arguments)));}
@@ -240,6 +242,41 @@ function imgTag(base,alt,cls,sizes,fp,priority){
    
 /* ── Coordonnées ── */
 function getCoords(loc){loc=loc||{};return{lat:parseFloat(loc.mapLat||loc.markerLat||''),lng:parseFloat(loc.mapLng||loc.markerLng||'')};}
+
+function spreadOverlappingItems(items){
+  if(!Array.isArray(items)||cfg.map.overlapStrategy!=='spread')return items;
+
+  var groups={};
+  items.forEach(function(item){
+    var key=[Number(item.lat).toFixed(7),Number(item.lng).toFixed(7)].join(',');
+    if(!groups[key])groups[key]=[];
+    groups[key].push(item);
+  });
+
+  Object.keys(groups).forEach(function(key){
+    var group=groups[key];
+    if(group.length<2){
+      group[0].markerLat=group[0].lat;
+      group[0].markerLng=group[0].lng;
+      return;
+    }
+
+    var radius=Number(cfg.map.overlapRadiusMeters||18);
+    var latRad=group[0].lat*Math.PI/180;
+    var metersPerLat=111320;
+    var metersPerLng=Math.max(1,111320*Math.cos(latRad));
+
+    group.forEach(function(item,index){
+      var angle=(-Math.PI/2)+(Math.PI*2*index/group.length);
+      item.markerLat=item.lat+(Math.sin(angle)*radius/metersPerLat);
+      item.markerLng=item.lng+(Math.cos(angle)*radius/metersPerLng);
+      item.hasOverlappingLocation=true;
+      item.overlapCount=group.length;
+    });
+  });
+
+  return items;
+}
 
 function getCollectionOptions(maxPages){
   return {
@@ -354,6 +391,8 @@ function getCollectionOptions(maxPages){
     });
   }
 
+  spreadOverlappingItems(items);
+
   return {
     items: items,
     complete: !!state.complete,
@@ -458,7 +497,10 @@ function defineCustomPopup(){
     var b='';if(item.numero)b+='<div class="lb-popup-num">'+escHtml(item.numero)+'</div>';if(item.title)b+='<div class="lb-popup-title">'+escHtml(item.title)+'</div>';if(item.lieu)b+='<div class="lb-popup-lieu">'+escHtml(item.lieu)+'</div>';
     this.container=document.createElement('div');this.container.className='lb-popup-wrap';
     var pt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
-    this.container.innerHTML='<a class="lb-popup" href="'+escHtml(item.url)+'"'+pt+'>'+im+(b?'<div class="lb-popup-body">'+b+'</div>':'')+'</a>';
+    this.container.innerHTML='<button class="lb-popup-close" type="button" aria-label="Fermer">×</button><a class="lb-popup" href="'+escHtml(item.url)+'"'+pt+'>'+im+(b?'<div class="lb-popup-body">'+b+'</div>':'')+'</a>';
+    var closeBtn=this.container.querySelector('.lb-popup-close');
+    var popup=this;
+    if(closeBtn)closeBtn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();popup.setMap(null);});
     this.getPanes().floatPane.appendChild(this.container);
   };
   CustomPopup.prototype.draw=function(){var proj=this.getProjection(),pos=proj.fromLatLngToDivPixel(this.position);if(!pos||!this.container)return;var w=this.container.offsetWidth||220;this.container.style.left=(pos.x-w/2)+'px';this.container.style.top=(pos.y-this.container.offsetHeight-56)+'px';};
@@ -601,9 +643,10 @@ function createInstance(root,allItems,fetchMoreItems){
   });
 });
   }
-  function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.lat,item.lng),item);activePopup.setMap(map);}
+  function markerPosition(item){return{lat:item.markerLat||item.lat,lng:item.markerLng||item.lng};}
+  function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.markerLat||item.lat,item.markerLng||item.lng),item);activePopup.setMap(map);}
   function closePopup(){if(activePopup){activePopup.setMap(null);activePopup=null;}}
-  function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:{lat:item.lat,lng:item.lng},map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){activate(item.id,true);showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
+  function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:markerPosition(item),map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){activate(item.id,true);showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
   function addAllMarkers(){var ml=allItems.map(function(i){return createMarker(i);});if(cfg.map.clustering&&window.markerClusterer)clusterer=new markerClusterer.MarkerClusterer({map:map,markers:ml,algorithm:new markerClusterer.GridAlgorithm({maxDistance:40})});}
   function addMissingMarkers(items){
     var ml=[];
@@ -613,6 +656,14 @@ function createInstance(root,allItems,fetchMoreItems){
       else ml.forEach(function(m){m.setMap(map);});
     }
   }
+  function syncMarkerPositions(items){
+    items.forEach(function(i){
+      if(markers[i.id]&&typeof markers[i.id].marker.setPosition==='function'){
+        markers[i.id].item=i;
+        markers[i.id].marker.setPosition(markerPosition(i));
+      }
+    });
+  }
   function updateMarker(id,a){if(!markers[id])return;var icon=markerIcon(markers[id].item.numero,a);if(icon!==null)markers[id].marker.setIcon(icon);markers[id].marker.setZIndex(a?999:0);}
   function activate(id,pan){
     if(activeId===id)return;
@@ -621,7 +672,7 @@ function createInstance(root,allItems,fetchMoreItems){
     var card=root.querySelector('.lb-card[data-item-id="'+id+'"]');
     if(card){card.classList.add('is-active');card.classList.add('cb-card--active');card.classList.add('lb-card--active');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
     if(pan&&markers[id]){
-      map.panTo({lat:markers[id].item.lat,lng:markers[id].item.lng});
+      map.panTo(markerPosition(markers[id].item));
       if(map.getZoom()<cfg.mapZoomOnSelect)map.setZoom(cfg.mapZoomOnSelect);
       /* Compenser la hauteur du popup (environ popup + marker + marge) */
       var popupH = cfg.map.popup ? 280 : 0;
@@ -663,6 +714,7 @@ function createInstance(root,allItems,fetchMoreItems){
       if(Array.isArray(nextItems)&&nextItems.length>allItems.length){
         allItems = nextItems;
         addMissingMarkers(allItems);
+        syncMarkerPositions(allItems);
         currentItems = activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
         items = currentItems;
       }
@@ -686,6 +738,7 @@ function createInstance(root,allItems,fetchMoreItems){
     if(!Array.isArray(nextItems)||!nextItems.length)return;
     allItems=nextItems;
     addMissingMarkers(allItems);
+    syncMarkerPositions(allItems);
     currentItems=activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
     visibleCount=cfg.display.pageSize>0?Math.min(Math.max(visibleCount,cfg.display.pageSize),currentItems.length):currentItems.length;
     var counter=root.querySelector('.lb-counter');
