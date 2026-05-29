@@ -726,9 +726,13 @@
         };
         // Options de cache depuis _shared si définies, sinon depuis le bloc
         const sharedCache = SHARED_CONFIG?.cache || {};
+        const perf = CFG?.performance || {};
+        const sharedSession = sharedCache.sessionCache ?? sharedCache.useSessionCache;
+        const blockSession = perf.sessionCache ?? perf.useCollectionSessionCache;
         return {
-            useMemoryCache: sharedCache.useMemoryCache ?? CFG?.performance?.useCollectionMemoryCache !== false,
-            useSessionCache: sharedCache.useSessionCache ?? CFG?.performance?.useCollectionSessionCache === true
+            useMemoryCache: sharedCache.memoryCache ?? sharedCache.useMemoryCache ?? perf.memoryCache ?? perf.useCollectionMemoryCache !== false,
+            useSessionCache: sharedSession ?? blockSession === true,
+            ttl: sharedCache.sessionCacheTTL ?? sharedCache.ttl ?? perf.sessionCacheTTL ?? perf.ttl ?? 900
         };
     }
     function buildCollectionRequestOptions(maxPages, cacheOptions, keepFields) {
@@ -754,7 +758,7 @@
 
         return {
             maxPages: maxPages || 1,
-            ttl: 900,
+            ttl: opts.ttl || 900,
             memoryCache: opts.useMemoryCache !== false,
             sessionCache: opts.useSessionCache === true,
             credentials: 'same-origin',
@@ -1392,7 +1396,10 @@
                 maxPages: 1,
                 progressiveMaxPages: 'all',
                 useCollectionMemoryCache: true,
-                useCollectionSessionCache: false
+                useCollectionSessionCache: false,
+                sessionCache: undefined,
+                sessionCacheTTL: 900,
+                domBatchSize: 8
             }
         }, CFG || {});
         if (CFG.enabled === false) return null;
@@ -1638,6 +1645,18 @@ finalItems = applyFallbackFill(finalItems, items, currentItem, {
         const queue = buildPreloadQueue();
         if (!queue.length) return;
         const runner = async () => {
+            const utils = getCollectionUtils();
+            if (utils && typeof utils.idlePreload === "function") {
+                await utils.idlePreload(queue.map(item => ({
+                    path: item.path,
+                    maxPages: item.maxPages,
+                    options: buildCollectionRequestOptions(item.maxPages, item.cacheOptions)
+                })), {
+                    timeout: 1500
+                });
+                return;
+            }
+
             for (const item of queue) {
                 try {
                     await fetchCollectionItemsFromPath(item.path, item.maxPages, item.jsonFormatSuffix, item.cacheOptions);
