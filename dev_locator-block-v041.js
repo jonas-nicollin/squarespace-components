@@ -152,9 +152,9 @@ var CLS_ERROR='cb-error lb-error';
 var CLS_SKELETON_CARD='cb-card--skeleton lb-card--skeleton';
 
 /* ── Utilitaires ── */
-function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
-function slugifyToken(s){return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
-function tagFieldModifier(name){var slug=slugifyToken(name);return slug?' cb-card__tag-field--'+slug+' lb-card__tag-field--'+slug:'';}
+function escHtml(s){var utils=getCollectionUtils();if(utils&&typeof utils.escapeHTML==='function')return utils.escapeHTML(s);return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
+function slugifyToken(s){var utils=getCollectionUtils();if(utils&&typeof utils.slugify==='function')return utils.slugify(s);return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
+function tagFieldModifier(name){var utils=getCollectionUtils();if(utils&&typeof utils.tagFieldModifier==='function'){var cls=utils.tagFieldModifier(name,'lb-card');return cls?' '+cls:'';}var slug=slugifyToken(name);return slug?' cb-card__tag-field--'+slug+' lb-card__tag-field--'+slug:'';}
 function tagRe(p){return new RegExp('^'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\s*','i');}
 function getTag(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function'){var vals=utils.getTagValuesByPrefix({tags:tags||[]},p);return vals[0]||'';}if(!Array.isArray(tags))return'';var re=tagRe(p),t=tags.find(function(x){return re.test(String(x));});return t?String(t).replace(re,'').trim():'';}
 function getTags(tags,p){var utils=getCollectionUtils();if(utils&&typeof utils.getTagValuesByPrefix==='function')return utils.getTagValuesByPrefix({tags:tags||[]},p);if(!Array.isArray(tags))return[];var re=tagRe(p);return tags.filter(function(x){return re.test(String(x));}).map(function(x){return String(x).replace(re,'').trim();});}
@@ -195,6 +195,15 @@ function imgTag(base,alt,cls,sizes,fp,priority){
 
   var pos=fp||'50% 50%';
   var fallback=base+'?format=750w';
+  var utils=getCollectionUtils();
+  if(utils&&typeof utils.buildImgHTML==='function'){
+    return utils.buildImgHTML(base,pos,alt,{
+      imageClass:cls,
+      sizes:sizes||'(max-width:768px) 100vw, 400px',
+      widths:SW,
+      priority:isPriority
+    });
+  }
 
   return '<img class="'+escHtml(cls)+'"'
     +' src="'+escHtml(fallback)+'"'
@@ -348,6 +357,8 @@ function renderChild(child,item){
   }
   if(child==='zones'){
     if(!d.showZones||!item.zones.length)return'';
+    var utils=getCollectionUtils();
+    if(utils&&typeof utils.buildCategoriesHTML==='function')return utils.buildCategoriesHTML(item.zones,{prefix:'lb-card'});
     return'<div class="cb-card__categories lb-card__categories">'+item.zones.map(function(z){return'<span class="cb-card__category lb-card__category">'+escHtml(z)+'</span>';}).join('')+'</div>';
   }
   if(child==='cardLink'){
@@ -401,7 +412,7 @@ function buildCardHTML(item){
   if(d.showNumero&&item.numero)bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('numero'))+'"><span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.numero)+'</span></div>';
   if(d.showTitle&&item.title)bodyHtml+='<div class="'+escHtml(CLS_TITLE)+'">'+escHtml(item.title)+'</div>';
   if(d.showLieu&&item.lieu){var icon=d.lieuIcon?'<span class="ui-icon" aria-hidden="true">'+escHtml(d.lieuIcon)+'</span>':'';bodyHtml+='<div class="'+escHtml(CLS_TAG_FIELD+tagFieldModifier('lieu')+' '+CLS_LOCATION)+'">'+icon+'<span class="'+escHtml(CLS_TAG_VALUE)+'">'+escHtml(item.lieu)+'</span></div>';}
-  if(d.showZones&&item.zones.length)bodyHtml+='<div class="cb-card__categories lb-card__categories">'+item.zones.map(function(z){return'<span class="cb-card__category lb-card__category">'+escHtml(z)+'</span>';}).join('')+'</div>';
+  if(d.showZones&&item.zones.length){var utilsZones=getCollectionUtils();bodyHtml+=utilsZones&&typeof utilsZones.buildCategoriesHTML==='function'?utilsZones.buildCategoriesHTML(item.zones,{prefix:'lb-card'}):'<div class="cb-card__categories lb-card__categories">'+item.zones.map(function(z){return'<span class="cb-card__category lb-card__category">'+escHtml(z)+'</span>';}).join('')+'</div>';}
 
   var clHtml='';
   if(cfg.showCardLink&&item.url){var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
