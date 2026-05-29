@@ -47,6 +47,12 @@
         if (!cfg.classes && cfg.className) cfg.classes = {
             block: cfg.className
         };
+        if (cfg.openInNewTab !== undefined) {
+            cfg.display = {
+                ...(cfg.display || {})
+            };
+            if (cfg.display.openInNewTab === undefined) cfg.display.openInNewTab = cfg.openInNewTab;
+        }
         return cfg;
     }
     function addClasses(el, classes) {
@@ -1182,6 +1188,10 @@
         const card = document.createElement("a");
         card.className = "cb-card rb-card";
         card.href = item.fullUrl || CFG.sourceCollection.path + "/" + item.urlId;
+        if (CFG.display?.openInNewTab === true || CFG.openInNewTab === true) {
+            card.target = "_blank";
+            card.rel = "noopener noreferrer";
+        }
         extraClasses.forEach(cls => card.classList.add(cls + "__item"));
         // Marquer l'item courant (ex: pour la bande parcours avec excludeCurrentItem: false)
         if (currentItem) {
