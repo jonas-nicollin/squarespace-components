@@ -6,6 +6,7 @@
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
+  var pendingIdlePreloads = new Set();
 
   var DEFAULT_FIELDS = [
     'id',
@@ -409,6 +410,63 @@
     return state.items;
   }
 
+  function scheduleIdle(fn, timeout) {
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      return window.requestIdleCallback(fn, { timeout: Number(timeout || 2000) });
+    }
+
+    return setTimeout(fn, Number(timeout || 600));
+  }
+
+  function idlePreload(entries, options) {
+    var list = Array.isArray(entries) ? entries : [entries];
+    options = options || {};
+
+    var queue = list.map(function(entry) {
+      if (!entry) return null;
+      if (typeof entry === 'string') return { path: entry };
+      return entry;
+    }).filter(function(entry) {
+      return entry && entry.path;
+    });
+
+    if (!queue.length) return Promise.resolve([]);
+
+    return new Promise(function(resolve) {
+      scheduleIdle(function() {
+        var results = [];
+        var chain = Promise.resolve();
+
+        queue.forEach(function(entry) {
+          var itemOptions = Object.assign({}, options, entry.options || {}, {
+            maxPages: entry.maxPages || options.maxPages || 'all'
+          });
+          var preloadKey = makeCacheKey(entry.path, Object.assign({}, DEFAULTS, itemOptions)) + '::idle::' + itemOptions.maxPages;
+
+          if (pendingIdlePreloads.has(preloadKey)) return;
+          pendingIdlePreloads.add(preloadKey);
+
+          chain = chain.then(function() {
+            return getState(entry.path, itemOptions)
+              .then(function(state) {
+                results.push({ path: entry.path, state: state });
+              })
+              .catch(function(error) {
+                results.push({ path: entry.path, error: serializeError(error) });
+              })
+              .finally(function() {
+                pendingIdlePreloads.delete(preloadKey);
+              });
+          });
+        });
+
+        chain.then(function() {
+          resolve(results);
+        });
+      }, options.timeout || options.idleTimeout || 2000);
+    });
+  }
+
   async function getCurrentPage(options) {
     return get(window.location.pathname, Object.assign({
       maxPages: 1
@@ -424,6 +482,7 @@
   function clear() {
     memoryCache.clear();
     pendingFetches.clear();
+    pendingIdlePreloads.clear();
 
     try {
       Object.keys(sessionStorage)
@@ -455,6 +514,7 @@
       collections: collections,
       memoryKeys: Array.from(memoryCache.keys()),
       pendingKeys: Array.from(pendingFetches.keys()),
+      pendingIdlePreloads: Array.from(pendingIdlePreloads),
       perfTest: isPerfTest()
     };
   }
@@ -1132,6 +1192,7 @@
     getState: getState,
     getCurrentPage: getCurrentPage,
     getCurrentPageState: getCurrentPageState,
+    idlePreload: idlePreload,
     clear: clear,
     stats: stats
   };
@@ -1171,6 +1232,7 @@
     utils: utilsApi,
     get: get,
     getState: getState,
+    idlePreload: idlePreload,
     clear: clear,
     stats: stats,
     norm: norm,
