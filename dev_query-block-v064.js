@@ -2049,7 +2049,39 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 13. RUNNER
    * ════════════════════════════════════ */
 
+  function normalizeCollectionRef(ref) {
+    if (!ref) return null;
+    if (typeof ref === 'string') return { path: ref };
+    if (ref.path) return ref;
+    if (ref.url) return Object.assign({}, ref, { path: ref.url });
+    return null;
+  }
+
+  function normalizeConfig(raw) {
+    var cfg = Object.assign({}, raw || {});
+    var source;
+
+    if (!cfg.target) {
+      cfg.target = cfg.rootSelector || cfg.targetSelector || (cfg.insertion && cfg.insertion.targetSelector) || '';
+    }
+
+    if (!Array.isArray(cfg.sources) || !cfg.sources.length) {
+      if (Array.isArray(cfg.collections)) {
+        cfg.sources = cfg.collections.map(normalizeCollectionRef).filter(Boolean);
+      } else {
+        source = normalizeCollectionRef(cfg.sourceCollection || cfg.collection || cfg.source || cfg.collectionUrl);
+        cfg.sources = source ? [source] : [];
+      }
+    }
+
+    if (!cfg.classes && cfg.className) cfg.classes = cfg.className;
+    if (cfg.classes && typeof cfg.classes === 'object') cfg.classes = cfg.classes.block || cfg.classes.root || '';
+
+    return cfg;
+  }
+
   async function runConfig(cfg) {
+  cfg = normalizeConfig(cfg);
   if (!cfg || cfg.enabled === false) return;
 
   var target = document.querySelector(cfg.target || '');
@@ -2620,6 +2652,7 @@ if (canFetchMorePages()) {
   }
 
 function scheduleConfig(cfg) {
+  cfg = normalizeConfig(cfg);
   if (!cfg || cfg.enabled === false) return;
 
   var target = document.querySelector(cfg.target || '');
@@ -2668,6 +2701,7 @@ function scheduleConfig(cfg) {
   if (!configs.length) return;
 
   configs = configs
+    .map(normalizeConfig)
     .filter(function(cfg) {
       if (!cfg || cfg.enabled === false) return false;
       if (!cfg.target) return false;
