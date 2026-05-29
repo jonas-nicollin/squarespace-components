@@ -738,7 +738,7 @@ var isPriority = priority === true || imgIndex < 3;
 
     if (link) {
       card.href = item.fullUrl;
-      var openInNewTab = disp.openInNewTab === true || disp.cardLinkNewTab === true || cfg.openInNewTab === true;
+      var openInNewTab = disp.openInNewTab === true || cfg.openInNewTab === true;
       if (openInNewTab) {
         card.target = '_blank';
         card.rel = 'noopener noreferrer';
@@ -1533,7 +1533,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 12. FILTRES UI
    * ════════════════════════════════════ */
 
-  function buildFilterBar(baseItems, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock) {
+  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock) {
     if (cfg.filters === false) return null;
 
     var fc = cfg.filters || {};
@@ -1574,6 +1574,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var toggleBtn = null;
     var panelClearBtn = null;
     var clearAllBtn = null;
+
+    function getBaseItems() {
+      return typeof baseItemsOrGetter === 'function'
+        ? (baseItemsOrGetter() || [])
+        : (baseItemsOrGetter || []);
+    }
 
     function emit() {
       var t = {};
@@ -1648,7 +1654,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       if (!toggleBtn) return;
 
       var n = countActive();
-      var badge = toggleBtn.querySelector('.qb-mobile-toggle-badge');
+      var badge = toggleBtn.querySelector('.qb-mobile-toggle__badge, .cb-mobile-toggle__badge');
 
       if (n > 0) {
         if (!badge) {
@@ -1663,7 +1669,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function tabPool() {
-      return state.tab ? applyTabFilter(baseItems, state.tab) : baseItems;
+      var items = getBaseItems();
+      return state.tab ? applyTabFilter(items, state.tab) : items;
     }
 
     function resetSec() {
@@ -2043,6 +2050,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       }
     }
 
+    wrapper.qbRebuildSecondary = function() {
+      rebuildSecondary();
+      updateToggleBadge();
+      if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
+    };
+
     return wrapper;
   }
 
@@ -2060,28 +2073,29 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
   function normalizeConfig(raw) {
     var cfg = Object.assign({}, raw || {});
-    var source;
+    var refs = Array.isArray(cfg.sourceCollection)
+      ? cfg.sourceCollection
+      : (cfg.sourceCollection ? [cfg.sourceCollection] : []);
 
-    if (!cfg.target) {
-      cfg.target = cfg.rootSelector || cfg.targetSelector || (cfg.insertion && cfg.insertion.targetSelector) || '';
-    }
+    cfg.sources = refs.map(normalizeCollectionRef).filter(Boolean);
 
-    if (!Array.isArray(cfg.sources) || !cfg.sources.length) {
-      if (Array.isArray(cfg.collections)) {
-        cfg.sources = cfg.collections.map(normalizeCollectionRef).filter(Boolean);
-      } else {
-        source = normalizeCollectionRef(cfg.sourceCollection || cfg.collection || cfg.source || cfg.collectionUrl);
-        cfg.sources = source ? [source] : [];
-      }
-    }
-
-    if (!cfg.classes && cfg.className) cfg.classes = cfg.className;
-    if (cfg.classes && typeof cfg.classes === 'object') cfg.classes = cfg.classes.block || cfg.classes.root || '';
+    cfg.classes = (cfg.classes && typeof cfg.classes === 'object')
+      ? (cfg.classes.block || '')
+      : '';
 
     if (cfg.openInNewTab !== undefined) {
       cfg.display = Object.assign({}, cfg.display || {});
       if (cfg.display.openInNewTab === undefined) cfg.display.openInNewTab = cfg.openInNewTab;
     }
+
+    cfg.performance = Object.assign({
+      lazyInit: true,
+      maxPages: 1,
+      progressiveMaxPages: 'all',
+      sessionCache: true,
+      sessionCacheTTL: 300,
+      domBatchSize: 6,
+    }, cfg.performance || {});
 
     return cfg;
   }
@@ -2157,7 +2171,12 @@ requestAnimationFrame(function() {
     var isFetchingMore = false;
 
     function canFetchMorePages(reason) {
-      if (mode === 'none' && reason !== 'filter-empty' && reason !== 'idle') return false;
+      if (
+        mode === 'none' &&
+        reason !== 'filter-empty' &&
+        reason !== 'filter-options' &&
+        reason !== 'idle'
+      ) return false;
       if (allRemoteLoaded) return false;
       if (progressiveMaxPages === 'all') return true;
       return Number(loadedMaxPages || 1) < Number(progressiveMaxPages || 1);
@@ -2244,6 +2263,9 @@ requestAnimationFrame(function() {
 
       try {
         rawItems = await loadSources(loadedMaxPages);
+        if (filterWrapper && typeof filterWrapper.qbRebuildSecondary === 'function') {
+          filterWrapper.qbRebuildSecondary();
+        }
         return true;
       } catch (err) {
         if (cfg.debug) console.warn('[QueryBlock]', cfg.key, err);
@@ -2251,6 +2273,57 @@ requestAnimationFrame(function() {
         return false;
       } finally {
         isFetchingMore = false;
+      }
+    }
+
+    function getConfiguredFilterPrefixes() {
+      var seen = {};
+      var out = [];
+
+      function add(list) {
+        normalizePrefixes(list, (fc && fc.layout) || 'pills').forEach(function(pd) {
+          if (!pd.prefix) return;
+          var key = norm(pd.prefix);
+          if (seen[key]) return;
+          seen[key] = true;
+          out.push(pd.prefix);
+        });
+      }
+
+      if (fc && fc.tagPrefixes) add(fc.tagPrefixes);
+
+      if (fc && Array.isArray(fc.tabs)) {
+        fc.tabs.forEach(function(tab) {
+          if (tab && tab.tagPrefixes) add(tab.tagPrefixes);
+        });
+      }
+
+      return out;
+    }
+
+    function hasConfiguredFilterOptions(items, prefixes) {
+      if (!prefixes.length) return true;
+
+      return prefixes.every(function(prefix) {
+        return (items || []).some(function(item) {
+          return getTagValuesByPrefix(item, prefix).length > 0;
+        });
+      });
+    }
+
+    async function ensureConfiguredFilterOptions() {
+      var prefixes = getConfiguredFilterPrefixes();
+      var guard = 0;
+
+      while (
+        prefixes.length &&
+        !hasConfiguredFilterOptions(rawItems, prefixes) &&
+        canFetchMorePages('filter-options') &&
+        guard < 20
+      ) {
+        guard++;
+        var changed = await loadNextRemotePage('filter-options');
+        if (!changed) break;
       }
     }
 
@@ -2285,6 +2358,7 @@ requestAnimationFrame(function() {
 
     try {
       rawItems = await loadSources(loadedMaxPages);
+      await ensureConfiguredFilterOptions();
     } catch (err) {
       if (cfg.debug) console.warn('[QueryBlock]', cfg.key, err);
 
@@ -2402,7 +2476,7 @@ requestAnimationFrame(function() {
     }
 
     var filterWrapper = buildFilterBar(
-      rawItems,
+      function() { return rawItems; },
       cfg,
       function(f) {
         if (ioInfinite) {
@@ -2702,7 +2776,7 @@ function scheduleConfig(cfg) {
  function init() {
   var configs = Array.isArray(window.QUERY_BLOCK_CONFIGS)
     ? window.QUERY_BLOCK_CONFIGS
-    : (Array.isArray(window.SQB_CONFIGS) ? window.SQB_CONFIGS : []);
+    : [];
 
   if (!configs.length) return;
 
