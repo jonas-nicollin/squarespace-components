@@ -971,6 +971,4 @@
     buildCard: buildCard,
     appendProgressiveDOM: appendProgressiveDOM
   };
-
-  window.CollectionData = dataApi;
 })();
