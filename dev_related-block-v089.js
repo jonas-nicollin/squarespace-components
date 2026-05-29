@@ -218,6 +218,8 @@
     // UTILITAIRES TEXTE
     // ════════════════════════════════════════════════════════════════
     function normalize(str) {
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.norm === "function") return utils.norm(str);
         return String(str || "").replace(/\u00A0/g, " ").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\u2019']/g, "'").replace(/&/g, "and").replace(/\s+/g, " ").trim();
     }
     function uniq(arr) {
@@ -229,9 +231,13 @@
         return txt.value;
     }
     function cleanText(str) {
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.cleanHTML === "function") return utils.cleanHTML(str);
         return decodeHtmlEntities(str).replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ").replace(/\u00A0/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     }
     function truncateText(str, maxLength) {
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.truncate === "function") return utils.truncate(str, maxLength);
         const text = cleanText(str);
         if (!text || text.length <= maxLength) return text;
         const sliced = text.slice(0, maxLength);
@@ -261,6 +267,8 @@
         return idx === -1 ? raw.trim() : raw.slice(idx + 1).trim();
     }
     function slugifyToken(str) {
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.slugify === "function") return utils.slugify(str);
         return String(str || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     }
     function buildTagObjects(tags) {
@@ -852,6 +860,24 @@
         const joinWith = fieldConfig.joinWith || ", ";
         const displayFormat = overrideDisplayFormat ?? fieldConfig.displayFormat ?? null;
         const locale = fieldConfig.locale || null;
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.buildTagField === "function") {
+            return utils.buildTagField(item, {
+                prefix: fieldConfig.prefix,
+                values,
+                label,
+                joinWith,
+                displayFormat,
+                locale,
+                className: fieldConfig.className,
+                icon: fieldConfig.icon,
+                iconType: fieldConfig.iconType,
+                iconClassName: "cb-card__tag-icon rb-card__tag-icon",
+                textOnlyWhenNoIcon: true
+            }, {
+                prefix: "rb-card"
+            });
+        }
         const formattedValues = values.map(v => displayFormat !== null ? formatISOTag(v, displayFormat, locale) : v).filter(Boolean);
         const text = formattedValues.join(joinWith);
         const fullText = label ? label + " " + text : text;
@@ -879,6 +905,13 @@
     function buildMetaElement(item) {
         const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
         if (!cats.length) return null;
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.buildCategories === "function") {
+            return utils.buildCategories(item, {
+                prefix: "rb-card",
+                className: "cb-card__meta rb-card__meta cb-card__categories rb-card__categories"
+            });
+        }
         const meta = document.createElement("div");
         meta.className = "cb-card__meta rb-card__meta cb-card__categories rb-card__categories";
         cats.forEach(cat => {
@@ -890,6 +923,15 @@
         return meta;
     }
     function buildTitleElement(item) {
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.buildTextElement === "function") {
+            return utils.buildTextElement(item.title || "", {
+                prefix: "rb-card",
+                role: "title",
+                tag: "div",
+                allowEmpty: true
+            });
+        }
         const el = document.createElement("div");
         el.className = "cb-card__title rb-card__title";
         el.textContent = cleanText(item.title || "");
@@ -897,6 +939,14 @@
     }
     function buildExcerptElement(item) {
         if (!item.excerpt) return null;
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.buildTextElement === "function") {
+            return utils.buildTextElement(item.excerpt, {
+                prefix: "rb-card",
+                role: "excerpt",
+                tag: "div"
+            });
+        }
         const el = document.createElement("div");
         el.className = "cb-card__excerpt rb-card__excerpt";
         el.textContent = cleanText(item.excerpt);
@@ -904,6 +954,14 @@
     }
     function buildLocationElement(item) {
         if (!item.locationText) return null;
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.buildTextElement === "function") {
+            return utils.buildTextElement(item.locationText, {
+                prefix: "rb-card",
+                role: "location",
+                tag: "div"
+            });
+        }
         const el = document.createElement("div");
         el.className = "cb-card__location rb-card__location";
         el.textContent = cleanText(item.locationText);
@@ -928,6 +986,14 @@
         img.className = "cb-card__img rb-card__img";
         const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths) ? CFG.display.srcsetWidths : [ 300, 500, 750, 1e3, 1500 ];
         const cleanWidths = srcsetWidths.filter(w => Number(w) <= 1500);
+        if (utils && typeof utils.buildImg === "function") {
+            return utils.buildImg(base, item.mediaFocalPoint, cleanText(item.title || ""), {
+                wrapperClass: "cb-card__media rb-card__media cb-card__img-wrap rb-card__img-wrap",
+                imageClass: "cb-card__img rb-card__img",
+                widths: cleanWidths,
+                sizes: CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES
+            });
+        }
         const fallbackSrc = `${base}?format=750w`;
         img.src = fallbackSrc;
         img.srcset = utils && typeof utils.buildSrcset === "function" ? utils.buildSrcset(base, cleanWidths) : cleanWidths.map(w => `${base}?format=${w}w ${w}w`).join(", ");
