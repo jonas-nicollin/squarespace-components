@@ -737,6 +737,55 @@
     }).join(', ');
   }
 
+  function escapeHTML(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function classNames() {
+    var out = [];
+
+    Array.prototype.forEach.call(arguments, function(value) {
+      if (!value) return;
+      if (Array.isArray(value)) {
+        value.forEach(function(item) {
+          if (item) out.push(item);
+        });
+      } else {
+        String(value).split(/\s+/).forEach(function(cls) {
+          if (cls && out.indexOf(cls) === -1) out.push(cls);
+        });
+      }
+    });
+
+    return out.join(' ');
+  }
+
+  function cardClass(role, prefix, extra) {
+    var specific = prefix || 'cb-card';
+    var common = role ? 'cb-card__' + role : 'cb-card';
+    var moduleClass = specific && specific !== 'cb-card'
+      ? (role ? specific + '__' + role : specific)
+      : '';
+
+    return classNames(common, moduleClass, extra);
+  }
+
+  function tagFieldModifier(name, prefix) {
+    var slug = slugify(String(name || '').replace(/:$/, ''));
+    if (!slug) return '';
+
+    var specific = prefix || '';
+    return classNames(
+      'cb-card__tag-field--' + slug,
+      specific && specific !== 'cb-card' ? specific + '__tag-field--' + slug : ''
+    );
+  }
+
   function createEl(tag, attrs) {
     var node = document.createElement(tag);
 
@@ -746,12 +795,142 @@
         if (value == null) return;
         if (key === 'class') node.className = value;
         else if (key === 'style') node.style.cssText = value;
-        else if (key.indexOf('data-') === 0 || key === 'aria-hidden' || key === 'aria-label') node.setAttribute(key, value);
+        else if (key.indexOf('data-') === 0 || key.indexOf('aria-') === 0 || key === 'role') node.setAttribute(key, value);
         else node[key] = value;
       });
     }
 
     return node;
+  }
+
+  function buildTextElement(text, options) {
+    options = options || {};
+
+    var value = options.clean === false ? String(text || '') : cleanHTML(text);
+    if (!value && options.allowEmpty !== true) return null;
+
+    var el = createEl(options.tag || 'div', {
+      class: classNames(cardClass(options.role || 'title', options.prefix), options.className)
+    });
+
+    if (options.attrs) {
+      Object.keys(options.attrs).forEach(function(key) {
+        if (options.attrs[key] != null) el.setAttribute(key, options.attrs[key]);
+      });
+    }
+
+    el.textContent = value;
+    return el;
+  }
+
+  function buildCategories(item, options) {
+    options = options || {};
+
+    var cats = Array.isArray(item) ? item : ((item && item.categories) || []);
+    cats = cats.map(cleanHTML).filter(Boolean);
+    if (!cats.length) return null;
+
+    var prefix = options.prefix || 'cb-card';
+    var wrap = createEl(options.tag || 'div', {
+      class: classNames(cardClass('categories', prefix), options.className)
+    });
+
+    cats.forEach(function(cat) {
+      var catEl = createEl(options.itemTag || 'span', {
+        class: classNames(cardClass('category', prefix), options.itemClassName)
+      });
+      catEl.textContent = cat;
+      wrap.appendChild(catEl);
+    });
+
+    return wrap;
+  }
+
+  function buildTagField(item, descriptor, options) {
+    descriptor = descriptor || {};
+    options = options || {};
+
+    var prefix = options.prefix || descriptor.cardPrefix || 'cb-card';
+    var rawValues = Array.isArray(descriptor.values)
+      ? descriptor.values
+      : getTagValuesByPrefix(item, descriptor.prefix);
+
+    if (descriptor.maxItems) rawValues = rawValues.slice(0, Number(descriptor.maxItems));
+
+    var displayFormat = descriptor.displayFormat;
+    var values = rawValues.map(function(value) {
+      return displayFormat != null
+        ? formatISOTag(value, displayFormat, descriptor.locale)
+        : cleanHTML(value);
+    }).filter(Boolean);
+
+    if (!values.length) return null;
+
+    var prefixName = String(descriptor.prefix || descriptor.name || '').replace(/:$/, '');
+    var modifiers = descriptor.modifier === false ? '' : tagFieldModifier(prefixName, prefix);
+    var row = createEl(descriptor.tag || 'div', {
+      class: classNames(
+        cardClass('tag-field', prefix),
+        descriptor.className,
+        modifiers
+      )
+    });
+
+    if (descriptor.dataPrefix !== false && descriptor.prefix) {
+      row.setAttribute('data-prefix', descriptor.prefix);
+    }
+
+    var joinWith = descriptor.joinWith != null ? descriptor.joinWith : ', ';
+    var label = cleanHTML(descriptor.label || '');
+    var text = values.join(joinWith);
+    var fullText = label && descriptor.separateLabel !== true
+      ? label + (descriptor.labelSeparator || ' ') + text
+      : text;
+    var icon = String(descriptor.icon || descriptor.labelIcon || '').trim();
+
+    if (icon) {
+      var iconEl = createEl('span', {
+        class: descriptor.iconClassName || cardClass('tag-icon', prefix),
+        'aria-hidden': 'true'
+      });
+
+      if (String(descriptor.iconType || 'text').toLowerCase() === 'html') iconEl.innerHTML = icon;
+      else iconEl.textContent = icon;
+
+      row.appendChild(iconEl);
+    }
+
+    if (label && descriptor.separateLabel === true) {
+      var labelEl = createEl('span', {
+        class: classNames(cardClass('tag-label', prefix), descriptor.labelClassName)
+      });
+      labelEl.textContent = label + (descriptor.labelSuffix || '');
+      row.appendChild(labelEl);
+    }
+
+    if (!icon && descriptor.textOnlyWhenNoIcon === true && descriptor.separateLabel !== true) {
+      row.textContent = fullText;
+      return row;
+    }
+
+    var valueClass = classNames(
+      cardClass('tag-value', prefix),
+      joinWith === '\n' ? cardClass('tag-value--multiline', prefix) : '',
+      descriptor.valueClassName
+    );
+    var valueEl = createEl('span', { class: valueClass });
+
+    if (joinWith === '\n') {
+      values.forEach(function(value, index) {
+        if (index > 0) valueEl.appendChild(document.createElement('br'));
+        valueEl.appendChild(document.createTextNode(value));
+      });
+    } else {
+      valueEl.textContent = fullText;
+    }
+
+    row.appendChild(valueEl);
+    return row;
   }
 
   function buildImg(assetUrl, focal, alt, options) {
@@ -781,6 +960,44 @@
     img.style.objectPosition = focalPoint(focal);
     wrap.appendChild(img);
     return wrap;
+  }
+
+  function buildImgHTML(assetUrl, focal, alt, options) {
+    options = options || {};
+
+    var base = String(assetUrl || '').split('?')[0];
+    if (!base) return '';
+
+    var imageClass = options.imageClass || options.className || 'cb-card__img';
+    var sizes = options.sizes || '(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw';
+    var fallbackWidth = Number(options.fallbackWidth || 750);
+    var priority = options.priority === true;
+    var fallback = base + '?format=' + fallbackWidth + 'w';
+
+    return '<img class="' + escapeHTML(imageClass) + '"' +
+      ' src="' + escapeHTML(fallback) + '"' +
+      ' srcset="' + escapeHTML(buildSrcset(base, options.widths)) + '"' +
+      ' sizes="' + escapeHTML(sizes) + '"' +
+      ' alt="' + escapeHTML(alt || '') + '"' +
+      ' loading="' + (priority ? 'eager' : 'lazy') + '"' +
+      ' fetchpriority="' + (priority ? 'high' : 'low') + '"' +
+      ' decoding="async"' +
+      ' style="object-position:' + escapeHTML(focalPoint(focal)) + '">';
+  }
+
+  function buildCategoriesHTML(values, options) {
+    options = options || {};
+
+    var cats = (Array.isArray(values) ? values : []).map(cleanHTML).filter(Boolean);
+    if (!cats.length) return '';
+
+    var prefix = options.prefix || 'cb-card';
+    var wrapClass = classNames(cardClass('categories', prefix), options.className);
+    var itemClass = classNames(cardClass('category', prefix), options.itemClassName);
+
+    return '<div class="' + escapeHTML(wrapClass) + '">' + cats.map(function(cat) {
+      return '<span class="' + escapeHTML(itemClass) + '">' + escapeHTML(cat) + '</span>';
+    }).join('') + '</div>';
   }
 
   function appendProgressiveDOM(items, container, renderItem, options) {
@@ -823,8 +1040,8 @@
 
     if (type === 'image') {
       return buildImg(getImageBase(item), item.mediaFocalPoint, item.title, {
-        wrapperClass: prefix + '__img-wrap',
-        imageClass: prefix + '__img',
+        wrapperClass: cardClass('img-wrap', prefix, descriptor.className),
+        imageClass: cardClass('img', prefix, descriptor.imageClassName),
         sizes: descriptor.sizes || options.imageSizes,
         priority: descriptor.priority || options.priorityImage === true
       });
@@ -833,59 +1050,47 @@
     if (type === 'title') {
       var title = item && item.title;
       if (!title) return null;
-      var titleEl = createEl(descriptor.tag || 'h3', { class: prefix + '__title' });
-      titleEl.textContent = cleanHTML(title);
-      return titleEl;
+      return buildTextElement(title, {
+        prefix: prefix,
+        role: 'title',
+        tag: descriptor.tag || 'h3',
+        className: descriptor.className,
+        attrs: descriptor.attrs
+      });
     }
 
     if (type === 'excerpt') {
       var excerpt = item && item.excerpt;
       if (!excerpt) return null;
-      var excerptEl = createEl('p', { class: prefix + '__excerpt' });
-      excerptEl.textContent = descriptor.max ? truncate(excerpt, descriptor.max) : cleanHTML(excerpt);
-      return excerptEl;
+      return buildTextElement(descriptor.max ? truncate(excerpt, descriptor.max) : excerpt, {
+        prefix: prefix,
+        role: 'excerpt',
+        tag: descriptor.tag || 'p',
+        className: descriptor.className
+      });
     }
 
     if (type === 'location') {
       var loc = item && item.location;
       if (!loc) return null;
-      var locEl = createEl('p', { class: prefix + '__location' });
-      locEl.textContent = cleanHTML(loc);
-      return locEl;
+      return buildTextElement(loc, {
+        prefix: prefix,
+        role: 'location',
+        tag: descriptor.tag || 'p',
+        className: descriptor.className
+      });
     }
 
     if (type === 'categories') {
-      var cats = (item && item.categories) || [];
-      if (!cats.length) return null;
-      var catsEl = createEl('div', { class: prefix + '__categories' });
-      cats.forEach(function(cat) {
-        var catEl = createEl('span', { class: prefix + '__category' });
-        catEl.textContent = cat;
-        catsEl.appendChild(catEl);
+      return buildCategories(item, {
+        prefix: prefix,
+        className: descriptor.className,
+        itemClassName: descriptor.itemClassName
       });
-      return catsEl;
     }
 
     if (type === 'tagPrefix') {
-      var values = getTagValuesByPrefix(item, descriptor.prefix);
-      if (!values.length) return null;
-
-      var tagEl = createEl('div', { class: prefix + '__tag-field' });
-
-      if (descriptor.label) {
-        var labelEl = createEl('span', { class: prefix + '__tag-label' });
-        labelEl.textContent = descriptor.label;
-        tagEl.appendChild(labelEl);
-      }
-
-      var valueEl = createEl('span', { class: prefix + '__tag-value' });
-      valueEl.textContent = values.map(function(value) {
-        return descriptor.displayFormat
-          ? formatISOTag(value, descriptor.displayFormat, descriptor.locale)
-          : value;
-      }).filter(Boolean).join(descriptor.joinWith || ', ');
-      tagEl.appendChild(valueEl);
-      return tagEl;
+      return buildTagField(item, descriptor, { prefix: prefix });
     }
 
     return null;
@@ -897,7 +1102,7 @@
     var prefix = options.prefix || 'cb-card';
     var href = item && (item.fullUrl || item.url);
     var tag = href && options.link !== false ? 'a' : 'article';
-    var card = createEl(tag, { class: prefix + ' cb-card' });
+    var card = createEl(tag, { class: cardClass(null, prefix, options.className) });
 
     if (href && options.link !== false) {
       card.href = href;
@@ -944,8 +1149,17 @@
     focalPoint: focalPoint,
     getImageBase: getImageBase,
     buildSrcset: buildSrcset,
+    escapeHTML: escapeHTML,
+    classNames: classNames,
+    cardClass: cardClass,
+    tagFieldModifier: tagFieldModifier,
     createEl: createEl,
+    buildTextElement: buildTextElement,
+    buildCategories: buildCategories,
+    buildTagField: buildTagField,
     buildImg: buildImg,
+    buildImgHTML: buildImgHTML,
+    buildCategoriesHTML: buildCategoriesHTML,
     buildChild: buildChild,
     buildCard: buildCard,
     appendProgressiveDOM: appendProgressiveDOM
@@ -967,8 +1181,17 @@
     formatISOTag: formatISOTag,
     getTagValuesByPrefix: getTagValuesByPrefix,
     buildSrcset: buildSrcset,
+    escapeHTML: escapeHTML,
+    classNames: classNames,
+    cardClass: cardClass,
+    tagFieldModifier: tagFieldModifier,
     createEl: createEl,
+    buildTextElement: buildTextElement,
+    buildCategories: buildCategories,
+    buildTagField: buildTagField,
     buildImg: buildImg,
+    buildImgHTML: buildImgHTML,
+    buildCategoriesHTML: buildCategoriesHTML,
     buildChild: buildChild,
     buildCard: buildCard,
     appendProgressiveDOM: appendProgressiveDOM
