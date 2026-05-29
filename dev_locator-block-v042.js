@@ -74,6 +74,9 @@ cfg.performance=Object.assign({
   maxPages:1,
   progressiveMaxPages:'all',
   domBatchSize:8,
+  sessionCache:undefined,
+  sessionCacheTTL:null,
+  idleComplete:false,
 },cfg.performance||{});
 
 /* display — même modèle que Related Block / Query Block.
@@ -220,11 +223,14 @@ function imgTag(base,alt,cls,sizes,fp,priority){
 function getCoords(loc){loc=loc||{};return{lat:parseFloat(loc.mapLat||loc.markerLat||''),lng:parseFloat(loc.mapLng||loc.markerLng||'')};}
 
 function getCollectionOptions(maxPages){
+  var sessionCache = cfg.performance.sessionCache;
+  if(sessionCache === undefined) sessionCache = !cfg.noCache;
+
   return {
     maxPages: maxPages,
-    ttl: Math.round((cfg.cacheTTL || 600000) / 1000),
+    ttl: Number(cfg.performance.sessionCacheTTL || Math.round((cfg.cacheTTL || 600000) / 1000)),
     memoryCache: true,
-    sessionCache: !cfg.noCache,
+    sessionCache: sessionCache === true,
     credentials: 'same-origin',
     keepFields: cfg.performance.keepFields || [
       'id',
@@ -649,6 +655,24 @@ function createInstance(root,allItems,fetchMoreItems){
 });}}
   }
   function applyFilter(zone){closePopup();activeZone=zone||'';currentItems=activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;visibleCount=cfg.display.pageSize>0?cfg.display.pageSize:currentItems.length;renderList(currentItems,visibleCount);allItems.forEach(function(i){if(!markers[i.id])return;markers[i.id].marker.setVisible(currentItems.some(function(ci){return ci.id===i.id;}));});if(currentItems.length&&activeZone){var b=new google.maps.LatLngBounds();currentItems.forEach(function(i){b.extend({lat:i.lat,lng:i.lng});});map.fitBounds(b,{padding:60});}}
+  function syncVisibleMarkers(){
+    var visibleIds={};
+    currentItems.forEach(function(i){visibleIds[i.id]=true;});
+    Object.keys(markers).forEach(function(id){
+      markers[id].marker.setVisible(!!visibleIds[id]);
+    });
+  }
+  function setItems(nextItems){
+    if(!Array.isArray(nextItems)||!nextItems.length)return;
+    allItems=nextItems;
+    addMissingMarkers(allItems);
+    currentItems=activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
+    visibleCount=cfg.display.pageSize>0?Math.min(Math.max(visibleCount,cfg.display.pageSize),currentItems.length):currentItems.length;
+    var counter=root.querySelector('.lb-counter');
+    if(counter)counter.textContent=getI18n(cfg).itemCount(currentItems.length);
+    syncVisibleMarkers();
+    renderList(currentItems,visibleCount);
+  }
 
   var zones=[];allItems.forEach(function(i){i.zones.forEach(function(z){if(zones.indexOf(z)===-1)zones.push(z);});});zones.sort();
   /* En mode grid, la structure HTML est identique au mode list.
@@ -674,6 +698,7 @@ function createInstance(root,allItems,fetchMoreItems){
     });
   });
   log('Instance:',allItems.length,'marqueurs');
+  return {setItems:setItems};
 }
 
 /* ── Init ── */
@@ -690,10 +715,11 @@ async function init(){
     var loadedMaxPages = initialMaxPages;
     var progressiveMaxPages = cfg.performance.progressiveMaxPages || 'all';
     var sourceComplete = !!(itemState.complete || itemState.fetchError);
+    var isFetchingMore = false;
     if(!items.length){roots.forEach(function(r){removeClasses(r, CLS_BLOCK_LOADING);addClasses(r, CLS_BLOCK_READY);r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">'+getI18n(cfg).noResults+'</p>';});return;}
 
 async function fetchMoreItems(){
-  if(sourceComplete){
+  if(sourceComplete || isFetchingMore){
     return {items:items, changed:false, complete:sourceComplete};
   }
 
@@ -702,23 +728,29 @@ async function fetchMoreItems(){
     return {items:items, changed:false, complete:sourceComplete};
   }
 
-  loadedMaxPages = progressiveMaxPages === 'all'
-    ? Number(loadedMaxPages || 1) + 1
-    : Math.min(Number(loadedMaxPages || 1) + 1, Number(progressiveMaxPages));
+  isFetchingMore = true;
 
-  var nextState = await fetchItemsState(loadedMaxPages);
-  var more = nextState.items || [];
-  var changed = more.length > items.length;
-  sourceComplete = !!(nextState.complete || nextState.fetchError);
+  try{
+    loadedMaxPages = progressiveMaxPages === 'all'
+      ? Number(loadedMaxPages || 1) + 1
+      : Math.min(Number(loadedMaxPages || 1) + 1, Number(progressiveMaxPages));
 
-  if(changed){
-    items = more;
+    var nextState = await fetchItemsState(loadedMaxPages);
+    var more = nextState.items || [];
+    var changed = more.length > items.length;
+    sourceComplete = !!(nextState.complete || nextState.fetchError);
+
+    if(changed){
+      items = more;
+    }
+
+    return {items:items, changed:changed, complete:sourceComplete};
+  }finally{
+    isFetchingMore = false;
   }
-
-  return {items:items, changed:changed, complete:sourceComplete};
 }
 
-roots.forEach(function(r){createInstance(r,items,fetchMoreItems);});
+var instances=roots.map(function(r){return createInstance(r,items,fetchMoreItems);});
 
 function completeInIdle(){
   if (typeof fetchMoreItems !== 'function') return;
@@ -729,8 +761,8 @@ function completeInIdle(){
     if (result.changed) {
       items = result.items || items;
 
-      roots.forEach(function(r){
-        createInstance(r,items,fetchMoreItems);
+      instances.forEach(function(instance){
+        if(instance&&typeof instance.setItems==='function')instance.setItems(items);
       });
     }
 
@@ -750,7 +782,7 @@ function scheduleIdleCompletion(){
   }
 }
 
-if (cfg.performance.idleComplete !== false) {
+if (cfg.performance.idleComplete === true || cfg.performance.idlePreload === true) {
   scheduleIdleCompletion();
 }
   }catch(err){console.error('Locator Block:',err);roots.forEach(function(r){removeClasses(r, CLS_BLOCK_LOADING);addClasses(r, CLS_BLOCK_READY);r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">Erreur: '+escHtml(err.message)+'</p>';});}
