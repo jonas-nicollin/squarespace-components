@@ -62,6 +62,17 @@ function normalizeConfig(raw){
   if(source&&source.path)cfg.collectionUrl=source.path;
   var rootSelector=cfg.target||cfg.targetSelector||cfg.mountSelector;
   if(!cfg.rootSelector&&rootSelector)cfg.rootSelector=rootSelector;
+  if(cfg.sort&&!cfg.sortBy)cfg.sortBy=typeof cfg.sort==='string'?cfg.sort:(cfg.sort.type||'');
+  if(cfg.pagination){
+    cfg.display=Object.assign({},cfg.display||{});
+    if(cfg.pagination.mode==='none'&&cfg.display.pageSize==null)cfg.display.pageSize=0;
+    if(cfg.pagination.perPage!=null&&cfg.display.pageSize==null)cfg.display.pageSize=Number(cfg.pagination.perPage)||0;
+  }
+  if(cfg.display){
+    if(cfg.openInNewTab===undefined&&cfg.display.openInNewTab!==undefined)cfg.openInNewTab=cfg.display.openInNewTab;
+    if(cfg.cardClickable===undefined&&cfg.display.cardClickable!==undefined)cfg.cardClickable=cfg.display.cardClickable;
+    if(cfg.showCardLink===undefined&&cfg.display.cardLink!==undefined)cfg.showCardLink=cfg.display.cardLink;
+  }
   if(!cfg.customClass&&cfg.className)cfg.customClass=cfg.className;
   if(!cfg.customClass&&typeof cfg.classes==='string')cfg.customClass=cfg.classes;
   if(!cfg.customClass&&cfg.classes&&typeof cfg.classes==='object')cfg.customClass=cfg.classes.block||cfg.classes.root||'';
