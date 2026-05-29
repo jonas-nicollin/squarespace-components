@@ -738,7 +738,8 @@ var isPriority = priority === true || imgIndex < 3;
 
     if (link) {
       card.href = item.fullUrl;
-      if (disp.cardLinkNewTab) {
+      var openInNewTab = disp.openInNewTab === true || disp.cardLinkNewTab === true || cfg.openInNewTab === true;
+      if (openInNewTab) {
         card.target = '_blank';
         card.rel = 'noopener noreferrer';
       }
@@ -2076,6 +2077,11 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     if (!cfg.classes && cfg.className) cfg.classes = cfg.className;
     if (cfg.classes && typeof cfg.classes === 'object') cfg.classes = cfg.classes.block || cfg.classes.root || '';
+
+    if (cfg.openInNewTab !== undefined) {
+      cfg.display = Object.assign({}, cfg.display || {});
+      if (cfg.display.openInNewTab === undefined) cfg.display.openInNewTab = cfg.openInNewTab;
+    }
 
     return cfg;
   }
