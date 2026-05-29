@@ -263,15 +263,26 @@
         txt.innerHTML = String(str || "");
         return txt.value;
     }
-    function cleanText(str) {
-        const utils = getCollectionUtils();
-        if (utils && typeof utils.cleanHTML === "function") return utils.cleanHTML(str);
-        return decodeHtmlEntities(str).replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ").replace(/\u00A0/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    function normalizeTextSpacing(text, preserveBreaks) {
+        text = String(text || "").replace(/\u00A0/g, " ").replace(/\r\n?/g, "\n");
+        if (preserveBreaks) {
+            return text.replace(/[ \t\f\v]+/g, " ").replace(/[ \t]*\n[ \t]*/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+        }
+        return text.replace(/\s+/g, " ").trim();
     }
-    function truncateText(str, maxLength) {
+    function cleanText(str, options = {}) {
         const utils = getCollectionUtils();
-        if (utils && typeof utils.truncate === "function") return utils.truncate(str, maxLength);
-        const text = cleanText(str);
+        if (utils && typeof utils.cleanHTML === "function") return utils.cleanHTML(str, options);
+        let html = decodeHtmlEntities(str);
+        if (options.preserveLineBreaks) {
+            html = html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h[1-6]|tr|section|article)>/gi, "\n");
+        }
+        return normalizeTextSpacing(html.replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ").replace(/<[^>]+>/g, " "), options.preserveLineBreaks);
+    }
+    function truncateText(str, maxLength, options = {}) {
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.truncate === "function") return utils.truncate(str, maxLength, options);
+        const text = cleanText(str, options);
         if (!text || text.length <= maxLength) return text;
         const sliced = text.slice(0, maxLength);
         const lastSpace = sliced.lastIndexOf(" ");
@@ -375,13 +386,13 @@
     }
     function getItemExcerpt(item, maxLength) {
         // maxLength: nombre > 0 pour tronquer, 0 ou false pour tout afficher
-        const excerptText = cleanText(item?.excerpt || "");
+        const excerptText = cleanText(item?.excerpt || "", { preserveLineBreaks: true });
         if (excerptText) {
-            return maxLength ? truncateText(excerptText, maxLength) : excerptText;
+            return maxLength ? truncateText(excerptText, maxLength, { preserveLineBreaks: true }) : excerptText;
         }
-        const bodyText = cleanText(item?.body || "");
+        const bodyText = cleanText(item?.body || "", { preserveLineBreaks: true });
         if (bodyText) {
-            return maxLength ? truncateText(bodyText, maxLength) : bodyText;
+            return maxLength ? truncateText(bodyText, maxLength, { preserveLineBreaks: true }) : bodyText;
         }
         return "";
     }
@@ -979,12 +990,13 @@
             return utils.buildTextElement(item.excerpt, {
                 prefix: "rb-card",
                 role: "excerpt",
-                tag: "div"
+                tag: "div",
+                preserveLineBreaks: true
             });
         }
         const el = document.createElement("div");
         el.className = "cb-card__excerpt rb-card__excerpt";
-        el.textContent = cleanText(item.excerpt);
+        el.textContent = cleanText(item.excerpt, { preserveLineBreaks: true });
         return el;
     }
     function buildLocationElement(item) {
