@@ -2118,8 +2118,8 @@ requestAnimationFrame(function() {
     var allRemoteLoaded = false;
     var isFetchingMore = false;
 
-    function canFetchMorePages() {
-      if (mode === 'none') return false;
+    function canFetchMorePages(reason) {
+      if (mode === 'none' && reason !== 'filter-empty' && reason !== 'idle') return false;
       if (allRemoteLoaded) return false;
       if (progressiveMaxPages === 'all') return true;
       return Number(loadedMaxPages || 1) < Number(progressiveMaxPages || 1);
@@ -2198,8 +2198,8 @@ requestAnimationFrame(function() {
       return merged;
     }
 
-    async function loadNextRemotePage() {
-      if (!canFetchMorePages() || isFetchingMore) return false;
+    async function loadNextRemotePage(reason) {
+      if (!canFetchMorePages(reason) || isFetchingMore) return false;
 
       isFetchingMore = true;
       loadedMaxPages = nextMaxPagesValue();
@@ -2216,6 +2216,35 @@ requestAnimationFrame(function() {
       }
     }
 
+    function scheduleIdlePreload() {
+      var utils = getCollectionUtils();
+      if (!utils || typeof utils.idlePreload !== 'function') return;
+      if (perf.idlePreload !== true && perf.idleComplete !== true) return;
+
+      var maxPages = perf.idlePreloadMaxPages || progressiveMaxPages || 'all';
+      if (maxPages !== 'all' && Number(maxPages || 1) <= Number(loadedMaxPages || 1)) return;
+
+      utils.idlePreload(sourceList.map(function(src) {
+        var stripFields = src.stripFields;
+        if (stripFields === undefined) stripFields = perf.stripFields;
+        if (stripFields === undefined) stripFields = ['body'];
+
+        return {
+          path: src.path,
+          maxPages: maxPages,
+          options: {
+            ttl: perf.sessionCacheTTL || 300,
+            memoryCache: true,
+            sessionCache: perf.sessionCache === true,
+            credentials: 'same-origin',
+            stripFields: stripFields,
+          },
+        };
+      }), {
+        timeout: perf.idlePreloadTimeout || 2500,
+      });
+    }
+
     try {
       rawItems = await loadSources(loadedMaxPages);
     } catch (err) {
@@ -2229,6 +2258,8 @@ requestAnimationFrame(function() {
     }
 
     if (cfg.debug) console.log('[QueryBlock]', cfg.key, rawItems.length, 'items');
+
+    scheduleIdlePreload();
 
     var loaderEl = target.querySelector('.qb-loader, .qb-loader--text');
 
@@ -2445,13 +2476,13 @@ requestAnimationFrame(function() {
       footer.innerHTML = '';
 
       if (!shown.length) {
-        if (canFetchMorePages() && !isFetchingMore) {
+        if (canFetchMorePages('filter-empty') && !isFetchingMore) {
           grid.innerHTML = '';
           grid.appendChild(buildLoader(false));
 
           if (disp.counter !== false) counter.textContent = '';
 
-          loadNextRemotePage().then(function() {
+          loadNextRemotePage('filter-empty').then(function() {
             render(false, false);
           });
 
