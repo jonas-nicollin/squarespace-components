@@ -499,10 +499,22 @@ function buildControls(zones,total){
    function renderCardsProgressive(list, items, count, done){
   var n = cfg.display.pageSize > 0 ? Math.min(count, items.length) : items.length;
   var batchSize = Math.max(1, Number(cfg.performance.domBatchSize || 8));
+  var utils = getCollectionUtils();
   var index = 0;
 
   list.innerHTML = '';
   LOCATOR_RENDER_IMAGE_INDEX = 0;
+
+  if(utils&&typeof utils.appendProgressiveDOM==='function'){
+    return utils.appendProgressiveDOM(items.slice(0,n),list,function(item){
+      var wrap=document.createElement('div');
+      wrap.innerHTML=buildCardHTML(item);
+      return wrap.firstElementChild;
+    },{
+      batchSize:batchSize,
+      done:function(){if(typeof done==='function')done(n);}
+    });
+  }
 
   function appendBatch(){
     var html = '';
