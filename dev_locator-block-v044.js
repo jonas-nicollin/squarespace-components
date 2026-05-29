@@ -60,7 +60,8 @@ function normalizeConfig(raw){
   var cfg=Object.assign({},raw||{});
   var source=normalizeCollectionRef(cfg.sourceCollection||cfg.collection||cfg.source||cfg.collectionUrl);
   if(source&&source.path)cfg.collectionUrl=source.path;
-  if(!cfg.rootSelector)cfg.rootSelector=cfg.target||cfg.targetSelector||cfg.mountSelector||'';
+  var rootSelector=cfg.target||cfg.targetSelector||cfg.mountSelector;
+  if(!cfg.rootSelector&&rootSelector)cfg.rootSelector=rootSelector;
   if(!cfg.customClass&&cfg.className)cfg.customClass=cfg.className;
   if(!cfg.customClass&&typeof cfg.classes==='string')cfg.customClass=cfg.classes;
   if(!cfg.customClass&&cfg.classes&&typeof cfg.classes==='object')cfg.customClass=cfg.classes.block||cfg.classes.root||'';
