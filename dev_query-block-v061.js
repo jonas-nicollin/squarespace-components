@@ -500,12 +500,16 @@ var QB_RENDER_IMAGE_INDEX = 0;
   function buildImg(assetUrl, focalPoint, alt, priority) {
   var imgIndex = QB_RENDER_IMAGE_INDEX++;
 var isPriority = priority === true || imgIndex < 3;
+  var utils = getCollectionUtils();
+  var base = String(assetUrl || '').split('?')[0];
 
-  var srcset = SRCSET_WIDTHS.map(function(w) {
-    return assetUrl + '?format=' + w + 'w ' + w + 'w';
-  }).join(', ');
+  var srcset = (utils && typeof utils.buildSrcset === 'function')
+    ? utils.buildSrcset(base, SRCSET_WIDTHS)
+    : SRCSET_WIDTHS.map(function(w) {
+      return base + '?format=' + w + 'w ' + w + 'w';
+    }).join(', ');
 
-  var fallbackSrc = assetUrl + '?format=750w';
+  var fallbackSrc = base + '?format=750w';
 
   var wrap = el('div', { class: qCardClass('cb-card__img-wrap', 'qb-card__img-wrap') });
 
@@ -516,7 +520,9 @@ var isPriority = priority === true || imgIndex < 3;
     decoding: 'async',
   });
 
-  img.style.objectPosition = focalPoint;
+  img.style.objectPosition = (utils && typeof utils.focalPoint === 'function')
+    ? utils.focalPoint(focalPoint)
+    : focalPoint;
     
     if (isPriority) {
       img.loading = 'eager';
