@@ -418,11 +418,11 @@ function defineCustomPopup(){
   CustomPopup.prototype=Object.create(google.maps.OverlayView.prototype);
   CustomPopup.prototype.onAdd=function(){
     var d=cfg.display,item=this.item;
-    var im=(cfg.map.popupShowImage&&d.showImage&&item.imageBase)?'<div class="locator-block__popup-media">'+imgTag(item.imageBase,item.title,'locator-block__popup-image','240px',item.focalPos,false)+'</div>':'';
-    var b='';if(item.numero)b+='<div class="locator-block__popup-num">'+escHtml(item.numero)+'</div>';if(item.title)b+='<div class="locator-block__popup-title">'+escHtml(item.title)+'</div>';if(item.lieu)b+='<div class="locator-block__popup-lieu">'+escHtml(item.lieu)+'</div>';
-    this.container=document.createElement('div');this.container.className='locator-block__popup-wrap';
+    var im=(cfg.map.popupShowImage&&d.showImage&&item.imageBase)?'<div class="lb-popup-media locator-block__popup-media">'+imgTag(item.imageBase,item.title,'lb-popup-image locator-block__popup-image','240px',item.focalPos,false)+'</div>':'';
+    var b='';if(item.numero)b+='<div class="lb-popup-num locator-block__popup-num">'+escHtml(item.numero)+'</div>';if(item.title)b+='<div class="lb-popup-title locator-block__popup-title">'+escHtml(item.title)+'</div>';if(item.lieu)b+='<div class="lb-popup-lieu locator-block__popup-lieu">'+escHtml(item.lieu)+'</div>';
+    this.container=document.createElement('div');this.container.className='lb-popup-wrap locator-block__popup-wrap';
     var pt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
-    this.container.innerHTML='<a class="locator-block__popup" href="'+escHtml(item.url)+'"'+pt+'>'+im+(b?'<div class="locator-block__popup-body">'+b+'</div>':'')+'</a>';
+    this.container.innerHTML='<a class="lb-popup locator-block__popup" href="'+escHtml(item.url)+'"'+pt+'>'+im+(b?'<div class="lb-popup-body locator-block__popup-body">'+b+'</div>':'')+'</a>';
     this.getPanes().floatPane.appendChild(this.container);
   };
   CustomPopup.prototype.draw=function(){var proj=this.getProjection(),pos=proj.fromLatLngToDivPixel(this.position);if(!pos||!this.container)return;var w=this.container.offsetWidth||220;this.container.style.left=(pos.x-w/2)+'px';this.container.style.top=(pos.y-this.container.offsetHeight-56)+'px';};
