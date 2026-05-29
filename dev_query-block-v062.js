@@ -78,6 +78,9 @@
   }
 
   function el(tag, attrs) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.createEl === 'function') return utils.createEl(tag, attrs);
+
     var e = document.createElement(tag);
     if (attrs) Object.keys(attrs).forEach(function(k) {
       var v = attrs[k];
@@ -96,6 +99,9 @@
   }
 
   function qCardClass(shared, specific) {
+    var utils = getCollectionUtils();
+    if (utils && typeof utils.classNames === 'function') return utils.classNames(shared, specific);
+
     return [shared, specific].filter(Boolean).join(' ');
   }
 
@@ -589,6 +595,10 @@ var isPriority = priority === true || imgIndex < 3;
 
     if (type === 'categories') {
       if (!item.categories.length) return null;
+      var utilsCats = getCollectionUtils();
+      if (utilsCats && typeof utilsCats.buildCategories === 'function') {
+        return utilsCats.buildCategories(item, { prefix: 'qb-card' });
+      }
 
       var w = el('div', { class: qCardClass('cb-card__categories', 'qb-card__categories') });
       item.categories.forEach(function(c) {
@@ -602,6 +612,18 @@ var isPriority = priority === true || imgIndex < 3;
 
     if (type === 'title') {
       if (!item.title) return null;
+      var utilsTitle = getCollectionUtils();
+      if (utilsTitle && typeof utilsTitle.buildTextElement === 'function') {
+        return utilsTitle.buildTextElement(item.title, {
+          prefix: 'qb-card',
+          role: 'title',
+          tag: 'div',
+          attrs: {
+            role: 'heading',
+            'aria-level': '3',
+          },
+        });
+      }
 
       var t = el('div', {
         class: qCardClass('cb-card__title', 'qb-card__title'),
@@ -629,6 +651,14 @@ var isPriority = priority === true || imgIndex < 3;
 
     if (type === 'location') {
       if (!item.location) return null;
+      var utilsLoc = getCollectionUtils();
+      if (utilsLoc && typeof utilsLoc.buildTextElement === 'function') {
+        return utilsLoc.buildTextElement(item.location, {
+          prefix: 'qb-card',
+          role: 'location',
+          tag: 'p',
+        });
+      }
 
       var pl = el('p', { class: qCardClass('cb-card__location', 'qb-card__location') });
       pl.textContent = item.location;
@@ -654,6 +684,20 @@ var isPriority = priority === true || imgIndex < 3;
         : rawVals;
 
       if (!vals.length) return null;
+      var utilsTag = getCollectionUtils();
+      if (utilsTag && typeof utilsTag.buildTagField === 'function') {
+        return utilsTag.buildTagField(item, {
+          prefix: prefix,
+          values: vals,
+          label: labelIcon ? '' : label,
+          labelIcon: labelIcon,
+          iconClassName: 'cb-icon qb-icon cb-tag-icon qb-tag-icon',
+          joinWith: joinWith,
+          separateLabel: true,
+          labelSuffix: '\u00A0',
+          modifier: false,
+        }, { prefix: 'qb-card' });
+      }
 
       var row = el('div', {
         class: qCardClass('cb-card__tag-field', 'qb-card__tag-field'),
@@ -767,25 +811,12 @@ var isPriority = priority === true || imgIndex < 3;
     var body = el('div', { class: qCardClass('cb-card__body', 'qb-card__body') });
 
     if (item.categories.length) {
-      var meta = el('div', { class: qCardClass('cb-card__categories', 'qb-card__categories') });
-
-      item.categories.forEach(function(c) {
-        var s = el('span', { class: qCardClass('cb-card__category', 'qb-card__category') });
-        s.textContent = c;
-        meta.appendChild(s);
-      });
-
-      body.appendChild(meta);
+      var meta = buildChild('categories', item, index);
+      if (meta) body.appendChild(meta);
     }
 
     if (item.title) {
-      var tt = el('div', {
-        class: qCardClass('cb-card__title', 'qb-card__title'),
-        role: 'heading',
-        'aria-level': '3',
-      });
-
-      tt.textContent = item.title;
+      var tt = buildChild('title', item, index);
       body.appendChild(tt);
     }
 
@@ -808,8 +839,7 @@ var isPriority = priority === true || imgIndex < 3;
     }
 
     if (disp.location && item.location) {
-      var lp = el('p', { class: qCardClass('cb-card__location', 'qb-card__location') });
-      lp.textContent = item.location;
+      var lp = buildChild('location', item, index);
       body.appendChild(lp);
     }
 
