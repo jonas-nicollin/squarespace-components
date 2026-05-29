@@ -1,7 +1,7 @@
 (function() {
     "use strict";
     // ── Rétrocompatibilité ─────────────────────────────────────────────
-    const ALL_CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS) ? window.RELATED_BLOCK_CONFIGS : Array.isArray(window.COLLECTION_RELATED_BLOCK_CONFIGS) ? window.COLLECTION_RELATED_BLOCK_CONFIGS : [];
+    const ALL_CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS) ? window.RELATED_BLOCK_CONFIGS : [];
     if (!ALL_CONFIGS.length) return;
     // Extraire l'entrée _shared (doit être en première position)
     const SHARED_CONFIG = ALL_CONFIGS[0]?._shared === true ? ALL_CONFIGS[0] : null;
@@ -25,28 +25,15 @@
         const cfg = {
             ...(raw || {})
         };
-        const source = normalizeCollectionRef(cfg.sourceCollection || cfg.collection || cfg.source || cfg.collectionUrl);
+        const source = normalizeCollectionRef(cfg.sourceCollection);
         if (source) cfg.sourceCollection = source;
         if (cfg.currentItem) {
-            const currentSource = normalizeCollectionRef(cfg.currentItem.sourceCollection || cfg.currentItem.collection || cfg.currentItem.source || cfg.currentItem.collectionUrl);
+            const currentSource = normalizeCollectionRef(cfg.currentItem.sourceCollection);
             if (currentSource) cfg.currentItem = {
                 ...cfg.currentItem,
                 sourceCollection: currentSource
             };
         }
-        const targetSelector = cfg.target || cfg.targetSelector || cfg.rootSelector || cfg.mountSelector;
-        if (targetSelector) {
-            cfg.insertion = {
-                ...(cfg.insertion || {})
-            };
-            if (!cfg.insertion.targetSelector) cfg.insertion.targetSelector = targetSelector;
-        }
-        if (typeof cfg.classes === "string") cfg.classes = {
-            block: cfg.classes
-        };
-        if (!cfg.classes && cfg.className) cfg.classes = {
-            block: cfg.className
-        };
         if (cfg.openInNewTab !== undefined) {
             cfg.display = {
                 ...(cfg.display || {})
@@ -773,11 +760,9 @@
         // Options de cache depuis _shared si définies, sinon depuis le bloc
         const sharedCache = SHARED_CONFIG?.cache || {};
         const perf = CFG?.performance || {};
-        const sharedSession = sharedCache.sessionCache ?? sharedCache.useSessionCache;
-        const blockSession = perf.sessionCache ?? perf.useCollectionSessionCache;
         return {
-            useMemoryCache: sharedCache.memoryCache ?? sharedCache.useMemoryCache ?? perf.memoryCache ?? perf.useCollectionMemoryCache !== false,
-            useSessionCache: sharedSession ?? blockSession === true,
+            useMemoryCache: sharedCache.memoryCache ?? perf.memoryCache ?? true,
+            useSessionCache: sharedCache.sessionCache ?? perf.sessionCache ?? true,
             ttl: sharedCache.sessionCacheTTL ?? sharedCache.ttl ?? perf.sessionCacheTTL ?? perf.ttl ?? 900
         };
     }
@@ -1370,8 +1355,8 @@
                 matchBy: "pathname",
                 sourceCollection: null
             },
+            target: "",
             insertion: {
-                targetSelector: "",
                 mode: "append"
             },
             heading: "",
@@ -1445,11 +1430,10 @@
                 useSessionStorage: true,
                 maxPages: 1,
                 progressiveMaxPages: 'all',
-                useCollectionMemoryCache: true,
-                useCollectionSessionCache: false,
-                sessionCache: undefined,
-                sessionCacheTTL: 900,
-                domBatchSize: 8
+                memoryCache: true,
+                sessionCache: true,
+                sessionCacheTTL: 300,
+                domBatchSize: 6
             }
         }, CFG || {});
         if (CFG.enabled === false) return null;
@@ -1475,7 +1459,7 @@ function getNextPagesValue(currentPages, maxPages) {
   return Math.min(Number(currentPages || 1) + 1, Number(maxPages || 1));
 }
         async function apply() {
-            const target = getInsertTarget(CFG.insertion?.targetSelector);
+            const target = getInsertTarget(CFG.target);
             if (!target) return false;
             if (alreadyInjected(target, CFG.key)) {
                 syncBodyRelatedBlockClasses();
@@ -1634,7 +1618,7 @@ finalItems = applyFallbackFill(finalItems, items, currentItem, {
             const ok = await apply();
             if (ok) return;
             observer = new MutationObserver(async () => {
-                const target = getInsertTarget(CFG.insertion?.targetSelector);
+                const target = getInsertTarget(CFG.target);
                 if (!target) return;
                 if (alreadyInjected(target, CFG.key)) {
                     syncBodyRelatedBlockClasses();
@@ -1726,7 +1710,7 @@ finalItems = applyFallbackFill(finalItems, items, currentItem, {
         return true;
     }
     function startRunnerWhenNearTarget(runner, CFG) {
-        const target = getInsertTarget(CFG.insertion?.targetSelector);
+        const target = getInsertTarget(CFG.target);
         if (!target || !shouldLazyStartRelated()) {
             runner.start();
             return;
