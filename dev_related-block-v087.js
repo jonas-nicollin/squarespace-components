@@ -20,18 +20,17 @@
         const cb = getCollectionBlocks();
         return cb && (cb.utils || cb);
     }
-    function getCollectionDataAPI() {
+    function getCollectionBlocksDataAPI() {
         const cb = getCollectionBlocks();
         if (cb?.data && typeof cb.data.get === "function") return cb.data;
         if (cb && typeof cb.get === "function") return cb;
-        if (window.CollectionData && typeof window.CollectionData.get === "function") return window.CollectionData;
         return null;
     }
     // ── Constantes ────────────────────────────────────────────────────
     const DEFAULT_JSON_FORMAT_SUFFIX = "?format=json";
     const DEFAULT_SRCSET_WIDTHS = [ 100, 300, 500, 750, 1e3, 1500, 2500 ];
     const DEFAULT_IMAGE_SIZES = "(max-width: 768px) 100vw, 50vw";
-    const BODY_CLASS_PREFIX = "has-related-block--";
+    const BODY_CLASS_PREFIX = "has-rb-block--";
     // Déduplication des fetches en vol :
     // si deux blocs demandent la même collection simultanément,
     // le second attend la promesse du premier au lieu de relancer un fetch.
@@ -299,19 +298,19 @@
     // BODY CLASSES
     // ════════════════════════════════════════════════════════════════
     function getBodyRelatedBlockClassName(key) {
-        return BODY_CLASS_PREFIX + slugifyToken(key || "related-block");
+        return BODY_CLASS_PREFIX + slugifyToken(key || "rb-block");
     }
     function syncBodyRelatedBlockClasses() {
         if (!document.body) return;
         Array.from(document.body.classList).forEach(cls => {
             if (cls.indexOf(BODY_CLASS_PREFIX) === 0) document.body.classList.remove(cls);
         });
-        const blocks = Array.from(document.querySelectorAll(".related-block[data-related-key]"));
+        const blocks = Array.from(document.querySelectorAll(".rb-block[data-related-key]"));
         if (!blocks.length) {
-            document.body.classList.remove("has-related-blocks");
+            document.body.classList.remove("has-rb-blocks");
             return;
         }
-        document.body.classList.add("has-related-blocks");
+        document.body.classList.add("has-rb-blocks");
         blocks.forEach(block => {
             const key = String(block.dataset.relatedKey || "").trim();
             if (key) document.body.classList.add(getBodyRelatedBlockClassName(key));
@@ -757,7 +756,7 @@
     }
 
     async function fetchCollectionStateFromPath(path, maxPages, jsonFormatSuffix, cacheOptions, keepFields) {
-        const dataApi = getCollectionDataAPI();
+        const dataApi = getCollectionBlocksDataAPI();
 
         if (dataApi && typeof dataApi.get === 'function') {
             const options = buildCollectionRequestOptions(maxPages, cacheOptions, keepFields);
@@ -776,7 +775,7 @@
             };
         }
 
-        throw new Error('CollectionBlocks or CollectionData unavailable');
+        throw new Error('CollectionBlocks unavailable');
     }
 
     async function fetchCollectionItemsFromPath(path, maxPages, jsonFormatSuffix, cacheOptions, keepFields) {
@@ -845,7 +844,7 @@
         if (!values.length) return null;
         if (fieldConfig.maxItems) values = values.slice(0, Number(fieldConfig.maxItems));
         const el = document.createElement("div");
-        el.className = fieldConfig.className || "related-block__tag-prefix";
+        el.className = fieldConfig.className || "rb-card__tag-field";
         addClasses(el, "cb-card__tag-field rb-card__tag-field");
         const prefixSlug = slugifyToken(String(fieldConfig.prefix || "").replace(/:$/, ""));
         if (prefixSlug) addClasses(el, `cb-card__tag-field--${prefixSlug} rb-card__tag-field--${prefixSlug}`);
@@ -860,7 +859,7 @@
         const icon = String(fieldConfig.icon || "").trim();
         if (icon) {
             const iconEl = document.createElement("span");
-            iconEl.className = "cb-card__tag-icon rb-card__tag-icon related-block__tag-prefix-icon";
+            iconEl.className = "cb-card__tag-icon rb-card__tag-icon";
             iconEl.setAttribute("aria-hidden", "true");
             if (String(fieldConfig.iconType || "text").toLowerCase() === "html") {
                 iconEl.innerHTML = icon;
@@ -869,7 +868,7 @@
             }
             el.appendChild(iconEl);
             const textEl = document.createElement("span");
-            textEl.className = "cb-card__tag-value rb-card__tag-value related-block__tag-prefix-text";
+            textEl.className = "cb-card__tag-value rb-card__tag-value";
             textEl.textContent = fullText;
             el.appendChild(textEl);
         } else {
@@ -881,10 +880,10 @@
         const cats = Array.isArray(item.categories) ? item.categories.filter(Boolean) : [];
         if (!cats.length) return null;
         const meta = document.createElement("div");
-        meta.className = "cb-card__meta rb-card__meta cb-card__categories rb-card__categories related-block__meta";
+        meta.className = "cb-card__meta rb-card__meta cb-card__categories rb-card__categories";
         cats.forEach(cat => {
             const span = document.createElement("span");
-            span.className = "cb-card__category rb-card__category related-block__category";
+            span.className = "cb-card__category rb-card__category";
             span.textContent = cleanText(cat);
             meta.appendChild(span);
         });
@@ -892,21 +891,21 @@
     }
     function buildTitleElement(item) {
         const el = document.createElement("div");
-        el.className = "cb-card__title rb-card__title related-block__title";
+        el.className = "cb-card__title rb-card__title";
         el.textContent = cleanText(item.title || "");
         return el;
     }
     function buildExcerptElement(item) {
         if (!item.excerpt) return null;
         const el = document.createElement("div");
-        el.className = "cb-card__excerpt rb-card__excerpt related-block__excerpt";
+        el.className = "cb-card__excerpt rb-card__excerpt";
         el.textContent = cleanText(item.excerpt);
         return el;
     }
     function buildLocationElement(item) {
         if (!item.locationText) return null;
         const el = document.createElement("div");
-        el.className = "cb-card__location rb-card__location related-block__location";
+        el.className = "cb-card__location rb-card__location";
         el.textContent = cleanText(item.locationText);
         return el;
     }
@@ -921,9 +920,9 @@
     function buildImageElement(item, CFG) {
         if (!CFG.display?.showImage || !item.assetUrl) return null;
         const media = document.createElement("div");
-        media.className = "cb-card__media rb-card__media cb-card__img-wrap rb-card__img-wrap related-block__image";
+        media.className = "cb-card__media rb-card__media cb-card__img-wrap rb-card__img-wrap";
         const img = document.createElement("img");
-        img.className = "cb-card__img rb-card__img related-block__img";
+        img.className = "cb-card__img rb-card__img";
         const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths) ? CFG.display.srcsetWidths : [ 300, 500, 750, 1e3, 1500 ];
         const fallbackSrc = `${item.assetUrl}?format=750w`;
         img.src = fallbackSrc;
@@ -1001,11 +1000,11 @@
     // ════════════════════════════════════════════════════════════════
     function createLoader() {
         const loader = document.createElement("div");
-        loader.className = "cb-loader rb-loader related-block__loader";
+        loader.className = "cb-loader rb-loader";
         loader.setAttribute("aria-hidden", "true");
         for (let i = 0; i < 3; i++) {
             const dot = document.createElement("span");
-            dot.className = "cb-loader__dot rb-loader__dot related-block__loader-dot";
+            dot.className = "cb-loader__dot rb-loader__dot";
             loader.appendChild(dot);
         }
         return loader;
@@ -1016,20 +1015,20 @@
         const href = String(cta.href || "").trim();
         if (!text || !href) return null;
         const link = document.createElement("a");
-        link.className = "cb-heading__cta rb-heading__cta related-block__heading-cta";
+        link.className = "cb-heading__cta rb-heading__cta";
         link.href = href;
         if (cta.newTab) {
             link.target = "_blank";
             link.rel = "noopener noreferrer";
         }
         const textEl = document.createElement("span");
-        textEl.className = "cb-heading__cta-text rb-heading__cta-text related-block__heading-cta-text";
+        textEl.className = "cb-heading__cta-text rb-heading__cta-text";
         textEl.textContent = text;
         link.appendChild(textEl);
         const icon = String(cta.icon || "");
         if (icon) {
             const iconEl = document.createElement("span");
-            iconEl.className = "cb-heading__cta-icon rb-heading__cta-icon related-block__heading-cta-icon";
+            iconEl.className = "cb-heading__cta-icon rb-heading__cta-icon";
             if (String(cta.iconType || "text").toLowerCase() === "html") {
                 iconEl.innerHTML = icon;
             } else {
@@ -1044,10 +1043,10 @@
         const headingCta = buildHeadingCta(CFG);
         if (!headingText && !headingCta) return null;
         const heading = document.createElement("div");
-        heading.className = "cb-heading rb-heading related-block__heading";
+        heading.className = "cb-heading rb-heading";
         if (headingText) {
             const tag = document.createElement(CFG.headingTag || "h3");
-            tag.className = "cb-heading__text rb-heading__text related-block__heading-text";
+            tag.className = "cb-heading__text rb-heading__text";
             tag.textContent = headingText;
             heading.appendChild(tag);
         }
@@ -1055,19 +1054,19 @@
         return heading;
     }
     function applyStateClasses(section) {
-        const toRemove = [ "cb-block--has-heading", "rb-block--has-heading", "related-block--has-heading", "cb-block--has-image", "rb-block--has-image", "related-block--has-image", "cb-block--has-title", "rb-block--has-title", "related-block--has-title", "cb-block--has-meta", "rb-block--has-meta", "related-block--has-meta", "cb-block--has-excerpt", "rb-block--has-excerpt", "related-block--has-excerpt", "cb-block--has-location", "rb-block--has-location", "related-block--has-location", "cb-block--has-tag-prefix", "rb-block--has-tag-prefix", "related-block--has-tag-prefix", "cb-block--has-heading-cta", "rb-block--has-heading-cta", "related-block--has-heading-cta", "cb-block--single-item", "rb-block--single-item", "related-block--single-item", "cb-block--multiple-items", "rb-block--multiple-items", "related-block--multiple-items", "cb-block--empty", "rb-block--empty", "related-block--is-empty" ];
+        const toRemove = [ "cb-block--has-heading", "rb-block--has-heading", "cb-block--has-image", "rb-block--has-image", "cb-block--has-title", "rb-block--has-title", "cb-block--has-meta", "rb-block--has-meta", "cb-block--has-excerpt", "rb-block--has-excerpt", "cb-block--has-location", "rb-block--has-location", "cb-block--has-tag-prefix", "rb-block--has-tag-prefix", "cb-block--has-heading-cta", "rb-block--has-heading-cta", "cb-block--single-item", "rb-block--single-item", "cb-block--multiple-items", "rb-block--multiple-items", "cb-block--empty", "rb-block--empty" ];
         toRemove.forEach(cls => section.classList.remove(cls));
-        const checks = [ [ ".related-block__heading", "cb-block--has-heading rb-block--has-heading related-block--has-heading" ], [ ".related-block__heading-cta", "cb-block--has-heading-cta rb-block--has-heading-cta related-block--has-heading-cta" ], [ ".related-block__image", "cb-block--has-image rb-block--has-image related-block--has-image" ], [ ".related-block__title", "cb-block--has-title rb-block--has-title related-block--has-title" ], [ ".related-block__meta", "cb-block--has-meta rb-block--has-meta related-block--has-meta" ], [ ".related-block__excerpt", "cb-block--has-excerpt rb-block--has-excerpt related-block--has-excerpt" ], [ ".related-block__location", "cb-block--has-location rb-block--has-location related-block--has-location" ], [ ".related-block__tag-prefix", "cb-block--has-tag-prefix rb-block--has-tag-prefix related-block--has-tag-prefix" ], [ ".related-block__empty", "cb-block--empty rb-block--empty related-block--is-empty" ] ];
+        const checks = [ [ ".rb-heading", "cb-block--has-heading rb-block--has-heading" ], [ ".rb-heading__cta", "cb-block--has-heading-cta rb-block--has-heading-cta" ], [ ".rb-card__media", "cb-block--has-image rb-block--has-image" ], [ ".rb-card__title", "cb-block--has-title rb-block--has-title" ], [ ".rb-card__meta", "cb-block--has-meta rb-block--has-meta" ], [ ".rb-card__excerpt", "cb-block--has-excerpt rb-block--has-excerpt" ], [ ".rb-card__location", "cb-block--has-location rb-block--has-location" ], [ ".rb-card__tag-field", "cb-block--has-tag-prefix rb-block--has-tag-prefix" ], [ ".rb-empty", "cb-block--empty rb-block--empty" ] ];
         checks.forEach(([ sel, cls ]) => {
             if (section.querySelector(sel)) addClasses(section, cls);
         });
-        const items = section.querySelectorAll(".related-block__item");
-        if (items.length === 1) addClasses(section, "cb-block--single-item rb-block--single-item related-block--single-item");
-        if (items.length > 1) addClasses(section, "cb-block--multiple-items rb-block--multiple-items related-block--multiple-items");
+        const items = section.querySelectorAll(".rb-card");
+        if (items.length === 1) addClasses(section, "cb-block--single-item rb-block--single-item");
+        if (items.length > 1) addClasses(section, "cb-block--multiple-items rb-block--multiple-items");
     }
     function buildCard(item, CFG, extraClasses, currentItem) {
         const card = document.createElement("a");
-        card.className = "cb-card rb-card related-block__item";
+        card.className = "cb-card rb-card";
         card.href = item.fullUrl || CFG.sourceCollection.path + "/" + item.urlId;
         extraClasses.forEach(cls => card.classList.add(cls + "__item"));
         // Marquer l'item courant (ex: pour la bande parcours avec excludeCurrentItem: false)
@@ -1077,7 +1076,7 @@
             if (itemUrl && curUrl && itemUrl === curUrl) {
                 card.dataset.current = "true";
                 card.setAttribute("aria-current", "page");
-                addClasses(card, "cb-card--current rb-card--current related-block__item--current");
+                addClasses(card, "cb-card--current rb-card--current");
             }
         }
         if (Array.isArray(CFG.display?.groups) && CFG.display.groups.length) {
@@ -1090,11 +1089,11 @@
             if (media) card.appendChild(media);
         }
         const content = document.createElement("div");
-        content.className = "cb-card__body rb-card__body related-block__content";
+        content.className = "cb-card__body rb-card__body";
         const order = Array.isArray(CFG.display?.order) ? CFG.display.order : [ "meta", "title", "excerpt", "location" ];
         order.forEach(type => {
             buildContentNodesByType(type, item, CFG).forEach(node => {
-                if (node.classList?.contains("related-block__image")) return;
+                if (node.classList?.contains("rb-card__media")) return;
                 content.appendChild(node);
             });
         });
@@ -1108,7 +1107,7 @@
    * on suffixe : "related-events-2", "-3", etc.
    */
     function assignBlockId(key) {
-        const base = slugifyToken(key || "related-block");
+        const base = slugifyToken(key || "rb-block");
         if (!document.getElementById(base)) return base;
         let n = 2;
         while (document.getElementById(base + "-" + n)) n++;
@@ -1116,47 +1115,47 @@
     }
     function buildBlockShell(CFG) {
         const section = document.createElement("section");
-        section.className = "cb-block rb-block related-block cb-block--loading rb-block--loading related-block--is-loading";
+        section.className = "cb-block rb-block cb-block--loading rb-block--loading";
         section.dataset.relatedKey = CFG.key;
         section.id = assignBlockId(CFG.key);
         String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => section.classList.add(cls));
         const inner = document.createElement("div");
-        inner.className = "cb-block__inner rb-block__inner related-block__inner";
+        inner.className = "cb-block__inner rb-block__inner";
         if (!CFG.loading?.hideLoader) inner.appendChild(createLoader());
         section.appendChild(inner);
         applyStateClasses(section);
         return section;
     }
     /**
-   * Construit le <div class="related-block__list"> avec :
+   * Construit le <div class="rb-grid"> avec :
    *   - data-count="N"
-   *   - related-block__list--single  (N === 1)
-   *   - related-block__list--multiple (N > 1)
+   *   - rb-grid--single  (N === 1)
+   *   - rb-grid--multiple (N > 1)
    */
     function buildList(items, CFG, currentItem) {
         const list = document.createElement("div");
         const count = items.length;
-        list.className = "cb-grid rb-grid related-block__list";
+        list.className = "cb-grid rb-grid";
         list.dataset.count = count;
-        if (count === 1) addClasses(list, "cb-grid--single rb-grid--single related-block__list--single");
-        if (count > 1) addClasses(list, "cb-grid--multiple rb-grid--multiple related-block__list--multiple");
+        if (count === 1) addClasses(list, "cb-grid--single rb-grid--single");
+        if (count > 1) addClasses(list, "cb-grid--multiple rb-grid--multiple");
         const extraClasses = String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean);
         items.forEach(item => list.appendChild(buildCard(item, CFG, extraClasses, currentItem)));
         return list;
     }
     function replaceBlockContent(section, items, CFG, currentItem) {
-        const inner = section.querySelector(".related-block__inner");
+        const inner = section.querySelector(".rb-block__inner");
         if (!inner) return;
         inner.innerHTML = "";
         const heading = buildHeadingElement(items, CFG, false);
         if (heading) inner.appendChild(heading);
         inner.appendChild(buildList(items, CFG, currentItem));
-        section.classList.remove("cb-block--loading", "rb-block--loading", "related-block--is-loading");
+        section.classList.remove("cb-block--loading", "rb-block--loading");
         section.classList.add("cb-block--ready", "rb-block--ready");
         applyStateClasses(section);
     }
     function replaceBlockWithEmptyState(section, CFG) {
-        const inner = section.querySelector(".related-block__inner");
+        const inner = section.querySelector(".rb-block__inner");
         if (!inner) return;
         inner.innerHTML = "";
         const heading = buildHeadingElement([], CFG, true);
@@ -1164,22 +1163,22 @@
         const message = cleanText(CFG.emptyState?.message || "");
         if (message) {
             const empty = document.createElement("div");
-            empty.className = "cb-empty rb-empty related-block__empty";
+            empty.className = "cb-empty rb-empty";
             empty.textContent = message;
             inner.appendChild(empty);
         }
-        section.classList.remove("cb-block--loading", "rb-block--loading", "related-block--is-loading");
-        section.classList.add("cb-block--ready", "rb-block--ready", "cb-block--empty", "rb-block--empty", "related-block--is-empty");
+        section.classList.remove("cb-block--loading", "rb-block--loading");
+        section.classList.add("cb-block--ready", "rb-block--ready", "cb-block--empty", "rb-block--empty");
         applyStateClasses(section);
     }
     function buildBlock(items, CFG, currentItem) {
         const section = document.createElement("section");
-        section.className = "cb-block rb-block related-block cb-block--ready rb-block--ready";
+        section.className = "cb-block rb-block cb-block--ready rb-block--ready";
         section.dataset.relatedKey = CFG.key;
         section.id = assignBlockId(CFG.key);
         String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => section.classList.add(cls));
         const inner = document.createElement("div");
-        inner.className = "cb-block__inner rb-block__inner related-block__inner";
+        inner.className = "cb-block__inner rb-block__inner";
         const heading = buildHeadingElement(items, CFG, false);
         if (heading) inner.appendChild(heading);
         inner.appendChild(buildList(items, CFG, currentItem));
@@ -1200,7 +1199,7 @@
         return document.querySelector(selector || "");
     }
     function alreadyInjected(target, cfgKey) {
-        return !!target.querySelector(`:scope > .related-block[data-related-key="${cfgKey}"]`);
+        return !!target.querySelector(`:scope > .rb-block[data-related-key="${cfgKey}"]`);
     }
     function getRelatedBlockOrder() {
         if (Array.isArray(SHARED_CONFIG?.blockOrder) && SHARED_CONFIG.blockOrder.length) {
@@ -1215,7 +1214,7 @@
     }
     function reorderRelatedBlocks(target) {
         if (!target) return;
-        const blocks = Array.from(target.querySelectorAll(":scope > .related-block[data-related-key]"));
+        const blocks = Array.from(target.querySelectorAll(":scope > .rb-block[data-related-key]"));
         if (blocks.length < 2) return;
         blocks.sort((a, b) => {
             const ai = getRelatedBlockOrderIndex(a.dataset.relatedKey || "");
@@ -1234,7 +1233,7 @@
     function createRunner(CFG) {
         CFG = Object.assign({
             enabled: true,
-            key: "related-block",
+            key: "rb-block",
             debug: false,
             devGuard: {
                 enabled: false
