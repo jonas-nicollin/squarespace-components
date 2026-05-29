@@ -562,6 +562,7 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
   display: flex; align-items: baseline; gap: 0.2em;
 }
 :where(.cb-card__tag-value--multiline).qb-card__tag-value--multiline { white-space: pre-line; }
+:where(.cb-card__excerpt) { white-space: pre-line; }
 :where(.cb-card__excerpt).qb-card__excerpt  { margin: 0; font-size: 0.9em; line-height: 1.5; }
 :where(.cb-card__location).qb-card__location { margin: 0; font-size: 0.9em; }
 
@@ -1168,6 +1169,25 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   width: 240px;   /* 240px desktop — safe */
   overflow: hidden; text-decoration: none; color: inherit;
 }
+
+.lb-popup-close {
+  position: absolute;
+  top: .375rem;
+  right: .375rem;
+  z-index: 2;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.92);
+  color: #000;
+  font: 400 1.5rem/1 system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,.18);
+}
+.lb-popup-close:hover { background: #fff; }
 
 @media (max-width: 1023px) {
   .lb-popup { width: 200px; }
