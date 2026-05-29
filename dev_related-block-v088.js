@@ -919,20 +919,24 @@
     }
     function buildImageElement(item, CFG) {
         if (!CFG.display?.showImage || !item.assetUrl) return null;
+        const utils = getCollectionUtils();
+        const base = utils && typeof utils.getImageBase === "function" ? utils.getImageBase(item) : String(item.assetUrl || "").split("?")[0];
+        if (!base) return null;
         const media = document.createElement("div");
         media.className = "cb-card__media rb-card__media cb-card__img-wrap rb-card__img-wrap";
         const img = document.createElement("img");
         img.className = "cb-card__img rb-card__img";
         const srcsetWidths = Array.isArray(CFG.display?.srcsetWidths) ? CFG.display.srcsetWidths : [ 300, 500, 750, 1e3, 1500 ];
-        const fallbackSrc = `${item.assetUrl}?format=750w`;
+        const cleanWidths = srcsetWidths.filter(w => Number(w) <= 1500);
+        const fallbackSrc = `${base}?format=750w`;
         img.src = fallbackSrc;
-        img.srcset = srcsetWidths.filter(w => Number(w) <= 1500).map(w => `${item.assetUrl}?format=${w}w ${w}w`).join(", ");
+        img.srcset = utils && typeof utils.buildSrcset === "function" ? utils.buildSrcset(base, cleanWidths) : cleanWidths.map(w => `${base}?format=${w}w ${w}w`).join(", ");
         img.sizes = CFG.display?.imageSizes || DEFAULT_IMAGE_SIZES;
         img.alt = cleanText(item.title || "");
         img.loading = "lazy";
         img.decoding = "async";
         img.fetchPriority = "low";
-        img.style.objectPosition = item.mediaFocalPoint && typeof item.mediaFocalPoint.x === "number" && typeof item.mediaFocalPoint.y === "number" ? `${Math.round(item.mediaFocalPoint.x * 100)}% ${Math.round(item.mediaFocalPoint.y * 100)}%` : "50% 50%";
+        img.style.objectPosition = utils && typeof utils.focalPoint === "function" ? utils.focalPoint(item.mediaFocalPoint) : item.mediaFocalPoint && typeof item.mediaFocalPoint.x === "number" && typeof item.mediaFocalPoint.y === "number" ? `${Math.round(item.mediaFocalPoint.x * 100)}% ${Math.round(item.mediaFocalPoint.y * 100)}%` : "50% 50%";
         media.appendChild(img);
         return media;
     }
