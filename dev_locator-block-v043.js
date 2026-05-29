@@ -48,7 +48,27 @@ function getI18n(cfg){
   return Object.assign({},base,cfg.i18n||{});
 }
 
+function normalizeCollectionRef(ref){
+  if(!ref)return null;
+  if(typeof ref==='string')return{path:ref};
+  if(ref.path)return ref;
+  if(ref.url)return Object.assign({},ref,{path:ref.url});
+  return null;
+}
+
+function normalizeConfig(raw){
+  var cfg=Object.assign({},raw||{});
+  var source=normalizeCollectionRef(cfg.sourceCollection||cfg.collection||cfg.source||cfg.collectionUrl);
+  if(source&&source.path)cfg.collectionUrl=source.path;
+  if(!cfg.rootSelector)cfg.rootSelector=cfg.target||cfg.targetSelector||cfg.mountSelector||'';
+  if(!cfg.customClass&&cfg.className)cfg.customClass=cfg.className;
+  if(!cfg.customClass&&typeof cfg.classes==='string')cfg.customClass=cfg.classes;
+  if(!cfg.customClass&&cfg.classes&&typeof cfg.classes==='object')cfg.customClass=cfg.classes.block||cfg.classes.root||'';
+  return cfg;
+}
+
 function setupLocatorBlock(rawConfig){
+rawConfig=normalizeConfig(rawConfig);
 var cfg=Object.assign({
   collectionUrl:'',category:'',tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
