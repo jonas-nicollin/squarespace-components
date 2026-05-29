@@ -48,20 +48,36 @@
     return norm(str).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
-  function cleanHTML(str) {
+  function cleanTextSpacing(text, preserveBreaks) {
+    text = String(text || '')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\r\n?/g, '\n');
+
+    if (preserveBreaks) {
+      return text
+        .replace(/[ \t\f\v]+/g, ' ')
+        .replace(/[ \t]*\n[ \t]*/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    }
+
+    return text.replace(/\s+/g, ' ').trim();
+  }
+
+  function cleanHTML(str, options) {
     var utils = getCollectionUtils();
-    if (utils && typeof utils.cleanHTML === 'function') return utils.cleanHTML(str);
+    if (utils && typeof utils.cleanHTML === 'function') return utils.cleanHTML(str, options);
 
     var d = document.createElement('div');
     d.innerHTML = String(str || '');
-    return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
+    return cleanTextSpacing(d.textContent || d.innerText || '', options && options.preserveLineBreaks);
   }
 
-  function truncate(str, max) {
+  function truncate(str, max, options) {
     var utils = getCollectionUtils();
-    if (utils && typeof utils.truncate === 'function') return utils.truncate(str, max);
+    if (utils && typeof utils.truncate === 'function') return utils.truncate(str, max, options);
 
-    var s = cleanHTML(str);
+    var s = cleanHTML(str, options);
     if (!s || s.length <= max) return s;
     var cut = s.slice(0, max), sp = cut.lastIndexOf(' ');
     return (sp > 0 ? cut.slice(0, sp) : cut).trim() + '\u2026';
@@ -361,7 +377,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       focalPoint:   focalPoint,
       categories:   (raw.categories || []).map(cleanHTML).filter(Boolean),
       tags:         (raw.tags || []).map(cleanHTML).filter(Boolean),
-      excerpt:      truncate(raw.excerpt || raw.body || '', 160),
+      excerpt:      truncate(raw.excerpt || raw.body || '', 160, { preserveLineBreaks: true }),
       excerptRaw:   raw.excerpt || raw.body || '',
       location:     loc ? cleanHTML(loc.addressTitle || loc.addressLine1 || '') : '',
       displayIndex: Number(raw.displayIndex != null ? raw.displayIndex : 999999),
@@ -1533,7 +1549,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 12. FILTRES UI
    * ════════════════════════════════════ */
 
-  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock) {
+  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock, ensureFilterOptions) {
     if (cfg.filters === false) return null;
 
     var fc = cfg.filters || {};
@@ -1925,10 +1941,14 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           resetSec();
 
           if (onTabChange) onTabChange(tab);
-          if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
 
-          rebuildSecondary();
-          emit();
+          Promise.resolve(ensureFilterOptions ? ensureFilterOptions(tabPool) : null).catch(function(err) {
+            if (cfg.debug) console.warn('[QueryBlock]', cfg.key, 'filter options fetch failed', err);
+          }).then(function() {
+            if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
+            rebuildSecondary();
+            emit();
+          });
         });
 
         tabGroup.appendChild(btn);
@@ -2311,13 +2331,25 @@ requestAnimationFrame(function() {
       });
     }
 
-    async function ensureConfiguredFilterOptions() {
-      var prefixes = getConfiguredFilterPrefixes();
+    function getActiveFilterPrefixes() {
+      var list = currentTagPrefixes || (fc && fc.tagPrefixes) || [];
+      return normalizePrefixes(list, (fc && fc.layout) || 'pills').map(function(pd) {
+        return pd.prefix;
+      }).filter(Boolean);
+    }
+
+    async function ensureConfiguredFilterOptions(poolGetter, prefixesGetter) {
+      var getPool = typeof poolGetter === 'function'
+        ? poolGetter
+        : function() { return rawItems; };
+      var getPrefixes = typeof prefixesGetter === 'function'
+        ? prefixesGetter
+        : getConfiguredFilterPrefixes;
       var guard = 0;
 
       while (
-        prefixes.length &&
-        !hasConfiguredFilterOptions(rawItems, prefixes) &&
+        getPrefixes().length &&
+        !hasConfiguredFilterOptions(getPool(), getPrefixes()) &&
         canFetchMorePages('filter-options') &&
         guard < 20
       ) {
@@ -2492,7 +2524,10 @@ requestAnimationFrame(function() {
       function() {
         return currentTagPrefixes;
       },
-      target
+      target,
+      function(poolGetter) {
+        return ensureConfiguredFilterOptions(poolGetter, getActiveFilterPrefixes);
+      }
     );
 
     var gridClass = dispLayout === 'list'
