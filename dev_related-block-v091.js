@@ -5,10 +5,50 @@
     if (!ALL_CONFIGS.length) return;
     // Extraire l'entrée _shared (doit être en première position)
     const SHARED_CONFIG = ALL_CONFIGS[0]?._shared === true ? ALL_CONFIGS[0] : null;
-    const CONFIGS = SHARED_CONFIG ? ALL_CONFIGS.slice(1) : ALL_CONFIGS;
+    const CONFIGS = (SHARED_CONFIG ? ALL_CONFIGS.slice(1) : ALL_CONFIGS).map(normalizeConfig);
     if (!CONFIGS.length && !SHARED_CONFIG) return;
     // Mode développement : désactive tous les caches quand _shared.devMode === true
     const DEV_MODE = SHARED_CONFIG?.devMode === true;
+    function normalizeCollectionRef(ref) {
+        if (!ref) return null;
+        if (typeof ref === "string") return {
+            path: ref
+        };
+        if (ref.path) return ref;
+        if (ref.url) return {
+            ...ref,
+            path: ref.url
+        };
+        return null;
+    }
+    function normalizeConfig(raw) {
+        const cfg = {
+            ...(raw || {})
+        };
+        const source = normalizeCollectionRef(cfg.sourceCollection || cfg.collection || cfg.source || cfg.collectionUrl);
+        if (source) cfg.sourceCollection = source;
+        if (cfg.currentItem) {
+            const currentSource = normalizeCollectionRef(cfg.currentItem.sourceCollection || cfg.currentItem.collection || cfg.currentItem.source || cfg.currentItem.collectionUrl);
+            if (currentSource) cfg.currentItem = {
+                ...cfg.currentItem,
+                sourceCollection: currentSource
+            };
+        }
+        const targetSelector = cfg.target || cfg.targetSelector || cfg.rootSelector || cfg.mountSelector;
+        if (targetSelector) {
+            cfg.insertion = {
+                ...(cfg.insertion || {})
+            };
+            if (!cfg.insertion.targetSelector) cfg.insertion.targetSelector = targetSelector;
+        }
+        if (typeof cfg.classes === "string") cfg.classes = {
+            block: cfg.classes
+        };
+        if (!cfg.classes && cfg.className) cfg.classes = {
+            block: cfg.className
+        };
+        return cfg;
+    }
     function addClasses(el, classes) {
         String(classes || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => el.classList.add(cls));
         return el;
