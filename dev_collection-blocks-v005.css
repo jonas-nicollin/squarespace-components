@@ -11,7 +11,7 @@
    ========================================================================== */
 
 /* ═══════════════════════════════════════════════════════════════
-   Squarespace Query Block (SQB) v11 — Base CSS
+   Query Block — Base CSS
    Design > Custom CSS
    Variables : --paragraphMediumColor · --siteBackgroundColor
                --tweak-line-block-line-color
@@ -19,14 +19,14 @@
 
 /* ─────────────────────────────────────────────
    BADGE ÉDITEUR
-   Classe qb-target sur le conteneur HTML.
+   Classe qb-block sur le conteneur HTML.
    Visible uniquement en mode édition Squarespace.
    Exemple HTML : <div id="sqb-membres"
-                       data-sqb-label="Query Block — Membres"></div>
+                       data-cb-label="Query Block — Membres"></div>
    ───────────────────────────────────────────── */
 
-.sqs-edit-mode-active :where(.cb-block).qb-block[data-sqb-label]::before {
-  content: attr(data-sqb-label);
+.sqs-edit-mode-active :where(.cb-block).qb-block[data-cb-label]::before {
+  content: attr(data-cb-label);
   display: block;
   background: #0050ff;
   color: #fff;
@@ -38,7 +38,7 @@
   margin-bottom: 0.75rem;
 }
 
-body:not(.sqs-edit-mode-active) :where(.cb-block).qb-block[data-sqb-label]::before {
+body:not(.sqs-edit-mode-active) :where(.cb-block).qb-block[data-cb-label]::before {
   display: none;
 }
 
@@ -563,6 +563,7 @@ body:where(.cb-panel-open).qb-panel-open { overflow: hidden; }
 }
 :where(.cb-card__tag-value--multiline).qb-card__tag-value--multiline { white-space: pre-line; }
 :where(.cb-card__excerpt) { white-space: pre-line; }
+:where(.cb-card__excerpt-line) { display: block; }
 :where(.cb-card__excerpt).qb-card__excerpt  { margin: 0; font-size: 0.9em; line-height: 1.5; }
 :where(.cb-card__location).qb-card__location { margin: 0; font-size: 0.9em; }
 
@@ -1183,11 +1184,17 @@ body.sqs-edit-mode-active :where(.cb-block).lb-block {
   place-items: center;
   background: rgba(255,255,255,.92);
   color: #000;
-  font: 400 1.5rem/1 system-ui, sans-serif;
+  font: inherit;
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0,0,0,.18);
 }
 .lb-popup-close:hover { background: #fff; }
+.lb-popup-close .ui-icon {
+  font-family: 'Material Symbols Outlined', sans-serif;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-size: 1.35rem;
+  line-height: 1;
+}
 
 @media (max-width: 1023px) {
   .lb-popup { width: 200px; }
