@@ -48,41 +48,21 @@ function getI18n(cfg){
   return Object.assign({},base,cfg.i18n||{});
 }
 
-function normalizeCollectionRef(ref){
-  if(!ref)return null;
-  if(typeof ref==='string')return{path:ref};
-  if(ref.path)return ref;
-  if(ref.url)return Object.assign({},ref,{path:ref.url});
-  return null;
-}
-
-function normalizeConfig(raw){
-  var cfg=Object.assign({},raw||{});
-  var source=normalizeCollectionRef(cfg.sourceCollection);
-  if(source)cfg.sourceCollection=source;
-  if(cfg.pagination){
-    cfg.display=Object.assign({},cfg.display||{});
-    if(cfg.pagination.mode==='none'&&cfg.display.pageSize==null)cfg.display.pageSize=0;
-    if(cfg.pagination.perPage!=null&&cfg.display.pageSize==null)cfg.display.pageSize=Number(cfg.pagination.perPage)||0;
-  }
-  if(!cfg.classes||typeof cfg.classes!=='object')cfg.classes={block:''};
-  if(!cfg.sort||typeof cfg.sort!=='object')cfg.sort={type:cfg.sort||'numero',direction:'asc'};
-  return cfg;
-}
-
 function setupLocatorBlock(rawConfig){
-rawConfig=normalizeConfig(rawConfig);
 var cfg=Object.assign({
-  sourceCollection:{path:''},category:'',tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
+  collectionUrl:'',category:'',tagNumero:'Numéro',tagLieu:'Lieu',tagZone:'Zone',
   layout:'list',display:{},apiKey:'',mapCenter:null,mapZoom:null,
   mapZoomOnSelect:16,mapStyle:null,mapOptions:{},map:{},
+  openInNewTab:false,
   filterMode:'dropdown',
   filterMultiple:false,
-  showZoneFilter:true,
-  sort:{type:'numero',direction:'asc'},
-  classes:{block:''},
+  cardClickable:false,
+  showCardLink:true,showZoneFilter:true,sortBy:'numero',
+  customClass:'',
   i18n:{},
-  target:'.locator-block',
+  rootSelector:'.locator-block',
+  noCache:false,
+  cacheTTL:600000,
   performance:{},
   debug:false,
 },rawConfig||{});
@@ -93,9 +73,9 @@ cfg.performance=Object.assign({
   priorityImages:true,
   maxPages:1,
   progressiveMaxPages:'all',
-  domBatchSize:6,
-  sessionCache:true,
-  sessionCacheTTL:300,
+  domBatchSize:8,
+  sessionCache:undefined,
+  sessionCacheTTL:null,
   idleComplete:false,
 },cfg.performance||{});
 
@@ -103,7 +83,8 @@ cfg.performance=Object.assign({
    groups définit la construction des cards (media + body).
    Chaque group a une className et des children.
    Par défaut : media avec image seule, body avec tous les champs texte.
-   Surcharger dans window.LOCATOR_BLOCK_CONFIGS[n].display. */
+   Surcharger dans window.LOCATOR_BLOCK_CONFIGS[n].display
+   ou window.LOCATOR_BLOCK_CONFIG.display en rétrocompatibilité. */
 cfg.display=Object.assign({
   /* Éléments à afficher (utilisés par les groups par défaut) */
   showImage:   true,
@@ -114,9 +95,6 @@ cfg.display=Object.assign({
   lieuIcon:    'location_on',
   showCount:   true,           /* afficher le compteur d'items */
   pageSize:    0,              /* 0 = tout afficher sans pagination */
-  cardClickable:false,
-  openInNewTab:false,
-  cardLink:true,
   /* groups : définit la construction des cards.
      null = comportement par défaut (media:image, body:numero+title+lieu+zones)
      Voir exemple dans la config PCC pour la construction spécifique. */
@@ -129,9 +107,10 @@ cfg.map=Object.assign({
   markerShadow:true,      /* ombre portée sous les marqueurs */
   popup:true,popupShowImage:true,
   clustering:false,clusterMinCount:2,updateListOnMapMove:false,
-  overlapStrategy:'spread',
-  overlapRadiusMeters:18,
 },cfg.map||{});
+
+cfg.openInNewTab=!!cfg.openInNewTab;
+cfg.showCardLink=cfg.showCardLink!==false;
 
 function log(){if(cfg.debug)console.log.apply(console,['[LocatorBlock]'].concat(Array.prototype.slice.call(arguments)));}
 
@@ -243,47 +222,15 @@ function imgTag(base,alt,cls,sizes,fp,priority){
 /* ── Coordonnées ── */
 function getCoords(loc){loc=loc||{};return{lat:parseFloat(loc.mapLat||loc.markerLat||''),lng:parseFloat(loc.mapLng||loc.markerLng||'')};}
 
-function spreadOverlappingItems(items){
-  if(!Array.isArray(items)||cfg.map.overlapStrategy!=='spread')return items;
-
-  var groups={};
-  items.forEach(function(item){
-    var key=[Number(item.lat).toFixed(7),Number(item.lng).toFixed(7)].join(',');
-    if(!groups[key])groups[key]=[];
-    groups[key].push(item);
-  });
-
-  Object.keys(groups).forEach(function(key){
-    var group=groups[key];
-    if(group.length<2){
-      group[0].markerLat=group[0].lat;
-      group[0].markerLng=group[0].lng;
-      return;
-    }
-
-    var radius=Number(cfg.map.overlapRadiusMeters||18);
-    var latRad=group[0].lat*Math.PI/180;
-    var metersPerLat=111320;
-    var metersPerLng=Math.max(1,111320*Math.cos(latRad));
-
-    group.forEach(function(item,index){
-      var angle=(-Math.PI/2)+(Math.PI*2*index/group.length);
-      item.markerLat=item.lat+(Math.sin(angle)*radius/metersPerLat);
-      item.markerLng=item.lng+(Math.cos(angle)*radius/metersPerLng);
-      item.hasOverlappingLocation=true;
-      item.overlapCount=group.length;
-    });
-  });
-
-  return items;
-}
-
 function getCollectionOptions(maxPages){
+  var sessionCache = cfg.performance.sessionCache;
+  if(sessionCache === undefined) sessionCache = !cfg.noCache;
+
   return {
     maxPages: maxPages,
-    ttl: Number(cfg.performance.sessionCacheTTL || 300),
+    ttl: Number(cfg.performance.sessionCacheTTL || Math.round((cfg.cacheTTL || 600000) / 1000)),
     memoryCache: true,
-    sessionCache: cfg.performance.sessionCache !== false,
+    sessionCache: sessionCache === true,
     credentials: 'same-origin',
     keepFields: cfg.performance.keepFields || [
       'id',
@@ -309,8 +256,7 @@ function getCollectionOptions(maxPages){
 
 /* ── Fetch SQS + pagination timestamp ── */
    async function fetchItemsState(maxPages){
-  var sourcePath = cfg.sourceCollection && cfg.sourceCollection.path;
-  if(!sourcePath) throw new Error('sourceCollection.path manquant');
+  if(!cfg.collectionUrl) throw new Error('collectionUrl manquant');
 
   var dataApi=getCollectionBlocksDataAPI();
 
@@ -324,10 +270,10 @@ function getCollectionOptions(maxPages){
   var state;
 
   if(typeof dataApi.getState === 'function'){
-    state = await dataApi.getState(sourcePath, options);
+    state = await dataApi.getState(cfg.collectionUrl, options);
   }else{
     state = {
-      items: await dataApi.get(sourcePath, options),
+      items: await dataApi.get(cfg.collectionUrl, options),
       complete: maxPages === 'all',
       fetchError: null,
       pagesLoaded: Number(maxPages || 1)
@@ -378,20 +324,15 @@ function getCollectionOptions(maxPages){
     };
   });
 
-  var sortType = cfg.sort && cfg.sort.type;
-  var sortDir = cfg.sort && cfg.sort.direction === 'desc' ? -1 : 1;
-
-  if(sortType === 'numero'){
+  if(cfg.sortBy === 'numero'){
     items.sort(function(a,b){
-      return ((parseInt(a.numero, 10) || 999) - (parseInt(b.numero, 10) || 999)) * sortDir;
+      return (parseInt(a.numero, 10) || 999) - (parseInt(b.numero, 10) || 999);
     });
-  } else if(sortType === 'title'){
+  } else if(cfg.sortBy === 'title'){
     items.sort(function(a,b){
-      return a.title.localeCompare(b.title, 'fr') * sortDir;
+      return a.title.localeCompare(b.title, 'fr');
     });
   }
-
-  spreadOverlappingItems(items);
 
   return {
     items: items,
@@ -427,8 +368,8 @@ function renderChild(child,item){
     return'<div class="cb-card__categories lb-card__categories">'+item.zones.map(function(z){return'<span class="cb-card__category lb-card__category">'+escHtml(z)+'</span>';}).join('')+'</div>';
   }
   if(child==='cardLink'){
-    if(cfg.display.cardLink===false||!item.url)return'';
-    var lt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
+    if(!cfg.showCardLink||!item.url)return'';
+    var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
     return'<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';
   }
   return'';
@@ -455,15 +396,15 @@ function buildCardHTML(item){
     });
     /* cardLink toujours en dernier dans le dernier body group */
     var clHtml='';
-    if(cfg.display.cardLink!==false&&item.url){var lt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
-    if(cfg.display.cardClickable&&item.url){
-      var lt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
+    if(cfg.showCardLink&&item.url){var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
+    if(cfg.cardClickable&&item.url){
+      var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
       return'<a class="'+escHtml(CLS_CARD_CLICKABLE)+'" href="'+escHtml(item.url)+'"'+lt+' data-item-id="'+escHtml(item.id)+'">'+html+'</a>';
     }
-    /* cardLink : si true et cardClickable=false, ajouter la flèche
+    /* showCardLink : si true et cardClickable=false, ajouter la flèche
        même si 'cardLink' n'est pas dans les children des groups */
-    if(cfg.display.cardLink!==false&&item.url&&!cfg.display.cardClickable){
-      var lt2=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
+    if(cfg.showCardLink&&item.url&&!cfg.cardClickable){
+      var lt2=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
       html+='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt2+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';
     }
     return'<div class="'+escHtml(CLS_CARD)+'" data-item-id="'+escHtml(item.id)+'">'+html+'</div>';
@@ -480,7 +421,7 @@ function buildCardHTML(item){
   if(d.showZones&&item.zones.length){var utilsZones=getCollectionUtils();bodyHtml+=utilsZones&&typeof utilsZones.buildCategoriesHTML==='function'?utilsZones.buildCategoriesHTML(item.zones,{prefix:'lb-card'}):'<div class="cb-card__categories lb-card__categories">'+item.zones.map(function(z){return'<span class="cb-card__category lb-card__category">'+escHtml(z)+'</span>';}).join('')+'</div>';}
 
   var clHtml='';
-  if(cfg.display.cardLink!==false&&item.url){var lt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
+  if(cfg.showCardLink&&item.url){var lt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';clHtml='<a class="'+escHtml(CLS_LINK)+'" href="'+escHtml(item.url)+'"'+lt+' aria-label="Voir '+escHtml(item.title)+'"><span class="ui-icon" aria-hidden="true">arrow_forward</span></a>';}
 
   return'<div class="'+escHtml(CLS_CARD)+'" data-item-id="'+escHtml(item.id)+'">'+mediaHtml+(bodyHtml?'<div class="'+escHtml(CLS_BODY)+'">'+bodyHtml+clHtml+'</div>':'')+'</div>';
 }
@@ -496,11 +437,8 @@ function defineCustomPopup(){
     var im=(cfg.map.popupShowImage&&d.showImage&&item.imageBase)?'<div class="lb-popup-media">'+imgTag(item.imageBase,item.title,'lb-popup-image','240px',item.focalPos,false)+'</div>':'';
     var b='';if(item.numero)b+='<div class="lb-popup-num">'+escHtml(item.numero)+'</div>';if(item.title)b+='<div class="lb-popup-title">'+escHtml(item.title)+'</div>';if(item.lieu)b+='<div class="lb-popup-lieu">'+escHtml(item.lieu)+'</div>';
     this.container=document.createElement('div');this.container.className='lb-popup-wrap';
-    var pt=cfg.display.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
-    this.container.innerHTML='<button class="lb-popup-close" type="button" aria-label="Fermer">×</button><a class="lb-popup" href="'+escHtml(item.url)+'"'+pt+'>'+im+(b?'<div class="lb-popup-body">'+b+'</div>':'')+'</a>';
-    var closeBtn=this.container.querySelector('.lb-popup-close');
-    var popup=this;
-    if(closeBtn)closeBtn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();popup.setMap(null);});
+    var pt=cfg.openInNewTab?' target="_blank" rel="noopener noreferrer"':'';
+    this.container.innerHTML='<a class="lb-popup" href="'+escHtml(item.url)+'"'+pt+'>'+im+(b?'<div class="lb-popup-body">'+b+'</div>':'')+'</a>';
     this.getPanes().floatPane.appendChild(this.container);
   };
   CustomPopup.prototype.draw=function(){var proj=this.getProjection(),pos=proj.fromLatLngToDivPixel(this.position);if(!pos||!this.container)return;var w=this.container.offsetWidth||220;this.container.style.left=(pos.x-w/2)+'px';this.container.style.top=(pos.y-this.container.offsetHeight-56)+'px';};
@@ -643,10 +581,9 @@ function createInstance(root,allItems,fetchMoreItems){
   });
 });
   }
-  function markerPosition(item){return{lat:item.markerLat||item.lat,lng:item.markerLng||item.lng};}
-  function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.markerLat||item.lat,item.markerLng||item.lng),item);activePopup.setMap(map);}
+  function showPopup(item){if(!cfg.map.popup||!item)return;closePopup();defineCustomPopup();activePopup=new CustomPopup(new google.maps.LatLng(item.lat,item.lng),item);activePopup.setMap(map);}
   function closePopup(){if(activePopup){activePopup.setMap(null);activePopup=null;}}
-  function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:markerPosition(item),map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){activate(item.id,true);showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
+  function createMarker(item){var icon=markerIcon(item.numero,false);var useCluster=cfg.map.clustering&&window.markerClusterer;var o={position:{lat:item.lat,lng:item.lng},map:useCluster?null:map,title:item.title};if(icon!==null)o.icon=icon;var m=new google.maps.Marker(o);m.addListener('click',function(){activate(item.id,true);showPopup(item);});markers[item.id]={marker:m,item:item};return m;}
   function addAllMarkers(){var ml=allItems.map(function(i){return createMarker(i);});if(cfg.map.clustering&&window.markerClusterer)clusterer=new markerClusterer.MarkerClusterer({map:map,markers:ml,algorithm:new markerClusterer.GridAlgorithm({maxDistance:40})});}
   function addMissingMarkers(items){
     var ml=[];
@@ -656,14 +593,6 @@ function createInstance(root,allItems,fetchMoreItems){
       else ml.forEach(function(m){m.setMap(map);});
     }
   }
-  function syncMarkerPositions(items){
-    items.forEach(function(i){
-      if(markers[i.id]&&typeof markers[i.id].marker.setPosition==='function'){
-        markers[i.id].item=i;
-        markers[i.id].marker.setPosition(markerPosition(i));
-      }
-    });
-  }
   function updateMarker(id,a){if(!markers[id])return;var icon=markerIcon(markers[id].item.numero,a);if(icon!==null)markers[id].marker.setIcon(icon);markers[id].marker.setZIndex(a?999:0);}
   function activate(id,pan){
     if(activeId===id)return;
@@ -672,7 +601,7 @@ function createInstance(root,allItems,fetchMoreItems){
     var card=root.querySelector('.lb-card[data-item-id="'+id+'"]');
     if(card){card.classList.add('is-active');card.classList.add('cb-card--active');card.classList.add('lb-card--active');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
     if(pan&&markers[id]){
-      map.panTo(markerPosition(markers[id].item));
+      map.panTo({lat:markers[id].item.lat,lng:markers[id].item.lng});
       if(map.getZoom()<cfg.mapZoomOnSelect)map.setZoom(cfg.mapZoomOnSelect);
       /* Compenser la hauteur du popup (environ popup + marker + marge) */
       var popupH = cfg.map.popup ? 280 : 0;
@@ -684,7 +613,7 @@ function createInstance(root,allItems,fetchMoreItems){
     /* Hover : allume le marker correspondant */
     card.addEventListener('mouseenter',function(){if(!markers[id])return;updateMarker(id,true);if(activeId&&activeId!==id)updateMarker(activeId,false);});
     card.addEventListener('mouseleave',function(){if(id!==activeId)updateMarker(id,false);});
-    if(!cfg.display.cardClickable){
+    if(!cfg.cardClickable){
       /* Mode par défaut : clic → active carte + popup (navigation via card-link) */
       card.addEventListener('click',function(e){
         if(e.target.closest('.lb-card__link'))return;
@@ -714,7 +643,6 @@ function createInstance(root,allItems,fetchMoreItems){
       if(Array.isArray(nextItems)&&nextItems.length>allItems.length){
         allItems = nextItems;
         addMissingMarkers(allItems);
-        syncMarkerPositions(allItems);
         currentItems = activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
         items = currentItems;
       }
@@ -738,7 +666,6 @@ function createInstance(root,allItems,fetchMoreItems){
     if(!Array.isArray(nextItems)||!nextItems.length)return;
     allItems=nextItems;
     addMissingMarkers(allItems);
-    syncMarkerPositions(allItems);
     currentItems=activeZone?allItems.filter(function(i){return i.zones.indexOf(activeZone)!==-1;}):allItems;
     visibleCount=cfg.display.pageSize>0?Math.min(Math.max(visibleCount,cfg.display.pageSize),currentItems.length):currentItems.length;
     var counter=root.querySelector('.lb-counter');
@@ -752,8 +679,7 @@ function createInstance(root,allItems,fetchMoreItems){
      Le CSS gère l'affichage : liste=grille multi-colonnes, carte=côté droit.
      --locator-grid-list-width contrôle la proportion (défaut: 50%). */
   var lc=cfg.layout==='grid'?' '+CLS_INNER_GRID:' '+CLS_INNER_LIST;
-  var blockClass=cfg.classes&&cfg.classes.block?cfg.classes.block:'';
-  var cc=blockClass?' '+escHtml(blockClass):'';
+  var cc=cfg.customClass?' '+escHtml(cfg.customClass):'';
   addClasses(root, CLS_BLOCK+' '+CLS_BLOCK_READY);
   removeClasses(root, CLS_BLOCK_LOADING);
   root.innerHTML='<div class="'+escHtml(CLS_INNER+lc)+cc+'"><div class="'+escHtml(CLS_SIDEBAR)+'">'+buildControls(zones,allItems.length)+'<div class="'+escHtml(CLS_LIST)+'"></div></div><div class="'+escHtml(CLS_MAP_WRAP)+'"><div class="'+escHtml(CLS_MAP)+'"></div></div></div>';
@@ -777,7 +703,7 @@ function createInstance(root,allItems,fetchMoreItems){
 
 /* ── Init ── */
 async function init(){
-  var roots=Array.from(document.querySelectorAll(cfg.target));
+  var roots=Array.from(document.querySelectorAll(cfg.rootSelector));
   log('Init —',roots.length,'conteneur(s)');if(!roots.length)return;
   roots.forEach(function(r){addClasses(r, CLS_BLOCK+' '+CLS_BLOCK_LOADING);});
   if(!cfg.apiKey){roots.forEach(function(r){removeClasses(r, CLS_BLOCK_LOADING);addClasses(r, CLS_BLOCK_READY);r.innerHTML='<p class="'+escHtml(CLS_ERROR)+'">apiKey manquant</p>';});return;}
@@ -863,18 +789,9 @@ if (cfg.performance.idleComplete === true || cfg.performance.idlePreload === tru
 }
 
 function scheduleInit(){
-  var roots=Array.from(document.querySelectorAll(cfg.target));
+  var roots=Array.from(document.querySelectorAll(cfg.rootSelector));
   log('Schedule —',roots.length,'conteneur(s)');
-  if(!roots.length){
-    var waitObserver=new MutationObserver(function(){
-      roots=Array.from(document.querySelectorAll(cfg.target));
-      if(!roots.length)return;
-      waitObserver.disconnect();
-      scheduleInit();
-    });
-    waitObserver.observe(document.documentElement,{childList:true,subtree:true});
-    return;
-  }
+  if(!roots.length)return;
 
   if(cfg.performance.lazyInit===false||!('IntersectionObserver'in window)){
     init();
@@ -905,6 +822,10 @@ if(document.readyState==='loading'){
 function getLocatorConfigs(){
   if(Array.isArray(window.LOCATOR_BLOCK_CONFIGS)){
     return window.LOCATOR_BLOCK_CONFIGS;
+  }
+
+  if(window.LOCATOR_BLOCK_CONFIG){
+    return [window.LOCATOR_BLOCK_CONFIG];
   }
 
   return [];
