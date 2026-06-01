@@ -48,20 +48,36 @@
     return norm(str).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
-  function cleanHTML(str) {
+  function cleanTextSpacing(text, preserveBreaks) {
+    text = String(text || '')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\r\n?/g, '\n');
+
+    if (preserveBreaks) {
+      return text
+        .replace(/[ \t\f\v]+/g, ' ')
+        .replace(/[ \t]*\n[ \t]*/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    }
+
+    return text.replace(/\s+/g, ' ').trim();
+  }
+
+  function cleanHTML(str, options) {
     var utils = getCollectionUtils();
-    if (utils && typeof utils.cleanHTML === 'function') return utils.cleanHTML(str);
+    if (utils && typeof utils.cleanHTML === 'function') return utils.cleanHTML(str, options);
 
     var d = document.createElement('div');
     d.innerHTML = String(str || '');
-    return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
+    return cleanTextSpacing(d.textContent || d.innerText || '', options && options.preserveLineBreaks);
   }
 
-  function truncate(str, max) {
+  function truncate(str, max, options) {
     var utils = getCollectionUtils();
-    if (utils && typeof utils.truncate === 'function') return utils.truncate(str, max);
+    if (utils && typeof utils.truncate === 'function') return utils.truncate(str, max, options);
 
-    var s = cleanHTML(str);
+    var s = cleanHTML(str, options);
     if (!s || s.length <= max) return s;
     var cut = s.slice(0, max), sp = cut.lastIndexOf(' ');
     return (sp > 0 ? cut.slice(0, sp) : cut).trim() + '\u2026';
@@ -361,7 +377,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       focalPoint:   focalPoint,
       categories:   (raw.categories || []).map(cleanHTML).filter(Boolean),
       tags:         (raw.tags || []).map(cleanHTML).filter(Boolean),
-      excerpt:      truncate(raw.excerpt || raw.body || '', 160),
+      excerpt:      truncate(raw.excerpt || raw.body || '', 160, { preserveLineBreaks: true }),
       excerptRaw:   raw.excerpt || raw.body || '',
       location:     loc ? cleanHTML(loc.addressTitle || loc.addressLine1 || '') : '',
       displayIndex: Number(raw.displayIndex != null ? raw.displayIndex : 999999),
@@ -586,6 +602,50 @@ var isPriority = priority === true || imgIndex < 3;
     return null;
   }
 
+  function buildExcerptElement(item, def) {
+    if (!item.excerpt) return null;
+
+    def = def || {};
+
+    var richExcerpt = def.richHTML === true || def.htmlMode === 'rich' || def.excerptMode === 'rich';
+    var utils = getCollectionUtils();
+
+    if (utils && typeof utils.buildTextElement === 'function') {
+      return utils.buildTextElement(item.excerpt, {
+        prefix: 'qb-card',
+        role: 'excerpt',
+        tag: def.tag || 'div',
+        className: def.className,
+        preserveLineBreaks: richExcerpt !== true,
+        richHTML: richExcerpt,
+        html: item.excerptRaw || item.excerpt,
+        lineTag: def.lineTag || 'span',
+        lineClassName: def.lineClassName,
+      });
+    }
+
+    var node = el(def.tag || 'div', {
+      class: qCardClass('cb-card__excerpt', 'qb-card__excerpt') + (def.className ? ' ' + def.className : ''),
+    });
+
+    if (richExcerpt) {
+      node.innerHTML = sanitizeHTML(item.excerptRaw || item.excerpt);
+      return node;
+    }
+
+    cleanHTML(item.excerpt, { preserveLineBreaks: true }).split(/\n/).forEach(function(line) {
+      if (!line) return;
+      var lineNode = el(def.lineTag || 'span', {
+        class: qCardClass('cb-card__excerpt-line', 'qb-card__excerpt-line') + (def.lineClassName ? ' ' + def.lineClassName : ''),
+      });
+      lineNode.textContent = line;
+      node.appendChild(lineNode);
+    });
+
+    if (!node.hasChildNodes()) node.textContent = item.excerpt;
+    return node;
+  }
+
   function buildChild(def, item, cardIndex) {
     var type = typeof def === 'string' ? def : (def && def.type);
 
@@ -636,17 +696,7 @@ var isPriority = priority === true || imgIndex < 3;
     }
 
     if (type === 'excerpt') {
-      if (!item.excerpt) return null;
-
-      var p = el('p', { class: qCardClass('cb-card__excerpt', 'qb-card__excerpt') });
-
-      if (def && def.excerptPlain) {
-        p.textContent = item.excerpt;
-      } else {
-        p.innerHTML = sanitizeHTML(item.excerptRaw || item.excerpt);
-      }
-
-      return p;
+      return buildExcerptElement(item, def);
     }
 
     if (type === 'location') {
@@ -733,12 +783,14 @@ var isPriority = priority === true || imgIndex < 3;
     var link = disp.cardLink !== false;
     var card = el(link ? 'a' : 'div', {
       class: qCardClass('cb-card', 'qb-card'),
-      'data-sqb-index': String(index),
+      'data-cb-index': String(index),
+      'data-qb-index': String(index),
     });
 
     if (link) {
       card.href = item.fullUrl;
-      if (disp.cardLinkNewTab) {
+      var openInNewTab = disp.openInNewTab === true || cfg.openInNewTab === true;
+      if (openInNewTab) {
         card.target = '_blank';
         card.rel = 'noopener noreferrer';
       }
@@ -833,8 +885,7 @@ var isPriority = priority === true || imgIndex < 3;
     });
 
     if (disp.excerpt !== false && item.excerpt) {
-      var ep = el('p', { class: qCardClass('cb-card__excerpt', 'qb-card__excerpt') });
-      ep.textContent = item.excerpt;
+      var ep = buildExcerptElement(item, { tag: 'div' });
       body.appendChild(ep);
     }
 
@@ -918,7 +969,7 @@ var isPriority = priority === true || imgIndex < 3;
     };
   }
 
-  var SQB_TZ = (function() {
+  var QUERY_TZ = (function() {
     try {
       var ctx = window.Static && window.Static.SQUARESPACE_CONTEXT;
       return (ctx && ctx.websiteTimeZone) ? ctx.websiteTimeZone : null;
@@ -975,7 +1026,7 @@ var isPriority = priority === true || imgIndex < 3;
         return capitalize(dt.toLocaleDateString(loc2, format));
       }
 
-      var tzOpt = SQB_TZ ? { timeZone: SQB_TZ } : {};
+      var tzOpt = QUERY_TZ ? { timeZone: QUERY_TZ } : {};
 
       if (format === 'time' && d.hour !== null) {
         return dt.toLocaleTimeString(loc2, Object.assign({
@@ -1447,13 +1498,24 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
         }
       });
 
-      ['data-sqb-key', 'data-sqb-label', 'data-sqb-tab'].forEach(function(attr) {
+      var previousCustomClasses = panel.getAttribute('data-cb-classes') || '';
+      removeUiClasses(panel, previousCustomClasses);
+
+      ['data-cb-key', 'data-qb-key', 'data-cb-label', 'data-qb-label', 'data-cb-tab', 'data-qb-tab'].forEach(function(attr) {
         if (ownerBlock.hasAttribute(attr)) {
           panel.setAttribute(attr, ownerBlock.getAttribute(attr));
         } else {
           panel.removeAttribute(attr);
         }
       });
+
+      var customClasses = ownerBlock.getAttribute('data-cb-classes') || '';
+      if (customClasses) {
+        addUiClasses(panel, customClasses);
+        panel.setAttribute('data-cb-classes', customClasses);
+      } else {
+        panel.removeAttribute('data-cb-classes');
+      }
 
       Array.from(ownerBlock.classList).forEach(function(c) {
         if (
@@ -1532,7 +1594,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 12. FILTRES UI
    * ════════════════════════════════════ */
 
-  function buildFilterBar(baseItems, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock) {
+  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock, ensureFilterOptions) {
     if (cfg.filters === false) return null;
 
     var fc = cfg.filters || {};
@@ -1573,6 +1635,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var toggleBtn = null;
     var panelClearBtn = null;
     var clearAllBtn = null;
+
+    function getBaseItems() {
+      return typeof baseItemsOrGetter === 'function'
+        ? (baseItemsOrGetter() || [])
+        : (baseItemsOrGetter || []);
+    }
 
     function emit() {
       var t = {};
@@ -1647,7 +1715,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       if (!toggleBtn) return;
 
       var n = countActive();
-      var badge = toggleBtn.querySelector('.qb-mobile-toggle-badge');
+      var badge = toggleBtn.querySelector('.qb-mobile-toggle__badge, .cb-mobile-toggle__badge');
 
       if (n > 0) {
         if (!badge) {
@@ -1662,7 +1730,8 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function tabPool() {
-      return state.tab ? applyTabFilter(baseItems, state.tab) : baseItems;
+      var items = getBaseItems();
+      return state.tab ? applyTabFilter(items, state.tab) : items;
     }
 
     function resetSec() {
@@ -1917,10 +1986,14 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           resetSec();
 
           if (onTabChange) onTabChange(tab);
-          if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
 
-          rebuildSecondary();
-          emit();
+          Promise.resolve(ensureFilterOptions ? ensureFilterOptions(tabPool) : null).catch(function(err) {
+            if (cfg.debug) console.warn('[QueryBlock]', cfg.key, 'filter options fetch failed', err);
+          }).then(function() {
+            if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
+            rebuildSecondary();
+            emit();
+          });
         });
 
         tabGroup.appendChild(btn);
@@ -2042,6 +2115,12 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       }
     }
 
+    wrapper.qbRebuildSecondary = function() {
+      rebuildSecondary();
+      updateToggleBadge();
+      if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
+    };
+
     return wrapper;
   }
 
@@ -2049,7 +2128,45 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 13. RUNNER
    * ════════════════════════════════════ */
 
+  function normalizeCollectionRef(ref) {
+    if (!ref) return null;
+    if (typeof ref === 'string') return { path: ref };
+    if (ref.path) return ref;
+    if (ref.url) return Object.assign({}, ref, { path: ref.url });
+    return null;
+  }
+
+  function normalizeConfig(raw) {
+    var cfg = Object.assign({}, raw || {});
+    var refs = Array.isArray(cfg.sourceCollection)
+      ? cfg.sourceCollection
+      : (cfg.sourceCollection ? [cfg.sourceCollection] : []);
+
+    cfg.sources = refs.map(normalizeCollectionRef).filter(Boolean);
+
+    cfg.classes = (cfg.classes && typeof cfg.classes === 'object')
+      ? (cfg.classes.block || '')
+      : (typeof cfg.classes === 'string' ? cfg.classes : '');
+
+    if (cfg.openInNewTab !== undefined) {
+      cfg.display = Object.assign({}, cfg.display || {});
+      if (cfg.display.openInNewTab === undefined) cfg.display.openInNewTab = cfg.openInNewTab;
+    }
+
+    cfg.performance = Object.assign({
+      lazyInit: true,
+      maxPages: 1,
+      progressiveMaxPages: 'all',
+      sessionCache: true,
+      sessionCacheTTL: 300,
+      domBatchSize: 6,
+    }, cfg.performance || {});
+
+    return cfg;
+  }
+
   async function runConfig(cfg) {
+  cfg = normalizeConfig(cfg);
   if (!cfg || cfg.enabled === false) return;
 
   var target = document.querySelector(cfg.target || '');
@@ -2082,19 +2199,31 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
 
     target.classList.add('cb-block');
     target.classList.add('qb-block');
-    target.setAttribute('data-sqb-key', cfg.key || 'sqb');
+    target.setAttribute('data-cb-key', cfg.key || 'query');
+    target.setAttribute('data-qb-key', cfg.key || 'query');
 
     if (cfg.key && !target.id) target.id = 'sqb-' + cfg.key;
-    if (cfg.label) target.setAttribute('data-sqb-label', cfg.label);
+    if (cfg.label) {
+      target.setAttribute('data-cb-label', cfg.label);
+      target.setAttribute('data-qb-label', cfg.label);
+    } else {
+      target.removeAttribute('data-cb-label');
+      target.removeAttribute('data-qb-label');
+    }
+
     if (cfg.key) {
       target.classList.add('cb--' + cfg.key);
       target.classList.add('qb--' + cfg.key);
     }
 
     if (cfg.classes) {
-      cfg.classes.trim().split(/\s+/).forEach(function(c) {
+      var customClasses = cfg.classes.trim();
+      target.setAttribute('data-cb-classes', customClasses);
+      customClasses.split(/\s+/).forEach(function(c) {
         if (c) target.classList.add(c);
       });
+    } else {
+      target.removeAttribute('data-cb-classes');
     }
 
     if (dispLayout === 'list') target.classList.add('cb-block--list', 'qb-block--list');
@@ -2119,7 +2248,12 @@ requestAnimationFrame(function() {
     var isFetchingMore = false;
 
     function canFetchMorePages(reason) {
-      if (mode === 'none' && reason !== 'filter-empty' && reason !== 'idle') return false;
+      if (
+        mode === 'none' &&
+        reason !== 'filter-empty' &&
+        reason !== 'filter-options' &&
+        reason !== 'idle'
+      ) return false;
       if (allRemoteLoaded) return false;
       if (progressiveMaxPages === 'all') return true;
       return Number(loadedMaxPages || 1) < Number(progressiveMaxPages || 1);
@@ -2206,6 +2340,9 @@ requestAnimationFrame(function() {
 
       try {
         rawItems = await loadSources(loadedMaxPages);
+        if (filterWrapper && typeof filterWrapper.qbRebuildSecondary === 'function') {
+          filterWrapper.qbRebuildSecondary();
+        }
         return true;
       } catch (err) {
         if (cfg.debug) console.warn('[QueryBlock]', cfg.key, err);
@@ -2213,6 +2350,69 @@ requestAnimationFrame(function() {
         return false;
       } finally {
         isFetchingMore = false;
+      }
+    }
+
+    function getConfiguredFilterPrefixes() {
+      var seen = {};
+      var out = [];
+
+      function add(list) {
+        normalizePrefixes(list, (fc && fc.layout) || 'pills').forEach(function(pd) {
+          if (!pd.prefix) return;
+          var key = norm(pd.prefix);
+          if (seen[key]) return;
+          seen[key] = true;
+          out.push(pd.prefix);
+        });
+      }
+
+      if (fc && fc.tagPrefixes) add(fc.tagPrefixes);
+
+      if (fc && Array.isArray(fc.tabs)) {
+        fc.tabs.forEach(function(tab) {
+          if (tab && tab.tagPrefixes) add(tab.tagPrefixes);
+        });
+      }
+
+      return out;
+    }
+
+    function hasConfiguredFilterOptions(items, prefixes) {
+      if (!prefixes.length) return true;
+
+      return prefixes.every(function(prefix) {
+        return (items || []).some(function(item) {
+          return getTagValuesByPrefix(item, prefix).length > 0;
+        });
+      });
+    }
+
+    function getActiveFilterPrefixes() {
+      var list = currentTagPrefixes || (fc && fc.tagPrefixes) || [];
+      return normalizePrefixes(list, (fc && fc.layout) || 'pills').map(function(pd) {
+        return pd.prefix;
+      }).filter(Boolean);
+    }
+
+    async function ensureConfiguredFilterOptions(poolGetter, prefixesGetter) {
+      var getPool = typeof poolGetter === 'function'
+        ? poolGetter
+        : function() { return rawItems; };
+      var getPrefixes = typeof prefixesGetter === 'function'
+        ? prefixesGetter
+        : getConfiguredFilterPrefixes;
+      var guard = 0;
+
+      while (
+        getPrefixes().length &&
+        !hasConfiguredFilterOptions(getPool(), getPrefixes()) &&
+        canFetchMorePages('filter-options') &&
+        guard < 20
+      ) {
+        guard++;
+        var changed = await loadNextRemotePage('filter-options');
+        if (!changed) break;
       }
     }
 
@@ -2247,6 +2447,7 @@ requestAnimationFrame(function() {
 
     try {
       rawItems = await loadSources(loadedMaxPages);
+      await ensureConfiguredFilterOptions();
     } catch (err) {
       if (cfg.debug) console.warn('[QueryBlock]', cfg.key, err);
 
@@ -2335,9 +2536,11 @@ requestAnimationFrame(function() {
         var tabSlug = slugify(tabLabel);
         target.classList.add('cb-tab--' + tabSlug);
         target.classList.add('qb-tab--' + tabSlug);
-        target.setAttribute('data-sqb-tab', tabSlug);
+        target.setAttribute('data-cb-tab', tabSlug);
+        target.setAttribute('data-qb-tab', tabSlug);
       } else {
-        target.removeAttribute('data-sqb-tab');
+        target.removeAttribute('data-cb-tab');
+        target.removeAttribute('data-qb-tab');
       }
     }
 
@@ -2364,7 +2567,7 @@ requestAnimationFrame(function() {
     }
 
     var filterWrapper = buildFilterBar(
-      rawItems,
+      function() { return rawItems; },
       cfg,
       function(f) {
         if (ioInfinite) {
@@ -2380,7 +2583,10 @@ requestAnimationFrame(function() {
       function() {
         return currentTagPrefixes;
       },
-      target
+      target,
+      function(poolGetter) {
+        return ensureConfiguredFilterOptions(poolGetter, getActiveFilterPrefixes);
+      }
     );
 
     var gridClass = dispLayout === 'list'
@@ -2429,7 +2635,8 @@ requestAnimationFrame(function() {
       }
     }
 
-    var hook = window.SQB_HOOKS && window.SQB_HOOKS[cfg.key];
+    var hookRegistry = window.QUERY_BLOCK_HOOKS || {};
+    var hook = hookRegistry && hookRegistry[cfg.key];
 
     function render(fromFilter, fromPagination) {
       if (ioInfinite) {
@@ -2620,6 +2827,7 @@ if (canFetchMorePages()) {
   }
 
 function scheduleConfig(cfg) {
+  cfg = normalizeConfig(cfg);
   if (!cfg || cfg.enabled === false) return;
 
   var target = document.querySelector(cfg.target || '');
@@ -2663,11 +2871,12 @@ function scheduleConfig(cfg) {
  function init() {
   var configs = Array.isArray(window.QUERY_BLOCK_CONFIGS)
     ? window.QUERY_BLOCK_CONFIGS
-    : (Array.isArray(window.SQB_CONFIGS) ? window.SQB_CONFIGS : []);
+    : [];
 
   if (!configs.length) return;
 
   configs = configs
+    .map(normalizeConfig)
     .filter(function(cfg) {
       if (!cfg || cfg.enabled === false) return false;
       if (!cfg.target) return false;
