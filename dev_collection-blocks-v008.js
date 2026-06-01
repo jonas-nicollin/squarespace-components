@@ -1,8 +1,8 @@
 (function() {
   'use strict';
 
-  var VERSION = '0.2';
-  var STORE_KEY_PREFIX = 'collection-blocks::v0.2::';
+  var VERSION = '0.3';
+  var STORE_KEY_PREFIX = 'collection-blocks::v0.3::';
 
   var memoryCache = new Map();
   var pendingFetches = new Map();
@@ -536,18 +536,76 @@
     return norm(str).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
-  function cleanHTML(str) {
+  function cleanTextSpacing(text, preserveBreaks) {
+    text = String(text || '')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\r\n?/g, '\n');
+
+    if (preserveBreaks) {
+      return text
+        .replace(/[ \t\f\v]+/g, ' ')
+        .replace(/[ \t]*\n[ \t]*/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    }
+
+    return text.replace(/\s+/g, ' ').trim();
+  }
+
+  function htmlToTextPreservingBreaks(str) {
     if (typeof document === 'undefined' || !document.createElement) {
-      return String(str || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      return String(str || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|li|h[1-6]|tr|section|article)>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ');
+    }
+
+    var blockTags = {
+      ADDRESS: true, ARTICLE: true, ASIDE: true, BLOCKQUOTE: true, DIV: true,
+      FIGCAPTION: true, FIGURE: true, FOOTER: true, H1: true, H2: true,
+      H3: true, H4: true, H5: true, H6: true, HEADER: true, HR: true,
+      LI: true, MAIN: true, NAV: true, P: true, PRE: true, SECTION: true,
+      TABLE: true, TR: true
+    };
+
+    var root = document.createElement('div');
+    root.innerHTML = String(str || '');
+
+    function walk(node) {
+      if (node.nodeType === 3) return node.nodeValue || '';
+      if (node.nodeType !== 1 && node.nodeType !== 11) return '';
+      if (node.nodeType === 1 && node.tagName === 'BR') return '\n';
+
+      var out = '';
+      node.childNodes.forEach(function(child) {
+        out += walk(child);
+      });
+
+      if (node.nodeType === 1 && blockTags[node.tagName]) out += '\n';
+      return out;
+    }
+
+    return walk(root);
+  }
+
+  function cleanHTML(str, options) {
+    options = options || {};
+
+    if (options.preserveLineBreaks) {
+      return cleanTextSpacing(htmlToTextPreservingBreaks(str), true);
+    }
+
+    if (typeof document === 'undefined' || !document.createElement) {
+      return cleanTextSpacing(String(str || '').replace(/<[^>]+>/g, ' '), false);
     }
 
     var d = document.createElement('div');
     d.innerHTML = String(str || '');
-    return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
+    return cleanTextSpacing(d.textContent || d.innerText || '', false);
   }
 
-  function truncate(str, max) {
-    var s = cleanHTML(str);
+  function truncate(str, max, options) {
+    var s = cleanHTML(str, options);
     var limit = Number(max || 0);
 
     if (!limit || !s || s.length <= limit) return s;
@@ -863,10 +921,101 @@
     return node;
   }
 
+  function sanitizeRichHTML(html) {
+    var allowedTags = /^(br|p|h[1-6]|strong|em|b|i|u|a|ul|ol|li|span|div)$/i;
+    var allowedAttrs = {
+      A: ['href', 'target', 'rel', 'title', 'class'],
+      P: ['class', 'style', 'data-rte-preserve-empty'],
+      H1: ['class'],
+      H2: ['class'],
+      H3: ['class'],
+      H4: ['class'],
+      H5: ['class'],
+      H6: ['class'],
+      SPAN: ['class'],
+      DIV: ['class'],
+      UL: ['class'],
+      OL: ['class'],
+      LI: ['class']
+    };
+
+    if (typeof document === 'undefined' || !document.createElement) {
+      return escapeHTML(cleanHTML(html, { preserveLineBreaks: true }));
+    }
+
+    var root = document.createElement('div');
+    root.innerHTML = String(html || '');
+
+    function cleanNode(node) {
+      Array.prototype.slice.call(node.childNodes).forEach(function(child) {
+        if (child.nodeType !== 1) return;
+
+        if (!allowedTags.test(child.tagName)) {
+          child.parentNode.replaceChild(document.createTextNode(child.textContent || ''), child);
+          return;
+        }
+
+        var keep = allowedAttrs[child.tagName] || [];
+        Array.prototype.slice.call(child.attributes).forEach(function(attr) {
+          var name = attr.name.toLowerCase();
+          if (name.indexOf('on') === 0 || keep.indexOf(attr.name) === -1) {
+            child.removeAttribute(attr.name);
+          }
+        });
+
+        if (child.tagName === 'A') {
+          var href = child.getAttribute('href') || '';
+          if (/^\s*javascript:/i.test(href)) child.removeAttribute('href');
+          if (child.getAttribute('target') === '_blank') child.setAttribute('rel', 'noopener noreferrer');
+        }
+
+        cleanNode(child);
+      });
+    }
+
+    cleanNode(root);
+    return root.innerHTML;
+  }
+
+  function appendLineElements(el, text, options) {
+    options = options || {};
+
+    var lines = String(text || '').split(/\n/);
+    var role = options.role || 'title';
+    var hasLine = false;
+
+    lines.forEach(function(line) {
+      if (!line && options.keepEmptyLines !== true) return;
+
+      var node = createEl(options.lineTag || 'span', {
+        class: classNames(cardClass(role + '-line', options.prefix), options.lineClassName)
+      });
+
+      if (line) {
+        node.textContent = line;
+      } else {
+        node.innerHTML = '&nbsp;';
+        node.setAttribute('aria-hidden', 'true');
+      }
+
+      el.appendChild(node);
+      hasLine = true;
+    });
+
+    if (!hasLine && text) el.textContent = text;
+  }
+
   function buildTextElement(text, options) {
     options = options || {};
 
-    var value = options.clean === false ? String(text || '') : cleanHTML(text);
+    var raw = options.html != null ? options.html : text;
+    var richHTML = options.richHTML === true || options.htmlMode === 'rich';
+    var value = richHTML
+      ? cleanHTML(raw, { preserveLineBreaks: true })
+      : (options.clean === false
+        ? String(text || '')
+        : cleanHTML(text, { preserveLineBreaks: options.preserveLineBreaks === true }));
+
     if (!value && options.allowEmpty !== true) return null;
 
     var el = createEl(options.tag || 'div', {
@@ -879,7 +1028,14 @@
       });
     }
 
-    el.textContent = value;
+    if (richHTML) {
+      el.innerHTML = sanitizeRichHTML(raw);
+    } else if (options.preserveLineBreaks === true && options.lineWrap !== false) {
+      appendLineElements(el, value, options);
+    } else {
+      el.textContent = value;
+    }
+
     return el;
   }
 
@@ -1122,11 +1278,21 @@
     if (type === 'excerpt') {
       var excerpt = item && item.excerpt;
       if (!excerpt) return null;
-      return buildTextElement(descriptor.max ? truncate(excerpt, descriptor.max) : excerpt, {
+      var richExcerpt = descriptor.richHTML === true || descriptor.htmlMode === 'rich' || descriptor.excerptMode === 'rich';
+      var rawExcerpt = descriptor.html != null
+        ? descriptor.html
+        : (item.excerptRaw || item.excerptHTML || (item.rawItem && item.rawItem.excerpt) || excerpt);
+
+      return buildTextElement(descriptor.max ? truncate(excerpt, descriptor.max, { preserveLineBreaks: true }) : excerpt, {
         prefix: prefix,
         role: 'excerpt',
-        tag: descriptor.tag || 'p',
-        className: descriptor.className
+        tag: descriptor.tag || 'div',
+        className: descriptor.className,
+        preserveLineBreaks: richExcerpt !== true,
+        richHTML: richExcerpt,
+        html: rawExcerpt,
+        lineTag: descriptor.lineTag || 'span',
+        lineClassName: descriptor.lineClassName
       });
     }
 
@@ -1211,6 +1377,7 @@
     getImageBase: getImageBase,
     buildSrcset: buildSrcset,
     escapeHTML: escapeHTML,
+    sanitizeRichHTML: sanitizeRichHTML,
     classNames: classNames,
     cardClass: cardClass,
     tagFieldModifier: tagFieldModifier,
@@ -1244,6 +1411,7 @@
     getTagValuesByPrefix: getTagValuesByPrefix,
     buildSrcset: buildSrcset,
     escapeHTML: escapeHTML,
+    sanitizeRichHTML: sanitizeRichHTML,
     classNames: classNames,
     cardClass: cardClass,
     tagFieldModifier: tagFieldModifier,
