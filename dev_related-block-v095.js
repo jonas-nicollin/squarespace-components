@@ -1,14 +1,47 @@
 (function() {
     "use strict";
     // ── Rétrocompatibilité ─────────────────────────────────────────────
-    const ALL_CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS) ? window.RELATED_BLOCK_CONFIGS : Array.isArray(window.COLLECTION_RELATED_BLOCK_CONFIGS) ? window.COLLECTION_RELATED_BLOCK_CONFIGS : [];
+    const ALL_CONFIGS = Array.isArray(window.RELATED_BLOCK_CONFIGS) ? window.RELATED_BLOCK_CONFIGS : [];
     if (!ALL_CONFIGS.length) return;
     // Extraire l'entrée _shared (doit être en première position)
     const SHARED_CONFIG = ALL_CONFIGS[0]?._shared === true ? ALL_CONFIGS[0] : null;
-    const CONFIGS = SHARED_CONFIG ? ALL_CONFIGS.slice(1) : ALL_CONFIGS;
+    const CONFIGS = (SHARED_CONFIG ? ALL_CONFIGS.slice(1) : ALL_CONFIGS).map(normalizeConfig);
     if (!CONFIGS.length && !SHARED_CONFIG) return;
     // Mode développement : désactive tous les caches quand _shared.devMode === true
     const DEV_MODE = SHARED_CONFIG?.devMode === true;
+    function normalizeCollectionRef(ref) {
+        if (!ref) return null;
+        if (typeof ref === "string") return {
+            path: ref
+        };
+        if (ref.path) return ref;
+        if (ref.url) return {
+            ...ref,
+            path: ref.url
+        };
+        return null;
+    }
+    function normalizeConfig(raw) {
+        const cfg = {
+            ...(raw || {})
+        };
+        const source = normalizeCollectionRef(cfg.sourceCollection);
+        if (source) cfg.sourceCollection = source;
+        if (cfg.currentItem) {
+            const currentSource = normalizeCollectionRef(cfg.currentItem.sourceCollection);
+            if (currentSource) cfg.currentItem = {
+                ...cfg.currentItem,
+                sourceCollection: currentSource
+            };
+        }
+        if (cfg.openInNewTab !== undefined) {
+            cfg.display = {
+                ...(cfg.display || {})
+            };
+            if (cfg.display.openInNewTab === undefined) cfg.display.openInNewTab = cfg.openInNewTab;
+        }
+        return cfg;
+    }
     function addClasses(el, classes) {
         String(classes || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => el.classList.add(cls));
         return el;
@@ -230,15 +263,26 @@
         txt.innerHTML = String(str || "");
         return txt.value;
     }
-    function cleanText(str) {
-        const utils = getCollectionUtils();
-        if (utils && typeof utils.cleanHTML === "function") return utils.cleanHTML(str);
-        return decodeHtmlEntities(str).replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ").replace(/\u00A0/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    function normalizeTextSpacing(text, preserveBreaks) {
+        text = String(text || "").replace(/\u00A0/g, " ").replace(/\r\n?/g, "\n");
+        if (preserveBreaks) {
+            return text.replace(/[ \t\f\v]+/g, " ").replace(/[ \t]*\n[ \t]*/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+        }
+        return text.replace(/\s+/g, " ").trim();
     }
-    function truncateText(str, maxLength) {
+    function cleanText(str, options = {}) {
         const utils = getCollectionUtils();
-        if (utils && typeof utils.truncate === "function") return utils.truncate(str, maxLength);
-        const text = cleanText(str);
+        if (utils && typeof utils.cleanHTML === "function") return utils.cleanHTML(str, options);
+        let html = decodeHtmlEntities(str);
+        if (options.preserveLineBreaks) {
+            html = html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h[1-6]|tr|section|article)>/gi, "\n");
+        }
+        return normalizeTextSpacing(html.replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ").replace(/<[^>]+>/g, " "), options.preserveLineBreaks);
+    }
+    function truncateText(str, maxLength, options = {}) {
+        const utils = getCollectionUtils();
+        if (utils && typeof utils.truncate === "function") return utils.truncate(str, maxLength, options);
+        const text = cleanText(str, options);
         if (!text || text.length <= maxLength) return text;
         const sliced = text.slice(0, maxLength);
         const lastSpace = sliced.lastIndexOf(" ");
@@ -313,14 +357,14 @@
         Array.from(document.body.classList).forEach(cls => {
             if (cls.indexOf(BODY_CLASS_PREFIX) === 0) document.body.classList.remove(cls);
         });
-        const blocks = Array.from(document.querySelectorAll(".rb-block[data-related-key]"));
+        const blocks = Array.from(document.querySelectorAll(".rb-block[data-rb-key]"));
         if (!blocks.length) {
             document.body.classList.remove("has-rb-blocks");
             return;
         }
         document.body.classList.add("has-rb-blocks");
         blocks.forEach(block => {
-            const key = String(block.dataset.relatedKey || "").trim();
+            const key = String(block.dataset.rbKey || "").trim();
             if (key) document.body.classList.add(getBodyRelatedBlockClassName(key));
         });
     }
@@ -342,13 +386,13 @@
     }
     function getItemExcerpt(item, maxLength) {
         // maxLength: nombre > 0 pour tronquer, 0 ou false pour tout afficher
-        const excerptText = cleanText(item?.excerpt || "");
+        const excerptText = cleanText(item?.excerpt || "", { preserveLineBreaks: true });
         if (excerptText) {
-            return maxLength ? truncateText(excerptText, maxLength) : excerptText;
+            return maxLength ? truncateText(excerptText, maxLength, { preserveLineBreaks: true }) : excerptText;
         }
-        const bodyText = cleanText(item?.body || "");
+        const bodyText = cleanText(item?.body || "", { preserveLineBreaks: true });
         if (bodyText) {
-            return maxLength ? truncateText(bodyText, maxLength) : bodyText;
+            return maxLength ? truncateText(bodyText, maxLength, { preserveLineBreaks: true }) : bodyText;
         }
         return "";
     }
@@ -394,6 +438,7 @@
             categories: Array.isArray(item.categories) ? item.categories.map(c => cleanText(c)).filter(Boolean) : [],
             tags: Array.isArray(item.tags) ? item.tags.map(t => cleanText(t)).filter(Boolean) : [],
             excerpt: getItemExcerpt(item, getExcerptMaxLength(CFG)),
+            excerptRaw: item.excerpt || item.body || "",
             locationText: getItemLocationText(item),
             displayIndex: Number(item.displayIndex || 999999),
             timestamp: getItemTimestamp(item),
@@ -727,11 +772,9 @@
         // Options de cache depuis _shared si définies, sinon depuis le bloc
         const sharedCache = SHARED_CONFIG?.cache || {};
         const perf = CFG?.performance || {};
-        const sharedSession = sharedCache.sessionCache ?? sharedCache.useSessionCache;
-        const blockSession = perf.sessionCache ?? perf.useCollectionSessionCache;
         return {
-            useMemoryCache: sharedCache.memoryCache ?? sharedCache.useMemoryCache ?? perf.memoryCache ?? perf.useCollectionMemoryCache !== false,
-            useSessionCache: sharedSession ?? blockSession === true,
+            useMemoryCache: sharedCache.memoryCache ?? perf.memoryCache ?? true,
+            useSessionCache: sharedCache.sessionCache ?? perf.sessionCache ?? true,
             ttl: sharedCache.sessionCacheTTL ?? sharedCache.ttl ?? perf.sessionCacheTTL ?? perf.ttl ?? 900
         };
     }
@@ -941,19 +984,34 @@
         el.textContent = cleanText(item.title || "");
         return el;
     }
-    function buildExcerptElement(item) {
+    function buildExcerptElement(item, CFG, descriptor) {
         if (!item.excerpt) return null;
+        descriptor = descriptor || {};
+        const richExcerpt = descriptor.richHTML === true || descriptor.htmlMode === "rich" || descriptor.excerptMode === "rich" || CFG.display?.excerptMode === "rich" || CFG.display?.excerptRichHTML === true;
         const utils = getCollectionUtils();
         if (utils && typeof utils.buildTextElement === "function") {
             return utils.buildTextElement(item.excerpt, {
                 prefix: "rb-card",
                 role: "excerpt",
-                tag: "div"
+                tag: descriptor.tag || "div",
+                className: descriptor.className,
+                preserveLineBreaks: richExcerpt !== true,
+                richHTML: richExcerpt,
+                html: item.excerptRaw || item.rawItem?.excerpt || item.excerpt,
+                lineTag: descriptor.lineTag || "span",
+                lineClassName: descriptor.lineClassName
             });
         }
         const el = document.createElement("div");
-        el.className = "cb-card__excerpt rb-card__excerpt";
-        el.textContent = cleanText(item.excerpt);
+        el.className = "cb-card__excerpt rb-card__excerpt" + (descriptor.className ? " " + descriptor.className : "");
+        cleanText(item.excerpt, { preserveLineBreaks: true }).split(/\n/).forEach(line => {
+            if (!line) return;
+            const lineEl = document.createElement(descriptor.lineTag || "span");
+            lineEl.className = "cb-card__excerpt-line rb-card__excerpt-line" + (descriptor.lineClassName ? " " + descriptor.lineClassName : "");
+            lineEl.textContent = line;
+            el.appendChild(lineEl);
+        });
+        if (!el.hasChildNodes()) el.textContent = cleanText(item.excerpt, { preserveLineBreaks: true });
         return el;
     }
     function buildLocationElement(item) {
@@ -1032,7 +1090,7 @@
             return [ buildTitleElement(item) ];
         }
         if (type === "excerpt" && CFG.display?.showExcerpt) {
-            const el = buildExcerptElement(item);
+            const el = buildExcerptElement(item, CFG, descriptor);
             return el ? [ el ] : [];
         }
         if (type === "location" && CFG.display?.showLocation) {
@@ -1142,6 +1200,10 @@
         const card = document.createElement("a");
         card.className = "cb-card rb-card";
         card.href = item.fullUrl || CFG.sourceCollection.path + "/" + item.urlId;
+        if (CFG.display?.openInNewTab === true || CFG.openInNewTab === true) {
+            card.target = "_blank";
+            card.rel = "noopener noreferrer";
+        }
         extraClasses.forEach(cls => card.classList.add(cls + "__item"));
         // Marquer l'item courant (ex: pour la bande parcours avec excludeCurrentItem: false)
         if (currentItem) {
@@ -1190,9 +1252,12 @@
     function buildBlockShell(CFG) {
         const section = document.createElement("section");
         section.className = "cb-block rb-block cb-block--loading rb-block--loading";
-        section.dataset.relatedKey = CFG.key;
+        section.dataset.cbKey = CFG.key;
+        section.dataset.rbKey = CFG.key;
         section.id = assignBlockId(CFG.key);
-        String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => section.classList.add(cls));
+        const blockClasses = String(CFG.classes?.block || "").trim();
+        if (blockClasses) section.dataset.cbClasses = blockClasses;
+        blockClasses.split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => section.classList.add(cls));
         const inner = document.createElement("div");
         inner.className = "cb-block__inner rb-block__inner";
         if (!CFG.loading?.hideLoader) inner.appendChild(createLoader());
@@ -1248,9 +1313,12 @@
     function buildBlock(items, CFG, currentItem) {
         const section = document.createElement("section");
         section.className = "cb-block rb-block cb-block--ready rb-block--ready";
-        section.dataset.relatedKey = CFG.key;
+        section.dataset.cbKey = CFG.key;
+        section.dataset.rbKey = CFG.key;
         section.id = assignBlockId(CFG.key);
-        String(CFG.classes?.block || "").split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => section.classList.add(cls));
+        const blockClasses = String(CFG.classes?.block || "").trim();
+        if (blockClasses) section.dataset.cbClasses = blockClasses;
+        blockClasses.split(/\s+/).map(s => s.trim()).filter(Boolean).forEach(cls => section.classList.add(cls));
         const inner = document.createElement("div");
         inner.className = "cb-block__inner rb-block__inner";
         const heading = buildHeadingElement(items, CFG, false);
@@ -1273,7 +1341,7 @@
         return document.querySelector(selector || "");
     }
     function alreadyInjected(target, cfgKey) {
-        return !!target.querySelector(`:scope > .rb-block[data-related-key="${cfgKey}"]`);
+        return !!target.querySelector(`:scope > .rb-block[data-rb-key="${cfgKey}"]`);
     }
     function getRelatedBlockOrder() {
         if (Array.isArray(SHARED_CONFIG?.blockOrder) && SHARED_CONFIG.blockOrder.length) {
@@ -1288,11 +1356,11 @@
     }
     function reorderRelatedBlocks(target) {
         if (!target) return;
-        const blocks = Array.from(target.querySelectorAll(":scope > .rb-block[data-related-key]"));
+        const blocks = Array.from(target.querySelectorAll(":scope > .rb-block[data-rb-key]"));
         if (blocks.length < 2) return;
         blocks.sort((a, b) => {
-            const ai = getRelatedBlockOrderIndex(a.dataset.relatedKey || "");
-            const bi = getRelatedBlockOrderIndex(b.dataset.relatedKey || "");
+            const ai = getRelatedBlockOrderIndex(a.dataset.rbKey || "");
+            const bi = getRelatedBlockOrderIndex(b.dataset.rbKey || "");
             return ai - bi;
         }).forEach(block => target.appendChild(block));
     }
@@ -1320,8 +1388,8 @@
                 matchBy: "pathname",
                 sourceCollection: null
             },
+            target: "",
             insertion: {
-                targetSelector: "",
                 mode: "append"
             },
             heading: "",
@@ -1395,11 +1463,10 @@
                 useSessionStorage: true,
                 maxPages: 1,
                 progressiveMaxPages: 'all',
-                useCollectionMemoryCache: true,
-                useCollectionSessionCache: false,
-                sessionCache: undefined,
-                sessionCacheTTL: 900,
-                domBatchSize: 8
+                memoryCache: true,
+                sessionCache: true,
+                sessionCacheTTL: 300,
+                domBatchSize: 6
             }
         }, CFG || {});
         if (CFG.enabled === false) return null;
@@ -1425,7 +1492,7 @@ function getNextPagesValue(currentPages, maxPages) {
   return Math.min(Number(currentPages || 1) + 1, Number(maxPages || 1));
 }
         async function apply() {
-            const target = getInsertTarget(CFG.insertion?.targetSelector);
+            const target = getInsertTarget(CFG.target);
             if (!target) return false;
             if (alreadyInjected(target, CFG.key)) {
                 syncBodyRelatedBlockClasses();
@@ -1584,7 +1651,7 @@ finalItems = applyFallbackFill(finalItems, items, currentItem, {
             const ok = await apply();
             if (ok) return;
             observer = new MutationObserver(async () => {
-                const target = getInsertTarget(CFG.insertion?.targetSelector);
+                const target = getInsertTarget(CFG.target);
                 if (!target) return;
                 if (alreadyInjected(target, CFG.key)) {
                     syncBodyRelatedBlockClasses();
@@ -1676,7 +1743,7 @@ finalItems = applyFallbackFill(finalItems, items, currentItem, {
         return true;
     }
     function startRunnerWhenNearTarget(runner, CFG) {
-        const target = getInsertTarget(CFG.insertion?.targetSelector);
+        const target = getInsertTarget(CFG.target);
         if (!target || !shouldLazyStartRelated()) {
             runner.start();
             return;
