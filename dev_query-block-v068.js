@@ -48,36 +48,20 @@
     return norm(str).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
-  function cleanTextSpacing(text, preserveBreaks) {
-    text = String(text || '')
-      .replace(/\u00A0/g, ' ')
-      .replace(/\r\n?/g, '\n');
-
-    if (preserveBreaks) {
-      return text
-        .replace(/[ \t\f\v]+/g, ' ')
-        .replace(/[ \t]*\n[ \t]*/g, '\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-    }
-
-    return text.replace(/\s+/g, ' ').trim();
-  }
-
-  function cleanHTML(str, options) {
+  function cleanHTML(str) {
     var utils = getCollectionUtils();
-    if (utils && typeof utils.cleanHTML === 'function') return utils.cleanHTML(str, options);
+    if (utils && typeof utils.cleanHTML === 'function') return utils.cleanHTML(str);
 
     var d = document.createElement('div');
     d.innerHTML = String(str || '');
-    return cleanTextSpacing(d.textContent || d.innerText || '', options && options.preserveLineBreaks);
+    return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
   }
 
-  function truncate(str, max, options) {
+  function truncate(str, max) {
     var utils = getCollectionUtils();
-    if (utils && typeof utils.truncate === 'function') return utils.truncate(str, max, options);
+    if (utils && typeof utils.truncate === 'function') return utils.truncate(str, max);
 
-    var s = cleanHTML(str, options);
+    var s = cleanHTML(str);
     if (!s || s.length <= max) return s;
     var cut = s.slice(0, max), sp = cut.lastIndexOf(' ');
     return (sp > 0 ? cut.slice(0, sp) : cut).trim() + '\u2026';
@@ -377,7 +361,7 @@ async function fetchCollectionState(path, maxPages, useSession, ttl, stripFields
       focalPoint:   focalPoint,
       categories:   (raw.categories || []).map(cleanHTML).filter(Boolean),
       tags:         (raw.tags || []).map(cleanHTML).filter(Boolean),
-      excerpt:      truncate(raw.excerpt || raw.body || '', 160, { preserveLineBreaks: true }),
+      excerpt:      truncate(raw.excerpt || raw.body || '', 160),
       excerptRaw:   raw.excerpt || raw.body || '',
       location:     loc ? cleanHTML(loc.addressTitle || loc.addressLine1 || '') : '',
       displayIndex: Number(raw.displayIndex != null ? raw.displayIndex : 999999),
@@ -754,8 +738,7 @@ var isPriority = priority === true || imgIndex < 3;
 
     if (link) {
       card.href = item.fullUrl;
-      var openInNewTab = disp.openInNewTab === true || cfg.openInNewTab === true;
-      if (openInNewTab) {
+      if (disp.cardLinkNewTab) {
         card.target = '_blank';
         card.rel = 'noopener noreferrer';
       }
@@ -1549,7 +1532,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 12. FILTRES UI
    * ════════════════════════════════════ */
 
-  function buildFilterBar(baseItemsOrGetter, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock, ensureFilterOptions) {
+  function buildFilterBar(baseItems, cfg, onFilter, onTabChange, getTabPrefixes, ownerBlock) {
     if (cfg.filters === false) return null;
 
     var fc = cfg.filters || {};
@@ -1590,12 +1573,6 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     var toggleBtn = null;
     var panelClearBtn = null;
     var clearAllBtn = null;
-
-    function getBaseItems() {
-      return typeof baseItemsOrGetter === 'function'
-        ? (baseItemsOrGetter() || [])
-        : (baseItemsOrGetter || []);
-    }
 
     function emit() {
       var t = {};
@@ -1670,7 +1647,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       if (!toggleBtn) return;
 
       var n = countActive();
-      var badge = toggleBtn.querySelector('.qb-mobile-toggle__badge, .cb-mobile-toggle__badge');
+      var badge = toggleBtn.querySelector('.qb-mobile-toggle-badge');
 
       if (n > 0) {
         if (!badge) {
@@ -1685,8 +1662,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
     }
 
     function tabPool() {
-      var items = getBaseItems();
-      return state.tab ? applyTabFilter(items, state.tab) : items;
+      return state.tab ? applyTabFilter(baseItems, state.tab) : baseItems;
     }
 
     function resetSec() {
@@ -1941,14 +1917,10 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
           resetSec();
 
           if (onTabChange) onTabChange(tab);
+          if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
 
-          Promise.resolve(ensureFilterOptions ? ensureFilterOptions(tabPool) : null).catch(function(err) {
-            if (cfg.debug) console.warn('[QueryBlock]', cfg.key, 'filter options fetch failed', err);
-          }).then(function() {
-            if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
-            rebuildSecondary();
-            emit();
-          });
+          rebuildSecondary();
+          emit();
         });
 
         tabGroup.appendChild(btn);
@@ -2070,12 +2042,6 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
       }
     }
 
-    wrapper.qbRebuildSecondary = function() {
-      rebuildSecondary();
-      updateToggleBadge();
-      if (mobileObj && mobileObj.syncContext) mobileObj.syncContext();
-    };
-
     return wrapper;
   }
 
@@ -2083,45 +2049,7 @@ function appendPlainItemsProgressive(items, cfg, grid, startIndex, batchSize, do
    * 13. RUNNER
    * ════════════════════════════════════ */
 
-  function normalizeCollectionRef(ref) {
-    if (!ref) return null;
-    if (typeof ref === 'string') return { path: ref };
-    if (ref.path) return ref;
-    if (ref.url) return Object.assign({}, ref, { path: ref.url });
-    return null;
-  }
-
-  function normalizeConfig(raw) {
-    var cfg = Object.assign({}, raw || {});
-    var refs = Array.isArray(cfg.sourceCollection)
-      ? cfg.sourceCollection
-      : (cfg.sourceCollection ? [cfg.sourceCollection] : []);
-
-    cfg.sources = refs.map(normalizeCollectionRef).filter(Boolean);
-
-    cfg.classes = (cfg.classes && typeof cfg.classes === 'object')
-      ? (cfg.classes.block || '')
-      : '';
-
-    if (cfg.openInNewTab !== undefined) {
-      cfg.display = Object.assign({}, cfg.display || {});
-      if (cfg.display.openInNewTab === undefined) cfg.display.openInNewTab = cfg.openInNewTab;
-    }
-
-    cfg.performance = Object.assign({
-      lazyInit: true,
-      maxPages: 1,
-      progressiveMaxPages: 'all',
-      sessionCache: true,
-      sessionCacheTTL: 300,
-      domBatchSize: 6,
-    }, cfg.performance || {});
-
-    return cfg;
-  }
-
   async function runConfig(cfg) {
-  cfg = normalizeConfig(cfg);
   if (!cfg || cfg.enabled === false) return;
 
   var target = document.querySelector(cfg.target || '');
@@ -2191,12 +2119,7 @@ requestAnimationFrame(function() {
     var isFetchingMore = false;
 
     function canFetchMorePages(reason) {
-      if (
-        mode === 'none' &&
-        reason !== 'filter-empty' &&
-        reason !== 'filter-options' &&
-        reason !== 'idle'
-      ) return false;
+      if (mode === 'none' && reason !== 'filter-empty' && reason !== 'idle') return false;
       if (allRemoteLoaded) return false;
       if (progressiveMaxPages === 'all') return true;
       return Number(loadedMaxPages || 1) < Number(progressiveMaxPages || 1);
@@ -2283,9 +2206,6 @@ requestAnimationFrame(function() {
 
       try {
         rawItems = await loadSources(loadedMaxPages);
-        if (filterWrapper && typeof filterWrapper.qbRebuildSecondary === 'function') {
-          filterWrapper.qbRebuildSecondary();
-        }
         return true;
       } catch (err) {
         if (cfg.debug) console.warn('[QueryBlock]', cfg.key, err);
@@ -2293,69 +2213,6 @@ requestAnimationFrame(function() {
         return false;
       } finally {
         isFetchingMore = false;
-      }
-    }
-
-    function getConfiguredFilterPrefixes() {
-      var seen = {};
-      var out = [];
-
-      function add(list) {
-        normalizePrefixes(list, (fc && fc.layout) || 'pills').forEach(function(pd) {
-          if (!pd.prefix) return;
-          var key = norm(pd.prefix);
-          if (seen[key]) return;
-          seen[key] = true;
-          out.push(pd.prefix);
-        });
-      }
-
-      if (fc && fc.tagPrefixes) add(fc.tagPrefixes);
-
-      if (fc && Array.isArray(fc.tabs)) {
-        fc.tabs.forEach(function(tab) {
-          if (tab && tab.tagPrefixes) add(tab.tagPrefixes);
-        });
-      }
-
-      return out;
-    }
-
-    function hasConfiguredFilterOptions(items, prefixes) {
-      if (!prefixes.length) return true;
-
-      return prefixes.every(function(prefix) {
-        return (items || []).some(function(item) {
-          return getTagValuesByPrefix(item, prefix).length > 0;
-        });
-      });
-    }
-
-    function getActiveFilterPrefixes() {
-      var list = currentTagPrefixes || (fc && fc.tagPrefixes) || [];
-      return normalizePrefixes(list, (fc && fc.layout) || 'pills').map(function(pd) {
-        return pd.prefix;
-      }).filter(Boolean);
-    }
-
-    async function ensureConfiguredFilterOptions(poolGetter, prefixesGetter) {
-      var getPool = typeof poolGetter === 'function'
-        ? poolGetter
-        : function() { return rawItems; };
-      var getPrefixes = typeof prefixesGetter === 'function'
-        ? prefixesGetter
-        : getConfiguredFilterPrefixes;
-      var guard = 0;
-
-      while (
-        getPrefixes().length &&
-        !hasConfiguredFilterOptions(getPool(), getPrefixes()) &&
-        canFetchMorePages('filter-options') &&
-        guard < 20
-      ) {
-        guard++;
-        var changed = await loadNextRemotePage('filter-options');
-        if (!changed) break;
       }
     }
 
@@ -2390,7 +2247,6 @@ requestAnimationFrame(function() {
 
     try {
       rawItems = await loadSources(loadedMaxPages);
-      await ensureConfiguredFilterOptions();
     } catch (err) {
       if (cfg.debug) console.warn('[QueryBlock]', cfg.key, err);
 
@@ -2508,7 +2364,7 @@ requestAnimationFrame(function() {
     }
 
     var filterWrapper = buildFilterBar(
-      function() { return rawItems; },
+      rawItems,
       cfg,
       function(f) {
         if (ioInfinite) {
@@ -2524,10 +2380,7 @@ requestAnimationFrame(function() {
       function() {
         return currentTagPrefixes;
       },
-      target,
-      function(poolGetter) {
-        return ensureConfiguredFilterOptions(poolGetter, getActiveFilterPrefixes);
-      }
+      target
     );
 
     var gridClass = dispLayout === 'list'
@@ -2767,7 +2620,6 @@ if (canFetchMorePages()) {
   }
 
 function scheduleConfig(cfg) {
-  cfg = normalizeConfig(cfg);
   if (!cfg || cfg.enabled === false) return;
 
   var target = document.querySelector(cfg.target || '');
@@ -2811,12 +2663,11 @@ function scheduleConfig(cfg) {
  function init() {
   var configs = Array.isArray(window.QUERY_BLOCK_CONFIGS)
     ? window.QUERY_BLOCK_CONFIGS
-    : [];
+    : (Array.isArray(window.SQB_CONFIGS) ? window.SQB_CONFIGS : []);
 
   if (!configs.length) return;
 
   configs = configs
-    .map(normalizeConfig)
     .filter(function(cfg) {
       if (!cfg || cfg.enabled === false) return false;
       if (!cfg.target) return false;
