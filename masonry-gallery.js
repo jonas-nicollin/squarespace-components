@@ -2,6 +2,25 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.29/dist/fancybox/fancybox.css" />
 <script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.29/dist/fancybox/fancybox.umd.js"></script>
 
+
+.sqs-gallery-block-stacked .sqs-gallery {
+  position: relative;
+}
+.masonry-item {
+  position: absolute;
+  width: 100%;
+  transition: transform 0.3s ease;
+}
+@media screen and (min-width: 768px) {
+  .sqs-gallery-block-stacked .sqs-gallery {
+    height: auto;
+  }
+  .masonry-item {
+    width: calc(33.333% - 2rem);
+  }
+}
+
+
 */
 document.addEventListener("DOMContentLoaded", () => {
   const galleries = document.querySelectorAll(".sqs-gallery-block-stacked .sqs-gallery");
