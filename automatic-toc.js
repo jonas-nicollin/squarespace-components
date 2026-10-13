@@ -1,8 +1,10 @@
 /**
- * Automatic TOC — v001 (local candidate, 2026-10-13)
+ * Automatic TOC — v002 (2026-10-13)
  * Configure window.tableOfContentSettings before loading this file.
  * One TOC per page; the first matching configuration wins.
- * Existing Squarespace defaults and CSS classes are retained.
+ * Generic component classes, with legacy aliases for existing integrations.
+ * customClassPrefix adds <prefix>--<component-class> to every TOC element.
+ * backLink.mobileMode: "compact" (default) or "stacked".
  * Generic options: contentSelector, selectors, targetContainerSelector,
  * observeChanges (default true), anchorKeyAttribute (optional), ariaLabel.
  * API: window.AutomaticTOC.refresh() / destroy(). No dependencies.
@@ -15,7 +17,7 @@
     return;
   }
 
-  const TOC = ".blog-item-table-of-contents";
+  const TOC = ".automatic-toc, .blog-item-table-of-contents";
   let instance = null;
   let frame = 0;
   let stopped = false;
@@ -66,32 +68,46 @@
   }
 
   function createTOC(config, content, target) {
-    const nav = document.createElement("nav");
-    nav.className = "blog-item-table-of-contents";
+    const requestedPrefix = typeof config.customClassPrefix === "string" ? config.customClassPrefix.trim() : "";
+    const prefix = /^[A-Za-z_][A-Za-z0-9_-]*$/.test(requestedPrefix) ? requestedPrefix : "";
+    if (requestedPrefix && !prefix) console.warn("[Automatic TOC] Ignoring invalid customClassPrefix; use a single CSS identifier.");
+    function element(tag, part, legacy = "") {
+      const node = document.createElement(tag);
+      const name = "automatic-toc" + (part ? "__" + part : "");
+      node.className = [name, prefix ? prefix + "--" + name : "", legacy].filter(Boolean).join(" ");
+      return node;
+    }
+    const nav = element("nav", "", "blog-item-table-of-contents");
+    nav.dataset.automaticTocVersion = "v002";
     nav.setAttribute("aria-label", config.ariaLabel || "Table of contents");
     nav.classList.toggle("is-sticky", !!config.sticky);
     nav.hidden = true;
-    const inner = document.createElement("div");
-    inner.className = "table-of-contents-inner";
-    const list = document.createElement("div");
-    list.className = "table-of-contents-list";
-    inner.appendChild(list);
+    const inner = element("div", "inner", "table-of-contents-inner");
+    const viewport = element("div", "viewport");
+    const list = element("div", "list", "table-of-contents-list");
+    viewport.appendChild(list);
+    inner.appendChild(viewport);
     nav.appendChild(inner);
 
     let back = null;
     if (config.backLink?.enabled && config.backLink.url) {
-      back = document.createElement("a");
-      back.className = "table-of-contents-back-link table-of-contents-item";
+      back = element("a", "back", "table-of-contents-back-link");
       back.href = config.backLink.url;
-      const icon = document.createElement("span");
-      icon.className = "back-icon";
+      const labelText = config.backLink.label || "Back";
+      back.setAttribute("aria-label", config.backLink.ariaLabel || labelText);
+      back.title = labelText;
+      const icon = element("span", "back-icon", "back-icon");
       icon.setAttribute("aria-hidden", "true");
-      icon.textContent = config.backLink.icon || "←";
-      const label = document.createElement("span");
-      label.className = "back-label";
-      label.textContent = config.backLink.label || "Back";
-      back.append(icon, " ", label);
-      list.appendChild(back);
+      // Draw the default chevron in CSS: no icon font is required.
+      const chevron = !config.backLink.icon || config.backLink.icon === "chevron_backward";
+      icon.classList.toggle("is-chevron", chevron);
+      if (!chevron) icon.textContent = config.backLink.icon;
+      const label = element("span", "back-label", "back-label");
+      label.textContent = labelText;
+      back.append(icon, label);
+      inner.prepend(back);
+      nav.classList.add("has-back-link");
+      nav.classList.toggle("is-back-stacked", config.backLink.mobileMode === "stacked");
     }
 
     const pos = config.insertPosition;
@@ -112,6 +128,8 @@
     let destroyed = false;
     let hashHandled = false;
     let lastHeight = "";
+    let lastActiveLink = null;
+    let lastViewportWidth = -1;
 
     function updateHeight() {
       const height = (nav.hidden ? 0 : nav.offsetHeight) + "px";
@@ -124,6 +142,27 @@
       return heading.getClientRects().length > 0 &&
         getComputedStyle(heading).visibility !== "hidden" &&
         !heading.closest('[hidden], [aria-hidden="true"]');
+    }
+
+    function revealLink(link) {
+      if (!link || viewport.clientWidth === 0) return;
+      const bounds = viewport.getBoundingClientRect();
+      const item = link.getBoundingClientRect();
+      const inset = 4; // Also leaves room for the keyboard focus outline.
+      const left = bounds.left + viewport.clientLeft + inset;
+      const right = bounds.left + viewport.clientLeft + viewport.clientWidth - inset;
+      const rtl = getComputedStyle(viewport).direction === "rtl";
+      let delta = 0;
+      if (item.width > right - left) delta = rtl ? item.right - right : item.left - left;
+      else if (item.left < left) delta = item.left - left;
+      else if (item.right > right) delta = item.right - right;
+      // Only the horizontal viewport moves; never scrollIntoView on the page.
+      if (Math.abs(delta) > 1) viewport.scrollBy({ left: delta, behavior: "instant" });
+    }
+
+    function onFocus(event) {
+      const link = event.target.closest("a");
+      if (link && list.contains(link)) revealLink(link);
     }
 
     function updateActive() {
@@ -142,6 +181,11 @@
           if (record.link.getAttribute("aria-current") !== "location") record.link.setAttribute("aria-current", "location");
         } else if (record.link.hasAttribute("aria-current")) record.link.removeAttribute("aria-current");
       });
+      const activeLink = active?.link || null;
+      const width = viewport.clientWidth;
+      if (activeLink !== lastActiveLink || width !== lastViewportWidth) revealLink(activeLink);
+      lastActiveLink = activeLink;
+      lastViewportWidth = width;
       updateHeight();
     }
 
@@ -154,7 +198,7 @@
       const value = config.scrollOffset;
       if (typeof value === "number") return Number.isFinite(value) ? value : 0;
       if (!value) return 0;
-      const probe = document.createElement("span");
+      const probe = element("span", "offset-probe");
       probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;width:0;height:0;";
       // Unitless numeric strings remain compatible with the old script.
       const cssValue = /^-?\d+(\.\d+)?$/.test(String(value).trim()) ? value + "px" : value;
@@ -225,8 +269,7 @@
         const key = identity(heading, text, counts);
         const id = ensureId(heading, text, index, key);
         const old = oldByHeading.get(heading);
-        const link = old?.link || document.createElement("a");
-        if (!old) link.className = "table-of-contents-item";
+        const link = old?.link || element("a", "link", "table-of-contents-item");
         const href = "#" + encodeURIComponent(id);
         if (link.getAttribute("href") !== href) link.setAttribute("href", href);
         if (link.textContent !== text) link.textContent = text;
@@ -234,7 +277,7 @@
       });
       const keep = new Set(next.map(record => record.link));
       records.forEach(record => { if (!keep.has(record.link)) record.link.remove(); });
-      let cursor = back ? back.nextSibling : list.firstChild;
+      let cursor = list.firstChild;
       next.forEach(({ link }) => {
         if (link !== cursor) list.insertBefore(link, cursor);
         cursor = link.nextSibling;
@@ -274,8 +317,10 @@
       resizeObserver = new ResizeObserver(scheduleActive);
       resizeObserver.observe(content);
       resizeObserver.observe(nav);
+      resizeObserver.observe(viewport);
     }
     list.addEventListener("click", onClick);
+    list.addEventListener("focusin", onFocus);
     window.addEventListener("scroll", scheduleActive, { passive: true });
     window.addEventListener("resize", schedule);
     // Image loads and collapsible content can change positions without scrolling.
@@ -291,6 +336,7 @@
         resizeObserver?.disconnect();
         cancelAnimationFrame(activeFrame);
         list.removeEventListener("click", onClick);
+        list.removeEventListener("focusin", onFocus);
         window.removeEventListener("scroll", scheduleActive);
         window.removeEventListener("resize", schedule);
         content.removeEventListener("load", scheduleActive, true);
@@ -319,7 +365,7 @@
   }
 
   window.AutomaticTOC = {
-    version: "v001",
+    version: "v002",
     refresh,
     destroy() {
       stopped = true;
