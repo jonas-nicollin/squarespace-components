@@ -1,4 +1,4 @@
-/* Automatic TOC — v002. Optional --automatic-toc-* variables inherit from the site. */
+/* Automatic TOC — v003. Optional --automatic-toc-* variables inherit from the site. */
 .automatic-toc {
   box-sizing: border-box;
   width: 100%;
@@ -13,28 +13,45 @@
   font-family: var(--automatic-toc-font-family, var(--body-font-font-family, inherit));
   font-style: var(--automatic-toc-font-style, var(--body-font-font-style, normal));
   font-weight: var(--automatic-toc-font-weight, var(--body-font-font-weight, 400));
-  font-size: var(--automatic-toc-font-size, 1rem);
+  font-size: var(--automatic-toc-font-size, .9375rem);
   letter-spacing: var(--automatic-toc-letter-spacing, normal);
   text-transform: var(--automatic-toc-text-transform, none);
   line-height: 1.25;
   z-index: var(--automatic-toc-z-index, 99);
 }
 .automatic-toc[hidden] { display: none; }
+.automatic-toc[data-toc-layout="contained"] {
+  max-width: var(--automatic-toc-max-width, var(--sqs-site-max-width, 100%));
+  margin-inline: auto;
+}
+.automatic-toc[data-toc-layout="full-width"] {
+  max-width: 100%;
+  padding-inline: var(--automatic-toc-gutter, var(--sqs-site-gutter, 0px));
+}
 .automatic-toc.is-sticky {
   position: sticky;
-  top: var(--automatic-toc-top, var(--header-height, 0px));
+  top: var(--automatic-toc-top, var(--automatic-toc-header-bottom, var(--header-height, 0px)));
 }
 .automatic-toc .automatic-toc__inner {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: var(--automatic-toc-gap, 1rem);
+  column-gap: var(--automatic-toc-gap, .75rem);
   min-width: 0;
   overflow: visible;
-  padding-block: var(--automatic-toc-padding-block, .5rem);
+  padding-block: var(--automatic-toc-padding-block, .25rem);
   padding-inline: var(--automatic-toc-padding-inline, 0px);
 }
+.automatic-toc.has-back-link .automatic-toc__inner {
+  grid-template-columns: var(--automatic-toc-side-space, 0px) minmax(0, 1fr) var(--automatic-toc-side-space, 0px);
+}
+/* When the full group cannot fit centred without hitting Back, give scrolling more room. */
+.automatic-toc.has-back-link.is-overflowing .automatic-toc__inner {
+  grid-template-columns: var(--automatic-toc-side-space, 0px) minmax(0, 1fr);
+}
 .automatic-toc .automatic-toc__viewport {
-  flex: 1 1 0%;
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -44,6 +61,7 @@
   scrollbar-width: none;
   touch-action: auto;
 }
+.automatic-toc.has-back-link .automatic-toc__viewport { grid-column: 2; }
 .automatic-toc__viewport::-webkit-scrollbar { display: none; }
 .automatic-toc .automatic-toc__list {
   box-sizing: border-box;
@@ -55,7 +73,7 @@
   min-width: 100%;
   gap: var(--automatic-toc-link-gap, .125rem);
   margin: 0;
-  padding: 4px;
+  padding: 2px;
   overflow: visible;
   scroll-snap-type: none;
   touch-action: auto;
@@ -72,7 +90,7 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
+  min-height: var(--automatic-toc-link-height, 36px);
   height: auto;
   width: auto;
   font: inherit;
@@ -86,10 +104,10 @@
   background: transparent;
   border: 0;
   box-shadow: none;
-  transition: background-color .175s ease, color .175s ease;
+  transition: background-color var(--automatic-toc-transition-duration, 220ms) cubic-bezier(.2, .65, .3, 1), color var(--automatic-toc-transition-duration, 220ms) cubic-bezier(.2, .65, .3, 1);
 }
 .automatic-toc a.automatic-toc__link {
-  padding: .5rem var(--automatic-toc-link-padding-inline, 1rem);
+  padding: .375rem var(--automatic-toc-link-padding-inline, .75rem);
   border-radius: var(--automatic-toc-link-radius, 999px);
 }
 .automatic-toc a.automatic-toc__link.is-active {
@@ -97,18 +115,30 @@
   background: var(--automatic-toc-active-background, var(--automatic-toc-color, var(--paragraphMediumColor, #222)));
 }
 @media (hover: hover) {
-  .automatic-toc a.automatic-toc__link:hover {
-    color: var(--automatic-toc-active-color, var(--automatic-toc-background, var(--siteBackgroundColor, #fff)));
-    background: var(--automatic-toc-active-background, var(--automatic-toc-color, var(--paragraphMediumColor, #222)));
+  .automatic-toc a.automatic-toc__link:not(.is-active):hover {
+    color: inherit;
+    background: var(--automatic-toc-hover-background, color-mix(in srgb, currentColor 8%, transparent));
   }
-  .automatic-toc a.automatic-toc__back:hover .automatic-toc__back-label { text-decoration: underline; text-underline-offset: .2em; }
+  .automatic-toc a.automatic-toc__back:hover .automatic-toc__back-label { text-decoration-color: currentColor; }
+}
+.automatic-toc .automatic-toc__back-label {
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: .2em;
+  transition: text-decoration-color var(--automatic-toc-transition-duration, 220ms) ease;
 }
 .automatic-toc a.automatic-toc__back {
   position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  width: max-content;
+  max-width: min(14rem, 35vw);
   gap: .5rem;
   padding: .5rem .25rem;
   border-radius: 0;
 }
+.automatic-toc .automatic-toc__back-label { overflow: hidden; text-overflow: ellipsis; }
 .automatic-toc .automatic-toc__back-icon {
   display: inline-block;
   flex: 0 0 auto;
@@ -127,8 +157,12 @@
 .automatic-toc a.automatic-toc__back:focus-visible { outline-offset: -2px; }
 @media (max-width: 767px) {
   .automatic-toc { font-size: var(--automatic-toc-font-size-mobile, .9375rem); }
-  .automatic-toc .automatic-toc__inner { gap: .5rem; }
+  .automatic-toc[data-toc-layout="full-width"] { padding-inline: var(--automatic-toc-gutter-mobile, var(--sqs-mobile-site-gutter, 0px)); }
+  .automatic-toc .automatic-toc__inner { column-gap: .5rem; }
+  .automatic-toc a.automatic-toc__link,
+  .automatic-toc a.automatic-toc__back { min-height: 44px; }
   .automatic-toc.has-back-link:not(.is-back-stacked) .automatic-toc__back {
+    width: 44px;
     min-width: 44px;
     align-self: stretch;
     padding: 0;
@@ -144,13 +178,14 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .automatic-toc.is-back-stacked .automatic-toc__inner { flex-wrap: wrap; gap: 0; }
-  .automatic-toc.is-back-stacked .automatic-toc__back { justify-content: flex-start; flex-basis: 100%; }
-  .automatic-toc.is-back-stacked .automatic-toc__viewport { flex-basis: 100%; }
+  .automatic-toc.is-back-stacked .automatic-toc__inner { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .automatic-toc.is-back-stacked .automatic-toc__back { justify-content: flex-start; max-width: 100%; }
+  .automatic-toc.is-back-stacked .automatic-toc__viewport { grid-column: 1; grid-row: 2; }
 }
 @media (prefers-reduced-motion: reduce) {
   .automatic-toc a.automatic-toc__link,
-  .automatic-toc a.automatic-toc__back { transition: none; }
+  .automatic-toc a.automatic-toc__back,
+  .automatic-toc .automatic-toc__back-label { transition: none; }
 }
 /* Transitional fallback if a browser still has the previous JavaScript cached. */
 .blog-item-table-of-contents:not(.automatic-toc) {
@@ -164,7 +199,7 @@
 }
 .blog-item-table-of-contents:not(.automatic-toc) a.table-of-contents-item {
   flex: 0 0 auto; padding: .5rem 1rem; white-space: nowrap; border-radius: 999px;
-  font-size: var(--automatic-toc-font-size, 1rem); color: var(--paragraphMediumColor, #222);
+  font-size: var(--automatic-toc-font-size, .9375rem); color: var(--paragraphMediumColor, #222);
 }
 .blog-item-table-of-contents:not(.automatic-toc) .table-of-contents-item.is-active { background: var(--paragraphMediumColor, #222); color: var(--siteBackgroundColor, #fff); }
 .blog-item-table-of-contents:not(.automatic-toc) .back-icon { font-family: var(--ui-font-font-family, inherit); }

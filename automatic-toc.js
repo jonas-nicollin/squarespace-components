@@ -1,8 +1,11 @@
 /**
- * Automatic TOC — v002 (2026-10-13)
+ * Automatic TOC — v003 (2026-10-14)
  * Configure window.tableOfContentSettings before loading this file.
  * One TOC per page; the first matching configuration wins.
- * Generic component classes, with legacy aliases for existing integrations.
+ * Generic component classes; legacyClasses:false disables compatibility aliases.
+ * layout: auto/contained/full-width/custom; insertAfterSelector is optional.
+ * scrollOffset: auto or a minimum CSS/numeric offset; scrollGap defaults to .75rem.
+ * headerSelector defaults to #header; scrollHandler may integrate a scroll engine.
  * customClassPrefix adds <prefix>--<component-class> to every TOC element.
  * backLink.mobileMode: "compact" (default) or "stacked".
  * Generic options: contentSelector, selectors, targetContainerSelector,
@@ -74,14 +77,18 @@
     function element(tag, part, legacy = "") {
       const node = document.createElement(tag);
       const name = "automatic-toc" + (part ? "__" + part : "");
-      node.className = [name, prefix ? prefix + "--" + name : "", legacy].filter(Boolean).join(" ");
+      node.className = [name, prefix ? prefix + "--" + name : "", config.legacyClasses === false ? "" : legacy].filter(Boolean).join(" ");
       return node;
     }
     const nav = element("nav", "", "blog-item-table-of-contents");
-    nav.dataset.automaticTocVersion = "v002";
+    nav.dataset.automaticTocVersion = "v003";
     nav.setAttribute("aria-label", config.ariaLabel || "Table of contents");
     nav.classList.toggle("is-sticky", !!config.sticky);
     nav.hidden = true;
+    const layout = config.layout || "auto";
+    nav.dataset.tocLayout = layout === "auto"
+      ? (target.matches(".entry") ? "contained" : target.matches(".blog-item-wrapper") ? "full-width" : "custom")
+      : layout;
     const inner = element("div", "inner", "table-of-contents-inner");
     const viewport = element("div", "viewport");
     const list = element("div", "list", "table-of-contents-list");
@@ -110,16 +117,32 @@
       nav.classList.toggle("is-back-stacked", config.backLink.mobileMode === "stacked");
     }
 
-    const pos = config.insertPosition;
-    if (pos === "prepend") target.prepend(nav);
-    else if (typeof pos === "number" && Number.isFinite(pos)) {
-      const index = Math.max(0, Math.min(Math.trunc(pos), target.children.length));
-      target.insertBefore(nav, target.children[index] || null);
-    } else target.appendChild(nav);
+    function placeNav(initial = false) {
+      if (!initial && !config.insertAfterSelector) return;
+      const anchor = config.insertAfterSelector && query(target, config.insertAfterSelector);
+      // A placement anchor must be a direct child; never move Squarespace content.
+      if (anchor && anchor.parentElement === target && anchor !== nav) {
+        if (anchor.nextElementSibling !== nav) anchor.after(nav);
+        return;
+      }
+      const pos = config.insertPosition;
+      const children = Array.from(target.children).filter(child => child !== nav);
+      const index = pos === "prepend" ? 0 : typeof pos === "number" && Number.isFinite(pos)
+        ? Math.max(0, Math.min(Math.trunc(pos), children.length)) : children.length;
+      const before = children[index] || null;
+      if (nav.parentElement !== target || nav.nextElementSibling !== before) target.insertBefore(nav, before);
+    }
+    placeNav(true);
 
-    const previousHeight = document.documentElement.style.getPropertyValue("--toc-height");
-    const previousPriority = document.documentElement.style.getPropertyPriority("--toc-height");
+    const sharedNames = ["--toc-height", "--automatic-toc-height", "--automatic-toc-bottom", "--automatic-toc-scroll-offset", "--automatic-toc-header-bottom"];
+    const sharedStyle = document.documentElement.style;
+    const previousVariables = new Map(sharedNames.map(name => [name, [sharedStyle.getPropertyValue(name), sharedStyle.getPropertyPriority(name)]]));
     const hadBodyClass = document.body.classList.contains("has-table-of-contents");
+    const hadModernBodyClass = document.body.classList.contains("has-automatic-toc");
+    const probe = element("span", "offset-probe");
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:0;height:0;";
+    nav.appendChild(probe);
     const rememberedIds = new Map();
     let records = [];
     let contentObserver;
@@ -127,15 +150,68 @@
     let activeFrame = 0;
     let destroyed = false;
     let hashHandled = false;
-    let lastHeight = "";
+    let header = null;
+    let targetObserver;
+    let effectiveOffset = 0;
+    let safeOffset = 0;
     let lastActiveLink = null;
     let lastViewportWidth = -1;
 
-    function updateHeight() {
-      const height = (nav.hidden ? 0 : nav.offsetHeight) + "px";
-      if (height === lastHeight) return;
-      lastHeight = height;
-      document.documentElement.style.setProperty("--toc-height", height);
+    function publish(name, value) {
+      const css = Math.round(value * 100) / 100 + "px";
+      if (sharedStyle.getPropertyValue(name) !== css) sharedStyle.setProperty(name, css);
+    }
+
+    function cssPixels(value) {
+      if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+      if (!value || value === "auto") return 0;
+      const cssValue = /^-?\d+(\.\d+)?$/.test(String(value).trim()) ? value + "px" : String(value);
+      probe.style.scrollMarginTop = "0px";
+      probe.style.scrollMarginTop = cssValue;
+      return parseFloat(getComputedStyle(probe).scrollMarginTop) || 0;
+    }
+
+    function updateGeometry() {
+      const currentHeader = config.headerSelector === false ? null : query(document, config.headerSelector || "#header");
+      if (currentHeader !== header) {
+        if (header) resizeObserver?.unobserve(header);
+        header = currentHeader;
+        if (header) resizeObserver?.observe(header);
+      }
+      let headerBottom = !header && config.headerSelector !== false && config.sticky ? cssPixels("var(--header-height, 0px)") : 0;
+      if (header && isVisible(header)) {
+        const style = getComputedStyle(header);
+        if (style.position === "fixed" || style.position === "sticky") headerBottom = Math.max(0, header.getBoundingClientRect().bottom);
+      }
+      publish("--automatic-toc-header-bottom", headerBottom);
+      const height = nav.hidden ? 0 : nav.getBoundingClientRect().height;
+      const style = getComputedStyle(nav);
+      // Predict the pinned position even when the TOC is still below the fold.
+      const bottom = nav.hidden ? 0 : style.position === "sticky"
+        ? Math.max(0, parseFloat(style.top) || 0) + height
+        : style.position === "fixed" ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
+      const obstruction = Math.max(headerBottom, bottom);
+      safeOffset = obstruction ? obstruction + cssPixels(config.scrollGap ?? ".75rem") : 0;
+      effectiveOffset = Math.max(0, cssPixels(config.scrollOffset), safeOffset);
+      publish("--toc-height", height);
+      publish("--automatic-toc-height", height);
+      publish("--automatic-toc-bottom", bottom);
+      publish("--automatic-toc-scroll-offset", effectiveOffset);
+    }
+
+    function updateLayout() {
+      const side = back ? back.getBoundingClientRect().width : 0;
+      const sideValue = Math.ceil(side) + "px";
+      if (inner.style.getPropertyValue("--automatic-toc-side-space") !== sideValue) inner.style.setProperty("--automatic-toc-side-space", sideValue);
+      const style = getComputedStyle(inner);
+      const available = inner.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      const listStyle = getComputedStyle(list);
+      const count = list.children.length;
+      const naturalWidth = Array.from(list.children).reduce((sum, child) => sum + child.getBoundingClientRect().width, 0)
+        + Math.max(0, count - 1) * (parseFloat(listStyle.columnGap) || 0)
+        + (parseFloat(listStyle.paddingLeft) || 0) + (parseFloat(listStyle.paddingRight) || 0);
+      const overflow = naturalWidth > available - 2 * (side + (parseFloat(style.columnGap) || 0)) + 1;
+      if (nav.classList.contains("is-overflowing") !== overflow) nav.classList.toggle("is-overflowing", overflow);
     }
 
     function isVisible(heading) {
@@ -167,9 +243,11 @@
 
     function updateActive() {
       if (destroyed) return;
+      updateLayout();
+      updateGeometry();
       const value = Number(config.activeZoneTop ?? 0.3);
       const zone = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.3;
-      const threshold = window.innerHeight * zone;
+      const threshold = Math.max(window.innerHeight * zone, safeOffset);
       let active = null;
       records.forEach(record => {
         if (isVisible(record.heading) && record.heading.getBoundingClientRect().top <= threshold) active = record;
@@ -186,7 +264,6 @@
       if (activeLink !== lastActiveLink || width !== lastViewportWidth) revealLink(activeLink);
       lastActiveLink = activeLink;
       lastViewportWidth = width;
-      updateHeight();
     }
 
     function scheduleActive() {
@@ -194,27 +271,12 @@
       activeFrame = requestAnimationFrame(() => { activeFrame = 0; updateActive(); });
     }
 
-    function offsetPx() {
-      const value = config.scrollOffset;
-      if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-      if (!value) return 0;
-      const probe = element("span", "offset-probe");
-      probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;width:0;height:0;";
-      // Unitless numeric strings remain compatible with the old script.
-      const cssValue = /^-?\d+(\.\d+)?$/.test(String(value).trim()) ? value + "px" : value;
-      probe.style.scrollMarginTop = cssValue;
-      nav.appendChild(probe);
-      const px = parseFloat(getComputedStyle(probe).scrollMarginTop) || 0;
-      probe.remove();
-      return px;
-    }
-
     function scrollToHeading(heading, behavior) {
       if (!heading.isConnected) return;
-      window.scrollTo({
-        top: Math.max(0, heading.getBoundingClientRect().top + window.scrollY - offsetPx()),
-        behavior
-      });
+      updateGeometry();
+      const top = Math.max(0, heading.getBoundingClientRect().top + window.scrollY - effectiveOffset);
+      if (typeof config.scrollHandler === "function") config.scrollHandler({ top, behavior, heading });
+      else window.scrollTo({ top, behavior });
     }
 
     function onClick(event) {
@@ -223,6 +285,9 @@
       const record = records.find(item => item.link === link);
       if (!record) return;
       event.preventDefault();
+      // Some delegated scroll engines ignore defaultPrevented (e.g. Lenis anchors).
+      // This component owns its links; modified clicks and the back link remain native.
+      event.stopPropagation();
       scrollToHeading(record.heading, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth");
     }
 
@@ -259,6 +324,7 @@
 
     function sync() {
       if (destroyed) return;
+      placeNav();
       const candidates = query(content, config.selectors || ".blog-anchor-title, .html-block h3", true)
         .filter(h => !h.closest(TOC) && h.textContent.trim());
       const counts = new Map();
@@ -285,7 +351,8 @@
       records = next;
       const hidden = !back && !records.length;
       if (nav.hidden !== hidden) nav.hidden = hidden;
-      if (!hadBodyClass) document.body.classList.toggle("has-table-of-contents", !hidden);
+      if (!hadBodyClass && config.legacyClasses !== false) document.body.classList.toggle("has-table-of-contents", !hidden);
+      if (!hadModernBodyClass) document.body.classList.toggle("has-automatic-toc", !hidden);
       updateActive();
       if (!hashHandled && location.hash) {
         let hash;
@@ -313,11 +380,18 @@
         attributeFilter: ["id", "class", "hidden", "aria-hidden"].concat(config.anchorKeyAttribute ? [config.anchorKeyAttribute] : [])
       });
     }
+    if (config.insertAfterSelector && "MutationObserver" in window) {
+      targetObserver = new MutationObserver(schedule);
+      targetObserver.observe(target, { childList: true });
+    }
     if ("ResizeObserver" in window) {
       resizeObserver = new ResizeObserver(scheduleActive);
       resizeObserver.observe(content);
       resizeObserver.observe(nav);
       resizeObserver.observe(viewport);
+      resizeObserver.observe(inner);
+      resizeObserver.observe(list);
+      if (back) resizeObserver.observe(back);
     }
     list.addEventListener("click", onClick);
     list.addEventListener("focusin", onFocus);
@@ -327,12 +401,14 @@
     content.addEventListener("load", scheduleActive, true);
     content.addEventListener("transitionend", scheduleActive);
     document.fonts?.ready.then(scheduleActive);
+    document.addEventListener("blogBannerReady", schedule);
 
     return {
       config, content, target, nav, sync,
       destroy() {
         destroyed = true;
         contentObserver?.disconnect();
+        targetObserver?.disconnect();
         resizeObserver?.disconnect();
         cancelAnimationFrame(activeFrame);
         list.removeEventListener("click", onClick);
@@ -341,10 +417,14 @@
         window.removeEventListener("resize", schedule);
         content.removeEventListener("load", scheduleActive, true);
         content.removeEventListener("transitionend", scheduleActive);
+        document.removeEventListener("blogBannerReady", schedule);
         nav.remove();
         if (!hadBodyClass) document.body.classList.remove("has-table-of-contents");
-        if (previousHeight) document.documentElement.style.setProperty("--toc-height", previousHeight, previousPriority);
-        else document.documentElement.style.removeProperty("--toc-height");
+        if (!hadModernBodyClass) document.body.classList.remove("has-automatic-toc");
+        previousVariables.forEach(([value, priority], name) => {
+          if (value) sharedStyle.setProperty(name, value, priority);
+          else sharedStyle.removeProperty(name);
+        });
         // Heading IDs intentionally remain: existing URLs must keep working.
       }
     };
@@ -365,7 +445,7 @@
   }
 
   window.AutomaticTOC = {
-    version: "v002",
+    version: "v003",
     refresh,
     destroy() {
       stopped = true;
