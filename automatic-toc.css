@@ -1,4 +1,4 @@
-/* Automatic TOC — v003. Optional --automatic-toc-* variables inherit from the site. */
+/* Automatic TOC — v004. Optional --automatic-toc-* variables inherit from the site. */
 .automatic-toc {
   box-sizing: border-box;
   width: 100%;
@@ -19,7 +19,10 @@
   line-height: 1.25;
   z-index: var(--automatic-toc-z-index, 99);
 }
-.automatic-toc[hidden] { display: none; }
+.automatic-toc[hidden],
+.automatic-toc .automatic-toc__viewport[hidden] { display: none; }
+.automatic-toc .automatic-toc__label { display: inline-block; }
+.automatic-toc.has-back-link.is-back-only .automatic-toc__inner { grid-template-columns: minmax(0, 1fr); }
 .automatic-toc[data-toc-layout="contained"] {
   max-width: var(--automatic-toc-max-width, var(--sqs-site-max-width, 100%));
   margin-inline: auto;

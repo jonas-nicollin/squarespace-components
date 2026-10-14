@@ -1,11 +1,13 @@
 /**
- * Automatic TOC — v003 (2026-10-14)
+ * Automatic TOC — v004 (2026-10-14)
  * Configure window.tableOfContentSettings before loading this file.
  * One TOC per page; the first matching configuration wins.
  * Generic component classes; legacyClasses:false disables compatibility aliases.
  * layout: auto/contained/full-width/custom; insertAfterSelector is optional.
  * scrollOffset: auto or a minimum CSS/numeric offset; scrollGap defaults to .75rem.
  * headerSelector defaults to #header; scrollHandler may integrate a scroll engine.
+ * minItems defaults to 1; fewer section links leave only Back (if enabled).
+ * sectionSelector defaults to section; section ends also respect following heading levels.
  * customClassPrefix adds <prefix>--<component-class> to every TOC element.
  * backLink.mobileMode: "compact" (default) or "stacked".
  * Generic options: contentSelector, selectors, targetContainerSelector,
@@ -81,7 +83,7 @@
       return node;
     }
     const nav = element("nav", "", "blog-item-table-of-contents");
-    nav.dataset.automaticTocVersion = "v003";
+    nav.dataset.automaticTocVersion = "v004";
     nav.setAttribute("aria-label", config.ariaLabel || "Table of contents");
     nav.classList.toggle("is-sticky", !!config.sticky);
     nav.hidden = true;
@@ -145,6 +147,7 @@
     nav.appendChild(probe);
     const rememberedIds = new Map();
     let records = [];
+    let boundaryHeadings = [];
     let contentObserver;
     let resizeObserver;
     let activeFrame = 0;
@@ -249,9 +252,18 @@
       const zone = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.3;
       const threshold = Math.max(window.innerHeight * zone, safeOffset);
       let active = null;
-      records.forEach(record => {
+      if (!viewport.hidden) records.forEach(record => {
         if (isVisible(record.heading) && record.heading.getBoundingClientRect().top <= threshold) active = record;
       });
+      if (active) {
+        let end = active.section.getBoundingClientRect().bottom;
+        // display:contents and zero-height wrappers cannot define a visual boundary.
+        if (!active.section.getClientRects().length || active.section.getBoundingClientRect().height <= 0) end = content.getBoundingClientRect().bottom;
+        for (const heading of active.endHeadings) {
+          if (isVisible(heading)) { end = Math.min(end, heading.getBoundingClientRect().top); break; }
+        }
+        if (end <= threshold) active = null;
+      }
       records.forEach(record => {
         const selected = record === active;
         if (record.link.classList.contains("is-active") !== selected) record.link.classList.toggle("is-active", selected);
@@ -327,6 +339,11 @@
       placeNav();
       const candidates = query(content, config.selectors || ".blog-anchor-title, .html-block h3", true)
         .filter(h => !h.closest(TOC) && h.textContent.trim());
+      // Include unlisted headings as boundaries without adding them to the menu.
+      boundaryHeadings = Array.from(new Set([...query(content, "h1, h2, h3, h4, h5, h6", true), ...candidates]))
+        .filter(heading => !heading.closest(TOC))
+        .sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+      const selectedHeadings = new Set(candidates);
       const counts = new Map();
       const oldByHeading = new Map(records.map(record => [record.heading, record]));
       // querySelectorAll supplies document order and deduplicates overlapping selectors.
@@ -336,10 +353,22 @@
         const id = ensureId(heading, text, index, key);
         const old = oldByHeading.get(heading);
         const link = old?.link || element("a", "link", "table-of-contents-item");
+        const label = old?.label || element("span", "label");
+        if (!old) link.appendChild(label);
         const href = "#" + encodeURIComponent(id);
         if (link.getAttribute("href") !== href) link.setAttribute("href", href);
-        if (link.textContent !== text) link.textContent = text;
-        return { heading, link, id };
+        if (label.textContent !== text) label.textContent = text;
+        let section = content;
+        if (config.sectionSelector !== false) {
+          try {
+            const closest = heading.parentElement?.closest(config.sectionSelector || "section");
+            if (closest && content.contains(closest)) section = closest;
+          } catch (_) { /* Invalid optional boundary: use the content root. */ }
+        }
+        const level = /^H[1-6]$/.test(heading.tagName) ? Number(heading.tagName[1]) : 6;
+        const endHeadings = boundaryHeadings.slice(boundaryHeadings.indexOf(heading) + 1)
+          .filter(next => selectedHeadings.has(next) || Number(next.tagName[1]) <= level);
+        return { heading, link, label, id, section, endHeadings };
       });
       const keep = new Set(next.map(record => record.link));
       records.forEach(record => { if (!keep.has(record.link)) record.link.remove(); });
@@ -349,7 +378,12 @@
         cursor = link.nextSibling;
       });
       records = next;
-      const hidden = !back && !records.length;
+      const requestedMinimum = Number(config.minItems ?? 1);
+      const minimum = Number.isFinite(requestedMinimum) ? Math.max(1, Math.floor(requestedMinimum)) : 1;
+      const hideSections = records.length < minimum;
+      if (viewport.hidden !== hideSections) viewport.hidden = hideSections;
+      nav.classList.toggle("is-back-only", !!back && hideSections);
+      const hidden = !back && hideSections;
       if (nav.hidden !== hidden) nav.hidden = hidden;
       if (!hadBodyClass && config.legacyClasses !== false) document.body.classList.toggle("has-table-of-contents", !hidden);
       if (!hadModernBodyClass) document.body.classList.toggle("has-automatic-toc", !hidden);
@@ -445,7 +479,7 @@
   }
 
   window.AutomaticTOC = {
-    version: "v003",
+    version: "v004",
     refresh,
     destroy() {
       stopped = true;
